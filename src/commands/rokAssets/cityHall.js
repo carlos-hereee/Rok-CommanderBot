@@ -1,5 +1,5 @@
-const { errorEmbed, formatEmbedCity } = require("../../utils/embed");
-const { getCity } = require("../../router/rok_modal");
+const { errorEmbed, formatEmbedCity } = require("../embed");
+const { getCity } = require("../../data/rok_modal");
 
 module.exports = {
   name: "City Hall Upgrades",

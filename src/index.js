@@ -1,11 +1,12 @@
-require("dotenv").config();
+/* eslint-disable no-undef */
+const dotenv = require("dotenv");
 const { Client } = require("discord.js");
-const commands = require("./commands");
+const commands = require("./commands/commands");
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
 
-const router = require("./router/server");
+dotenv.config();
 const port = process.env.PORT || 400;
 const client = new Client();
 const server = express();
@@ -13,7 +14,6 @@ const server = express();
 server.use(helmet());
 server.use(cors());
 server.use(express.json());
-server.use("/api/rok/", router);
 
 client.on("ready", () => {
   if (process.env.NODE_ENV === "production") {
@@ -42,7 +42,6 @@ client.on("message", (message) => {
   }
 });
 
-client.login(process.env.BOT_TOKEN);
+client.login(process.env.TOKEN);
 
-server.get("/", (req, res) => res.send("index"));
 server.listen(port, () => console.log(`\n*** Listening on port ${port}***\n`));

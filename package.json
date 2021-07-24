@@ -24,6 +24,7 @@
     "knex": "^0.21.15",
     "sqlite3": "^5.0.0",
     "sun-tzu-quotes": "^1.0.0",
+    "tesseract.js": "^2.1.4",
     "uuid": "^8.3.2"
   },
   "devDependencies": {

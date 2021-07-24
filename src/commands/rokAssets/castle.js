@@ -1,5 +1,5 @@
-const { formatEmbedCastle, errorEmbed } = require("../../utils/embed");
-const { getCastle } = require("../../router/rok_modal");
+const { formatEmbedCastle, errorEmbed } = require("../embed");
+const { getCastle } = require("../../data/rok_modal");
 
 module.exports = {
   name: "Castle Upgrades",
