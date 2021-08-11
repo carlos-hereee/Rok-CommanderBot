@@ -42,6 +42,6 @@ client.on("message", (message) => {
   }
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.BOT_TOKEN);
 
 server.listen(port, () => console.log(`\n*** Listening on port ${port}***\n`));
