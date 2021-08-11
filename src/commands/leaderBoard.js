@@ -1,4 +1,5 @@
-const Tesseract = require("tesseract.js");
+const axios = require("axios");
+const { readImage } = require("./tessaract");
 /**
  *
  *  
@@ -7,8 +8,6 @@ const Tesseract = require("tesseract.js");
   
   then save the data in a database and then be able to ranking them 
   based on how many points 
-
-  
 
  */
 
@@ -19,25 +18,22 @@ module.exports = {
   triggers: ["leaderboard"],
   handler: async (message) => {
     const cmd = message.content;
-    const { id, username, bot } = message.author;
-    let url = [];
-
-    message.attachments.forEach((attachment) => {
-      const img = attachment.proxyURL;
-      url.push(img);
-    });
-    if (!url.length) {
-      //  if no image tell user to attach image
-      return message.reply("Please attach an image with the command");
-    }
-    if (url.length === 1) {
-      Tesseract.recognize(url[0], "eng", {
-        logger: (tessa) => {
-          const { status, progress } = tessa;
-        },
-      }).then(({ data: { text } }) => {
-        console.log("text", text);
-      });
-    }
+    const user = {
+      discordUserId: message.author.id,
+      username: message.author.username,
+      bot: message.author.bot,
+      discordGuildId: message.guild.id,
+    };
+    const data = readImage(message.attachments);
+    console.log("data", data);
+    //   try {
+    //     const response = await axios.post("/users", {
+    //       user: user,
+    //       data: attachmentText,
+    //     });
+    //     console.log("response", response);
+    //   } catch (e) {
+    //     console.log("error", e);
+    // }
   },
 };

@@ -7,7 +7,7 @@ const countdown = require("./miscellaneous/countdown");
 const castle = require("./rokAssets/castle");
 const upgrade = require("./rokAssets/cityHall");
 const commander = require("./rokAssets/commander");
-const leaderBoard = require("./leaderBoard");
+// const leaderBoard = require("./leaderBoard");
 const { boiler } = require("./embed");
 
 let description = "";
@@ -21,7 +21,7 @@ const cmd = [
   castle,
   rps,
   countdown,
-  leaderBoard,
+  // leaderBoard,
 ].reduce((all, i) => {
   i.triggers.forEach((trigger) => (all[trigger] = i.handler));
   description += `**${i.name}** - ${i.description}\nUsage: ${i.triggers}\n\n`;
