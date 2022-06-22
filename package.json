@@ -27,7 +27,7 @@
     "knex": "^0.21.15",
     "node-tesseract-ocr": "^2.2.1",
     "replace-color": "^2.3.0",
-    "sqlite3": "^5.0.0",
+    "sqlite3": "^5.0.3",
     "sun-tzu-quotes": "^1.0.0",
     "tesseract.js": "^2.1.4",
     "uuid": "^8.3.2"
