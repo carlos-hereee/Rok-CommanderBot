@@ -77,3 +77,6 @@ bot.db
 .env
 config.json
 eng.traineddata
+
+# local scripts
+scripts/*
