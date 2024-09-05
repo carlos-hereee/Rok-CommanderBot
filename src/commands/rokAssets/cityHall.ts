@@ -1,7 +1,7 @@
 import { errorEmbed, formatEmbedCity }  from "../embed";
 import { getCity }  from "../../data/rok_modal";
 
-module.exports = {
+export = {
   name: "City Hall Upgrades",
   description: "Learn information about city to level up",
   triggers: ["city"],

@@ -22,7 +22,7 @@ const getCity = (level) => {
 const getCastle = (level) => {
   return db("castle").where({ level });
 };
-module.exports = {
+export {
   getCommander,
   getCity,
   getCastle,

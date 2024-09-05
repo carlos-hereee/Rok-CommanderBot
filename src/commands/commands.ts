@@ -35,7 +35,7 @@ const commands = {
     }),
 };
 
-module.exports = {
+export = {
   handler: (command, message) => {
     if (message.author.bot) return;
     if (command && commands[command]) commands[command](message);

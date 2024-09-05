@@ -9,7 +9,7 @@ const builds = {
   cavalry: "CAVALRY",
 };
 
-module.exports = {
+export = {
   name: "Commanders",
   description: "Optimal builds for a commander in Rise of Kingdoms",
   triggers: ["tree"],

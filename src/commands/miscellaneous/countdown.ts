@@ -7,7 +7,7 @@ const getArgs = (msg, cmd) => {
   return args;
 };
 
-module.exports = {
+export  = {
   name: "Count Down",
   description:
     "A timer for important events: => !cd event_name [number]d [number]h [number]m ",

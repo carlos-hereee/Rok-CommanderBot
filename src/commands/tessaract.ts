@@ -17,4 +17,4 @@ const readImage = async (attachments) => {
   });
 };
 
-module.exports = { readImage };
+export { readImage };

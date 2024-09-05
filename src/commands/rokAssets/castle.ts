@@ -1,7 +1,7 @@
 import { formatEmbedCastle, errorEmbed }  from "../embed";
 import { getCastle }  from "../../data/rok_modal";
 
-module.exports = {
+export= {
   name: "Castle Upgrades",
   description: "Learn information about castle upgrades",
   triggers: ["castle"],

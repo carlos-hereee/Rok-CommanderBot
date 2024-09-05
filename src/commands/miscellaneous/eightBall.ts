@@ -21,7 +21,7 @@ const prediction = [
   "Very doubtful",
 ];
 
-module.exports = {
+export = {
   name: "8 Ball",
   triggers: [`ball`, "8ball"],
   description: "Get mystical predictions for a yes or no question.",

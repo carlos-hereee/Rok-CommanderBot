@@ -6,7 +6,7 @@ const donate = {
     "[Patreon](https://www.patreon.com/silent_hero)",
 };
 
-module.exports = {
+export = {
   name: "Donate",
   description: "Donations are not expected but are appreciated. ",
   triggers: ["donate"],

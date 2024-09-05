@@ -39,7 +39,7 @@ function canSendPoll(user_id) {
   return true;
 }
 
-module.exports = {
+export = {
   name: "Poll",
   triggers: ["poll"],
   description:

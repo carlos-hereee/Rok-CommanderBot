@@ -122,7 +122,7 @@ const formatEmbedCastle = (embed) => {
   };
 };
 
-module.exports = {
+export {
   boiler,
   formatEmbed,
   formatEmbedCity,

@@ -12,7 +12,7 @@ const resultMap = {
   c: "You Lose!",
 };
 
-module.exports = {
+export = {
   name: "Rock, Paper, Scissors",
   triggers: ["game"],
   description: "Play a fun game with the bot of rock paper scissors",

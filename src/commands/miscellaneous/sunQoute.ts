@@ -1,6 +1,6 @@
 import sunTzu  from "sun-tzu-quotes";
 
-module.exports = {
+export = {
   name: "Sun Tzu Quotes",
   triggers: ["wise"],
   description: "Give you famous qoutes from the famous hero Sun Tzu",

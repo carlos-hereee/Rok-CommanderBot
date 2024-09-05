@@ -1,6 +1,7 @@
 // EMBED
-let { RichEmbed }  from "discord.js";
-module.exports = function genEmbed(days, hours, minutes, Title) {
+import  { RichEmbed }  from "discord.js";
+
+export function genEmbed(days, hours, minutes, Title) {
   let embed = new RichEmbed()
     .setFooter("Countdown bot ")
     .setColor("#FF0000")

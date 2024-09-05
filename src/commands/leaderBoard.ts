@@ -11,7 +11,7 @@ import { readImage }  from "./tessaract";
 
  */
 
-module.exports = {
+export = {
   name: "leaderboard",
   description:
     "Create an event for members to input data and get a leaderboard ranking on points.",
