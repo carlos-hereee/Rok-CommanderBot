@@ -1,46 +1,48 @@
-import { Client }  from "discord.js";
-import commands  from "./commands";
-import express  from "express";
+import { Client, Message, GatewayIntentBits, Partials}  from "discord.js";
+import {runCommand}  from "./commands";
+// import {deployCommands}  from "./commands/deployCommands";
+// import express  from "express";
 import helmet  from "helmet";
 import cors  from "cors";
-import {isDev, discordToken, port} from '@utils/config'
+import {isDev, discordToken, port, botInviteLink, } from '@utils/config'
 
-const client = new Client({  intents: ["Guilds", "GuildMessages", "DirectMessages"],});
-const server = express();
+const bot = new Client({  
+  partials: [Partials.Channel],
+  intents: [
+    GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.MessageContent],});
 
-server.use(helmet());
-server.use(cors());
-server.use(express.json());
+// const server = express();
+// server.use(helmet());
+// server.use(cors());
+// server.use(express.json());
 
 
-client.on("ready", () => {
-  console.log("Discord bot is ready! 🤖");
-  // if (!isDev) {
-  //   client.user.setStatus("online");
-  //   client.user.setPresence({
-  //     game: {
-  //       name: `Run "!bot"  for commands`,
-  //       type: "PLAYING",
-  //     },
-  //   });
-  // } else {
-  //   console.log("in development");
-  //   client.user.setStatus("online");
-  //   client.user.setPresence({
-  //     game: {
-  //       name: `Run "!bot" for commands`,
-  //       type: "PLAYING",
-  //     },
-  //   });
-  // }
+bot.on("ready", () => {
+  if(!bot.user) return 
+  if(isDev) console.log(`\n*** ${bot.user.username} is ready`)
+  bot.user.setStatus("online");
+  bot.user.setPresence({
+    afk: false,
+    activities: [{name: "Run '!rok data'  for commands"}]
+  });
+  
 });
-client.on("message", (message) => {
-  if (message.content[0] === "!") {
-    const command = message.content.split(" ")[0].substr(1);
-    commands.handler(command, message);
-  }
-});
+// bot.on("guildCreate", async (guild) => await deployCommands( guild.id))
 
-client.login(process.env.BOT_TOKEN);
+bot.on("messageCreate", runCommand);
 
-server.listen(port, () => console.log(`\n*** Listening on port ${port}***\n`));
+// bot.on("interactionCreate", async (interaction) => {
+//   console.log('interactoi', interaction)
+//   if (!interaction.isCommand()) {
+//     return;
+//   }
+//   const { commandName } = interaction;
+//   if (commands[commandName as keyof typeof commands]) {
+//     commands[commandName as keyof typeof commands].execute(interaction);
+//   }
+// });
+
+bot.login(discordToken);
+
+// server.listen(port, () => console.log(`\n*** Listening on port ${port}***\n`));
