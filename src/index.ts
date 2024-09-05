@@ -24,7 +24,7 @@ bot.on("ready", () => {
   bot.user.setStatus("online");
   bot.user.setPresence({
     afk: false,
-    activities: [{name: "Run '!rok data'  for commands"}]
+    activities: [{name: "Run !bothelp for commands"}]
   });
   
 });

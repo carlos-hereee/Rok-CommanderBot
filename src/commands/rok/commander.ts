@@ -25,10 +25,20 @@ export = {
       msg.pop();
       champion = msg.join(" ").toUpperCase();
     }
+    console.log('msg', msg)
     const commander = await getCommander(champion, build);
+    console.log('commander', commander)
     if (commander.length === 0) {
-      return message.channel.send({ embed: errorEmbed() });
+      const options ={
+        description: "The command as you have typed does not exist in our database",
+        image: {
+          url:
+            "https://www.filmla.com/wp-content/uploads/2016/04/travolta-404-comp.gif",
+        },
+      }
+      return sendEmbed(message, options)
     }
-    return message.channel.send({ embed: formatEmbed(commander.pop()) });
+    const options = formatEmbed(commander.pop())
+    return sendEmbed(message, options)
   },
 };

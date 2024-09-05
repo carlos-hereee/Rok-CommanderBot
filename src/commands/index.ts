@@ -1,4 +1,5 @@
 import { Message}  from "discord.js";
+import type {ICommand} from '@utils/types/ICommand'
 import eightBall  from "./miscellaneous/eightBall";
 import sunTzu  from "./miscellaneous/sunQoute";
 import donate  from "./miscellaneous/donate";
@@ -6,9 +7,10 @@ import poll  from "./miscellaneous/poll";
 import rps  from "./miscellaneous/rps";
 import ping  from "./miscellaneous/ping";
 import countdown  from "./miscellaneous/countdown";
-import castle  from "./rokAssets/castle";
-import upgrade  from "./rokAssets/cityHall";
-import commander  from "./rokAssets/commander";
+// import bothelp  from "./miscellaneous/bothelp";
+import castle  from "./rok/castle";
+import upgrade  from "./rok/cityHall";
+import commander  from "./rok/commander";
 // import leaderBoard  from "./leaderBoard";
 import { boiler }  from "./embed";
 
@@ -29,16 +31,15 @@ const commandsData = [
   i.triggers.forEach((trigger) => (all[trigger] = i.handler));
   description += `**${i.name}** - ${i.description}\nUsage: ${i.triggers}\n\n`;
   return all;
-}, {});
+}, );
 
 export const commands = {
   ...commandsData,
-  bot: (message) =>message.channel.send({embed: { ...boiler, description }}),
+  "bothelp": (message:Message) =>sendEmbed(message)
 };
 
 
 export const runCommand = (message:Message) => {
-  console.log('commands', commands)
     if (message.content[0] === "!") {
       const cmd = message.content.split(" ")[0].substr(1);
       if(commands[cmd]) commands[cmd]( message, cmd)
