@@ -1,5 +1,6 @@
 import { formatEmbed, errorEmbed , sendEmbed}  from "../embed";
 import { getCommander }  from "@db/modal/getCommander";
+import { notFound }  from "@db/error.json";
 
 const builds = {
   skill: "SKILL",
@@ -24,18 +25,9 @@ export = {
             champion = msg.join(" ")
           }
           const commander = await getCommander(champion, build);
-          if (commander.length === 0) {
-              const options ={
-                  description: "The command as you have typed does not exist in our database",
-                  image: {
-                      url:
-                        "https://www.filmla.com/wp-content/uploads/2016/04/travolta-404-comp.gif",
-                    },
-                  }
-                  return sendEmbed(message, options)
-                }
-                const options = formatEmbed(commander.pop())
-                return sendEmbed(message, options)
+          if (commander.length === 0)return sendEmbed(message, notFound)
+          const options = formatEmbed(commander.pop())
+          return sendEmbed(message, options)
               },
             };
             

@@ -46,7 +46,7 @@ export const errorEmbed = () => {
   })
 };
 export const formatEmbedCity = (embed) => {
-  return boiler({
+  return {
     description: embed.description,
     thumbnail: {
       url:
@@ -85,7 +85,7 @@ export const formatEmbedCity = (embed) => {
       },
     ],
   }
-)};
+};
 
 export const formatEmbedCastle = (embed) => {
   return {

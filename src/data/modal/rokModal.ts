@@ -9,10 +9,7 @@ export const getOtherBuilds = (arr, build) => {
   return [{ ...arr[index], other_builds }];
 };
 
-export const getCity = (level:string) => {
-  return []
-  // return db("city").where({ level });
-};
+
 export const getCastle = (level:string) => {
   return []
   // return db("castle").where({ level });
