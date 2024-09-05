@@ -89,7 +89,6 @@ export const formatEmbedCity = (embed) => {
 
 export const formatEmbedCastle = (embed) => {
   return {
-    ...boiler,
     description: embed.description,
     thumbnail: {
       url:

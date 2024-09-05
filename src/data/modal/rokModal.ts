@@ -10,7 +10,3 @@ export const getOtherBuilds = (arr, build) => {
 };
 
 
-export const getCastle = (level:string) => {
-  return []
-  // return db("castle").where({ level });
-};
