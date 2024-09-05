@@ -1,4 +1,4 @@
-const { v1 } = require("uuid");
+import { v1 }  from "uuid";
 
 exports.seed = (knex) => {
   // Deletes ALL existing entries

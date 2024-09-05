@@ -1,5 +1,5 @@
-const axios = require("axios");
-const { readImage } = require("./tessaract");
+import axios  from "axios";
+import { readImage }  from "./tessaract";
 /**
  *
  *  

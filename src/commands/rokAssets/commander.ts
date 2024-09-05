@@ -1,5 +1,5 @@
-const { formatEmbed, errorEmbed } = require("../embed");
-const { getCommander } = require("../../data/rok_modal");
+import { formatEmbed, errorEmbed }  from "../embed";
+import { getCommander }  from "../../data/rok_modal";
 
 const builds = {
   skill: "SKILL",

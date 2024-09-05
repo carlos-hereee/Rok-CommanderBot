@@ -1,4 +1,4 @@
-const sunTzu = require("sun-tzu-quotes");
+import sunTzu  from "sun-tzu-quotes";
 
 module.exports = {
   name: "Sun Tzu Quotes",

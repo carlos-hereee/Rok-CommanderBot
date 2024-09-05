@@ -1,14 +1,14 @@
-const eightBall = require("./miscellaneous/eightBall");
-const sunTzu = require("./miscellaneous/sunQoute");
-const donate = require("./miscellaneous/donate");
-const poll = require("./miscellaneous/poll");
-const rps = require("./miscellaneous/rps");
-const countdown = require("./miscellaneous/countdown");
-const castle = require("./rokAssets/castle");
-const upgrade = require("./rokAssets/cityHall");
-const commander = require("./rokAssets/commander");
-// const leaderBoard = require("./leaderBoard");
-const { boiler } = require("./embed");
+import eightBall  from "./miscellaneous/eightBall";
+import sunTzu  from "./miscellaneous/sunQoute";
+import donate  from "./miscellaneous/donate";
+import poll  from "./miscellaneous/poll";
+import rps  from "./miscellaneous/rps";
+import countdown  from "./miscellaneous/countdown";
+import castle  from "./rokAssets/castle";
+import upgrade  from "./rokAssets/cityHall";
+import commander  from "./rokAssets/commander";
+// import leaderBoard  from "./leaderBoard";
+import { boiler }  from "./embed";
 
 let description = "";
 const cmd = [

@@ -1,4 +1,4 @@
-const Tesseract = require("tesseract.js");
+import Tesseract  from "tesseract.js";
 
 const readImage = async (attachments) => {
   let url = [];

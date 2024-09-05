@@ -1,5 +1,5 @@
-const { Timer } = require("easytimer.js");
-const embeds = require("./embed.js");
+import { Timer }  from "easytimer.js";
+import embeds  from "./embed.js";
 
 const getArgs = (msg, cmd) => {
   const command = msg.content;

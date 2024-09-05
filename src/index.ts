@@ -1,10 +1,10 @@
 /* eslint-disable no-undef */
-const dotenv = require("dotenv");
-const { Client } = require("discord.js");
-const commands = require("./commands/commands");
-const express = require("express");
-const helmet = require("helmet");
-const cors = require("cors");
+import dotenv  from "dotenv";
+import { Client }  from "discord.js";
+import commands  from "./commands/commands";
+import express  from "express";
+import helmet  from "helmet";
+import cors  from "cors";
 
 dotenv.config();
 const port = process.env.PORT || 400;
