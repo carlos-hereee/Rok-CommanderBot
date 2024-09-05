@@ -9,7 +9,9 @@
     "start": "node ./src/index.js",
     "server": "nodemon ./src/index.js",
     "production": "NODE_ENV=production&&node ./src/index.js",
-    "development": "set NODE_ENV=development&&nodemon ./src/index.js"
+    "development": "set NODE_ENV=development&&nodemon ./src/index.js",
+    "watch:1": "tsc -p tsconfig.json --watch",
+    "watch:2": "tsc-alias -p tsconfig.json --watch"
   },
   "keywords": [],
   "author": "",
@@ -30,6 +32,16 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "nodemon": "^3.1.4",
+    "@types/node": "^22.5.4",
+    "@typescript-eslint/eslint-plugin": "^8.4.0",
+    "@typescript-eslint/parser": "^8.4.0",
+    "eslint": "^9.9.1",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.3",
+    "eslint-plugin-prettier": "^5.2.1",
+    "prettier": "^3.3.3",
+    "tsc-alias": "^1.8.10",
+    "typescript": "^5.5.4"
   }
 }
