@@ -7,15 +7,16 @@ import poll  from "./miscellaneous/poll";
 import rps  from "./miscellaneous/rps";
 import ping  from "./miscellaneous/ping";
 import countdown  from "./miscellaneous/countdown";
-// import bothelp  from "./miscellaneous/bothelp";
+import bothelp  from "./miscellaneous/bothelp";
 import castle  from "./rok/castle";
 import upgrade  from "./rok/cityHall";
 import commander  from "./rok/commander";
 // import leaderBoard  from "./leaderBoard";
-import { boiler }  from "./embed";
+import { boiler , sendEmbed}  from "./embed";
 
 let description = "";
 const commandsData = [
+  bothelp,
   commander,
   eightBall,
   sunTzu,
@@ -31,7 +32,7 @@ const commandsData = [
   i.triggers.forEach((trigger) => (all[trigger] = i.handler));
   description += `**${i.name}** - ${i.description}\nUsage: ${i.triggers}\n\n`;
   return all;
-}, );
+},{} );
 
 export const commands = {
   ...commandsData,

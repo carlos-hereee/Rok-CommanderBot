@@ -5,6 +5,7 @@ import {runCommand}  from "./commands";
 import helmet  from "helmet";
 import cors  from "cors";
 import {isDev, discordToken, port, botInviteLink, } from '@utils/config'
+import { connectMongoose } from "@db/mongo";
 
 const bot = new Client({  
   partials: [Partials.Channel],
@@ -44,5 +45,5 @@ bot.on("messageCreate", runCommand);
 // });
 
 bot.login(discordToken);
-
+connectMongoose()
 // server.listen(port, () => console.log(`\n*** Listening on port ${port}***\n`));

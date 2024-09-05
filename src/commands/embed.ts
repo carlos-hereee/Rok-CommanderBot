@@ -1,7 +1,7 @@
 import {EmbedBuilder, Message, EmbedData} from "discord.js"
 import {botInviteLink} from '@utils/config'
 
-export const boiler =(options:EmbedData)=>{
+export const boiler =(options?:EmbedData)=>{
   if(options) return new EmbedBuilder({
   color: 0x3a8bdf,
   author: {name: "Silbas handbood",url: botInviteLink,},
@@ -14,7 +14,7 @@ export const boiler =(options:EmbedData)=>{
   author: {name: "Silbas handbood",url: botInviteLink,},
   footer: {
     text: `This is a fanmade bot and it is not affiliated with Lilithgames in any way. Copyright © ${new Date().getFullYear()}`,
-  },...options
+  },
 }).setTimestamp()}
 
 export const formatEmbed = (embed) => {

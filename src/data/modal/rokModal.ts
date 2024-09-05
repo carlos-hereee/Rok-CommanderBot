@@ -1,4 +1,3 @@
-import db  from "./dbConfig";
 
 export const getOtherBuilds = (arr, build) => {
   let other_builds = "";
@@ -9,16 +8,12 @@ export const getOtherBuilds = (arr, build) => {
   }
   return [{ ...arr[index], other_builds }];
 };
-export const getCommander = async (name, build) => {
-  const response = await db("commander").where({ name });
-  if (response.length === 0) return [];
-  if (response.length === 1) return response;
-  return getOtherBuilds(response, build);
-};
 
 export const getCity = (level:string) => {
-  return db("city").where({ level });
+  return []
+  // return db("city").where({ level });
 };
 export const getCastle = (level:string) => {
-  return db("castle").where({ level });
+  return []
+  // return db("castle").where({ level });
 };
