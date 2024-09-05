@@ -80,3 +80,4 @@ eng.traineddata
 
 # local scripts
 scripts/*
+dist/

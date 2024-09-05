@@ -32,14 +32,18 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "@types/node": "^22.5.4",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.4.0",
     "@typescript-eslint/parser": "^8.4.0",
+    "discord-api-types": "^0.37.99",
     "eslint": "^9.9.1",
     "eslint-config-prettier": "^9.1.0",
     "eslint-import-resolver-typescript": "^3.6.3",
     "eslint-plugin-prettier": "^5.2.1",
+    "nodemon": "^3.1.4",
     "prettier": "^3.3.3",
     "tsc-alias": "^1.8.10",
     "typescript": "^5.5.4"

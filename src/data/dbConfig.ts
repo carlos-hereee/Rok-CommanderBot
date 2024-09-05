@@ -1,4 +1,5 @@
 import knex  from "knex";
 import knexConfig  from "../../knexfile";
+import {dbEnv} from '@utils/config'
 
-export { knex(knexConfig[process.env.DB_ENV || "development"]);}
+export = knex(knexConfig[dbEnv])

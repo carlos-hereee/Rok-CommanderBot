@@ -1,39 +1,38 @@
-/* eslint-disable no-undef */
-import dotenv  from "dotenv";
 import { Client }  from "discord.js";
-import commands  from "./commands/commands";
+import commands  from "./commands";
 import express  from "express";
 import helmet  from "helmet";
 import cors  from "cors";
+import {isDev, discordToken, port} from '@utils/config'
 
-dotenv.config();
-const port = process.env.PORT || 400;
-const client = new Client();
+const client = new Client({  intents: ["Guilds", "GuildMessages", "DirectMessages"],});
 const server = express();
 
 server.use(helmet());
 server.use(cors());
 server.use(express.json());
 
+
 client.on("ready", () => {
-  if (process.env.NODE_ENV === "production") {
-    client.user.setStatus("online");
-    client.user.setPresence({
-      game: {
-        name: `Run "!bot"  for commands`,
-        type: "PLAYING",
-      },
-    });
-  } else {
-    console.log("in development");
-    client.user.setStatus("online");
-    client.user.setPresence({
-      game: {
-        name: `Run "!bot" for commands`,
-        type: "PLAYING",
-      },
-    });
-  }
+  console.log("Discord bot is ready! 🤖");
+  // if (!isDev) {
+  //   client.user.setStatus("online");
+  //   client.user.setPresence({
+  //     game: {
+  //       name: `Run "!bot"  for commands`,
+  //       type: "PLAYING",
+  //     },
+  //   });
+  // } else {
+  //   console.log("in development");
+  //   client.user.setStatus("online");
+  //   client.user.setPresence({
+  //     game: {
+  //       name: `Run "!bot" for commands`,
+  //       type: "PLAYING",
+  //     },
+  //   });
+  // }
 });
 client.on("message", (message) => {
   if (message.content[0] === "!") {

@@ -1,5 +1,5 @@
 import { formatEmbed, errorEmbed }  from "../embed";
-import { getCommander }  from "../../data/rok_modal";
+import { getCommander }  from "../../data/rokModal";
 
 const builds = {
   skill: "SKILL",
@@ -19,7 +19,7 @@ export = {
     let build = "";
     if (!builds[msg[msg.length - 1]]) {
       champion = msg.join(" ").toUpperCase();
-      build = null;
+      build = "null";
     } else {
       build = msg[msg.length - 1].toUpperCase();
       msg.pop();

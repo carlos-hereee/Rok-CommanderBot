@@ -1,5 +1,5 @@
 import { Timer }  from "easytimer.js";
-import embeds  from "./embed.js";
+// import embeds  from "./embed.js";
 
 const getArgs = (msg, cmd) => {
   const command = msg.content;
@@ -13,12 +13,12 @@ export  = {
     "A timer for important events: => !cd event_name [number]d [number]h [number]m ",
   triggers: ["cd"],
   handler: (message) => {
-    const commandRecd = "cd ";
-    const args = getArgs(message, commandRecd).split(" ");
-    const title = args.shift();
-    const hours = 0;
-    const minutes = 0;
-    const seconds = 0;
+    let commandRecd = "cd ";
+    let args = getArgs(message, commandRecd).split(" ");
+    let title = args.shift();
+    let hours = 0;
+    let minutes = 0;
+    let seconds = 0;
 
     for (let i = 0; i < args.length; i++) {
       let regx = /(\d*)d|(\d*)h|(\d*)m|(\d*)s/g; // THIS IS LITERALLY BLACK MAGIC DO NOT TOUCH
@@ -53,17 +53,17 @@ export  = {
       precision: "minutes", // TODO: does not handle small amounts of time well. eg 3h 25mins etc
     });
     let embedmsg;
-    message.channel
-      .send({ embed: embeds(hours, minutes, seconds, title) })
-      .then((m) => (embedmsg = m));
-    timer.addEventListener("hoursUpdated", () => {
-      embedmsg.edit({ embed: embeds(hours, minutes, seconds, title) });
-    });
-    timer.addEventListener("daysUpdated", () => {
-      embedmsg.edit({ embed: embeds(hours, minutes, seconds, title) });
-    });
-    timer.addEventListener("targetAchieved", () => {
-      message.reply(`The reminder titled \`${title}\` has finished!`);
-    });
+    // message.channel
+    //   .send({ embed: embeds(hours, minutes, seconds, title) })
+    //   .then((m) => (embedmsg = m));
+    // timer.addEventListener("hoursUpdated", () => {
+    //   // embedmsg.edit({ embed: embeds(hours, minutes, seconds, title) });
+    // });
+    // timer.addEventListener("daysUpdated", () => {
+    //   // embedmsg.edit({ embed: embeds(hours, minutes, seconds, title) });
+    // });
+    // timer.addEventListener("targetAchieved", () => {
+    //   message.reply(`The reminder titled \`${title}\` has finished!`);
+    // });
   },
 };

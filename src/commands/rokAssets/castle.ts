@@ -1,5 +1,5 @@
 import { formatEmbedCastle, errorEmbed }  from "../embed";
-import { getCastle }  from "../../data/rok_modal";
+import { getCastle }  from "../../data/rokModal";
 
 export= {
   name: "Castle Upgrades",

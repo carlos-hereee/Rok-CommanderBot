@@ -1,6 +1,6 @@
-import db  from "./db-config";
+import db  from "./dbConfig";
 
-const getOtherBuilds = (arr, build) => {
+export const getOtherBuilds = (arr, build) => {
   let other_builds = "";
   let index = 0;
   for (let i = 0; i < arr.length; i++) {
@@ -9,21 +9,16 @@ const getOtherBuilds = (arr, build) => {
   }
   return [{ ...arr[index], other_builds }];
 };
-const getCommander = async (name, build) => {
+export const getCommander = async (name, build) => {
   const response = await db("commander").where({ name });
   if (response.length === 0) return [];
   if (response.length === 1) return response;
   return getOtherBuilds(response, build);
 };
 
-const getCity = (level) => {
+export const getCity = (level:string) => {
   return db("city").where({ level });
 };
-const getCastle = (level) => {
+export const getCastle = (level:string) => {
   return db("castle").where({ level });
-};
-export {
-  getCommander,
-  getCity,
-  getCastle,
 };

@@ -1,5 +1,5 @@
 import { errorEmbed, formatEmbedCity }  from "../embed";
-import { getCity }  from "../../data/rok_modal";
+import { getCity }  from "../../data/rokModal";
 
 export = {
   name: "City Hall Upgrades",
