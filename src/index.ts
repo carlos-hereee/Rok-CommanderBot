@@ -1,11 +1,11 @@
 import { Client, Message, GatewayIntentBits, Partials } from "discord.js";
-import { runCommand } from "./commands";
+// import { runCommand } from "./commands";
 // import {deployCommands}  from "./commands/deployCommands";
-// import express  from "express";
-import helmet from "helmet";
-import cors from "cors";
+import express  from "express";
+// import helmet from "helmet";
+// import cors from "cors";
 import { isDev, discordToken, port, botInviteLink } from "@utils/config";
-// import { connectMongoose } from "@db/mongo";
+import { connectMongoose } from "@db/mongo";
 
 const bot = new Client({
 	partials: [Partials.Channel],
@@ -17,10 +17,10 @@ const bot = new Client({
 	],
 });
 
-// const server = express();
+const server = express();
 // server.use(helmet());
 // server.use(cors());
-// server.use(express.json());
+server.use(express.json());
 
 bot.on("ready", () => {
 	if (!bot.user) return;
@@ -33,7 +33,7 @@ bot.on("ready", () => {
 });
 // bot.on("guildCreate", async (guild) => await deployCommands( guild.id))
 
-bot.on("messageCreate", runCommand);
+// bot.on("messageCreate", runCommand);
 
 // bot.on("interactionCreate", async (interaction) => {
 //   console.log('interactoi', interaction)
@@ -47,5 +47,8 @@ bot.on("messageCreate", runCommand);
 // });
 
 bot.login(discordToken);
-// connectMongoose()
-// server.listen(port, () => console.log(`\n*** Listening on port ${port}***\n`));
+
+connectMongoose(server)
+
+
+

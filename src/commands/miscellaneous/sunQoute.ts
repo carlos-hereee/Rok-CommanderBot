@@ -1,10 +1,10 @@
-import sunTzu  from "sun-tzu-quotes";
+// import sunTzu  from "sun-tzu-quotes";
 
-export = {
-  name: "Sun Tzu Quotes",
-  triggers: ["wise"],
-  description: "Give you famous qoutes from the famous hero Sun Tzu",
-  handler: (message) => {
-    return message.channel.send(`Sun Tzu once said, \n\n${sunTzu()}`);
-  },
-};
+// export = {
+//   name: "Sun Tzu Quotes",
+//   triggers: ["wise"],
+//   description: "Give you famous qoutes from the famous hero Sun Tzu",
+//   handler: (message) => {
+//     return message.channel.send(`Sun Tzu once said, \n\n${sunTzu()}`);
+//   },
+// };

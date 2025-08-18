@@ -1,8 +1,9 @@
 import mongoose from "mongoose";
-import { uri } from "@utils/config";
+import { port, uri } from "@utils/config";
+import {Express} from 'express'
 // import type { MongoError } from "mongodb";
 
-// mongoose no longer requires these options
-// const dbOptions = { useNewUrlParser: true, useUnifiedTopology: true };
-
-export const connectMongoose =  () => mongoose.connect(uri);
+export const connectMongoose =  (server:Express) =>
+    mongoose.connect(uri).then(()=>{
+        server.listen(port, () => console.log(`\n*** Listening on port ${port}***\n`));
+    })
