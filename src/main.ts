@@ -1,20 +1,15 @@
-import { Client, Message, GatewayIntentBits, Partials } from "discord.js";
+import { Client } from "discord.js";
 // import { runCommand } from "./commands";
 // import {deployCommands}  from "./commands/deployCommands";
-import express  from "express";
+import express from "express";
 // import helmet from "helmet";
 // import cors from "cors";
-import { isDev, discordToken, port, botInviteLink } from "@utils/config";
+import { isDev, discordToken } from "@utils/config";
 import { connectMongoose } from "@db/mongo";
 
-const bot = new Client({
-	partials: [Partials.Channel],
-	intents: [
-		GatewayIntentBits.Guilds,
-		GatewayIntentBits.GuildMessages,
-		GatewayIntentBits.DirectMessages,
-		GatewayIntentBits.MessageContent,
-	],
+const client = new Client({
+  // partials: [Partials.Channel],
+  intents: ["GUILDS", "GUILD_MESSAGES", "GUILD_MEMBERS", "MESSAGE_CONTENT"],
 });
 
 const server = express();
@@ -22,14 +17,14 @@ const server = express();
 // server.use(cors());
 server.use(express.json());
 
-bot.on("ready", () => {
-	if (!bot.user) return;
-	if (isDev) console.log(`\n*** ${bot.user.username} is ready`);
-	bot.user.setStatus("online");
-	bot.user.setPresence({
-		afk: false,
-		activities: [{ name: "Run !bothelp for commands" }],
-	});
+client.on("ready", () => {
+  if (!client.user) return;
+  if (isDev) console.log(`\n*** ${client.user.username} is ready`);
+  client.user.setStatus("online");
+  client.user.setPresence({
+    afk: false,
+    activities: [{ name: "Run !bothelp for commands" }],
+  });
 });
 // bot.on("guildCreate", async (guild) => await deployCommands( guild.id))
 
@@ -46,9 +41,6 @@ bot.on("ready", () => {
 //   }
 // });
 
-bot.login(discordToken);
+client.login(discordToken);
 
-connectMongoose(server)
-
-
-
+connectMongoose(server);

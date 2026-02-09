@@ -45,7 +45,7 @@
 //     },
 //   })
 // };
-// export const formatEmbedCity = (embed) => {
+// export const formatEmbedCity = (embed:any) => {
 //   return {
 //     description: embed.description,
 //     thumbnail: {
@@ -87,7 +87,7 @@
 //   }
 // };
 
-// export const formatEmbedCastle = (embed) => {
+// export const formatEmbedCastle = (embed:any) => {
 //   return {
 //     description: embed.description,
 //     thumbnail: {

@@ -1,22 +1,15 @@
-// const choices = ["rock", "paper", "scissors"];
+// import { Message } from "discord.js";
+// import {rps} from '@db/seeds/games.json'
 
-// const results = [
-//   ["t", "c", "u"],
-//   ["u", "t", "c"],
-//   ["c", "u", "t"],
-// ];
+// const {choices,resultMap, results }= rps
 
-// const resultMap = {
-//   t: "It is a Tie!",
-//   u: "You Win!",
-//   c: "You Lose!",
-// };
+
 
 // export = {
 //   name: "Rock, Paper, Scissors",
 //   triggers: ["game"],
 //   description: "Play a fun game with the bot of rock paper scissors",
-//   handler: (message) => {
+//   handler: (message:Message) => {
 //     const cpu = choices[Math.floor(Math.random() * choices.length)]; // generate random choice for computer
 //     const msg = message.content.toLowerCase().split(" "); // get the choice of the user
 //     const pc = msg[msg.length - 1];
@@ -32,11 +25,12 @@
 //         icon_url:
 //           "https://miro.medium.com/max/2000/1*FEcr9_owB5KplrClDpRenA.png",
 //       },
-//       description: `${message.author} plays ${pc}\n\n while computer plays, ${cpu}\n\nResults: ${resultMap[userResult]}\n\nThank you for playing.`,
+//       // description: `${message.author} plays ${pc}\n\n while computer plays, ${cpu}\n\nResults: ${resultMap[userResult]}\n\nThank you for playing.`,
 //       thumbnail: {
 //         url: "https://miro.medium.com/max/2000/1*FEcr9_owB5KplrClDpRenA.png",
 //       },
 //     };
-//     return message.channel.send({ embed: rps });
+//     console.log('message', message);
+//     // return message.reply({ embed: rps });
 //   },
 // };

@@ -1,0 +1,16 @@
+{
+    "rps":{  "choices" :["rock", "paper", "scissors"], 
+
+ "results" :[
+  ["t", "c", "u"],
+  ["u", "t", "c"],
+  ["c", "u", "t"]
+],
+
+ "resultMap" : {
+  "t": "It is a Tie!",
+  "u": "You Win!",
+  "c": "You Lose!"
+}
+}
+}

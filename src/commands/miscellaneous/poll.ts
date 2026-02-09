@@ -50,7 +50,7 @@
 //     let args = message.content.match(/"(.+?)"/g);
 //     if (args) {
 //       if (!canSendPoll(message.author.id)) {
-//         return message.channel.send(
+//         return message.reply(
 //           `${message.author} please wait before sending another poll.`
 //         );
 //       } else if (args.length === 1) {
@@ -74,7 +74,7 @@
 //         const question = args[0];
 //         const questionOptions = [...new Set(args.slice(1))];
 //         if (questionOptions.length > 20) {
-//           return message.channel.send(
+//           return message.reply(
 //             `${message.author} Polls are limited to 20 options.`
 //           );
 //         } else {
@@ -95,7 +95,7 @@
 //         }
 //       }
 //     } else {
-//       return message.channel.send(
+//       return message.reply(
 //         `${message.author} invalid Poll! Question and options should be wrapped in double quotes.`
 //       );
 //     }
