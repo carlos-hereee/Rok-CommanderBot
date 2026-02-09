@@ -3,7 +3,7 @@
 // // import { commandsData } from "./getCmd";
 
 // // import { commands } from "./commands";
-// import { port, botInviteLink, discordToken, clientId } from "@utils/config";
+// import { port, botInviteLink, discordToken, clientId } from "@utils/config.js";
 
 // // const commandsData = Object.values(commands).map((command) => command.data);
 

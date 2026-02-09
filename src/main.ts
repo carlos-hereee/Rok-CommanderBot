@@ -1,34 +1,35 @@
-import { Client } from "discord.js";
+import { Client, GatewayIntentBits } from "discord.js";
+
 // import { runCommand } from "./commands";
 // import {deployCommands}  from "./commands/deployCommands";
-import express from "express";
-// import helmet from "helmet";
-// import cors from "cors";
-import { isDev, discordToken } from "@utils/config";
-import { connectMongoose } from "@db/mongo";
+// import express from "express";
+import { discordToken } from "@utils/config.js";
+import clientReady from "@events/ready.js";
+// import { connectMongoose } from "@db/mongo.js";
 
-const client = new Client({
-  // partials: [Partials.Channel],
-  intents: ["GUILDS", "GUILD_MESSAGES", "GUILD_MEMBERS", "MESSAGE_CONTENT"],
-});
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
 
-const server = express();
-// server.use(helmet());
-// server.use(cors());
-server.use(express.json());
+// client.on(Events.InteractionCreate, async (interaction) => {
+//   console.log("\n\ninteraction ==>", interaction, "\n\n");
+//   if (!interaction.isChatInputCommand()) return;
 
-client.on("ready", () => {
-  if (!client.user) return;
-  if (isDev) console.log(`\n*** ${client.user.username} is ready`);
-  client.user.setStatus("online");
-  client.user.setPresence({
-    afk: false,
-    activities: [{ name: "Run !bothelp for commands" }],
-  });
-});
+//   if (interaction.commandName === "ping") {
+//     await interaction.reply("Pong!");
+//   }
+// });
+// // bot.on("messageCreate", runCommand);
+// client.on(Events.MessageCreate, (message) => {
+//   console.log("\n\nmessage ==>", message, "\n\n");
+// });
+clientReady(client);
+client.login(discordToken);
+
+// const server = express();
+// // server.use(helmet());
+// // server.use(cors());
+// server.use(express.json());
+
 // bot.on("guildCreate", async (guild) => await deployCommands( guild.id))
-
-// bot.on("messageCreate", runCommand);
 
 // bot.on("interactionCreate", async (interaction) => {
 //   console.log('interactoi', interaction)
@@ -41,6 +42,4 @@ client.on("ready", () => {
 //   }
 // });
 
-client.login(discordToken);
-
-connectMongoose(server);
+// connectMongoose(server);
