@@ -1,10 +1,8 @@
 import { Client, GatewayIntentBits } from "discord.js";
-
 // import { runCommand } from "./commands";
 // import {deployCommands}  from "./commands/deployCommands";
-// import express from "express";
 import { discordToken } from "@utils/config.js";
-import clientReady from "@events/ready.js";
+import clientReady from "@events/ready.js";     
 // import { connectMongoose } from "@db/mongo.js";
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
@@ -17,11 +15,12 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 //     await interaction.reply("Pong!");
 //   }
 // });
-// // bot.on("messageCreate", runCommand);
 // client.on(Events.MessageCreate, (message) => {
 //   console.log("\n\nmessage ==>", message, "\n\n");
 // });
 clientReady(client);
+
+
 client.login(discordToken);
 
 // const server = express();

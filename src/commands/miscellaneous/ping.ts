@@ -1,5 +1,6 @@
+// import { SlashCommandBuilder } from "discord.js";
 
-// export= {
+// export default {
 //     name: "Play ping pong",
 //     description: "Play ping pong",
 //     triggers: ["ping", "pong"],
