@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits } from "discord.js";
 // import { runCommand } from "./commands";
 // import {deployCommands}  from "./commands/deployCommands";
 import { discordToken } from "@utils/config.js";
-import clientReady from "@events/ready.js";     
+import clientReady from "@events/ready.js";
 // import { connectMongoose } from "@db/mongo.js";
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });

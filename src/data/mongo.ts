@@ -5,4 +5,5 @@ import { port, uri } from "@utils/config.js";
 
 export const connectMongoose = () =>
   mongoose.connect(uri).then(() => {
-    console.log(`\n*** Listening on port ${port}***\n`);})
+    console.log(`\n*** Listening on port ${port}***\n`);
+  })

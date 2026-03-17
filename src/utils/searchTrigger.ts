@@ -1,1 +1,0 @@
-export const searchTrigger = (triggers:string[]) => {}
