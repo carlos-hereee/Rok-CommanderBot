@@ -1,44 +1,48 @@
-import { Client, GatewayIntentBits } from "discord.js";
-// import { runCommand } from "./commands";
-// import {deployCommands}  from "./commands/deployCommands";
+import { Client, GatewayIntentBits, Collection, Events, MessageFlags, ClientOptions } from "discord.js";
 import { discordToken } from "@utils/config.js";
-import clientReady from "@events/ready.js";
-// import { connectMongoose } from "@db/mongo.js";
+import clientReady from "@commands/utility/ready.js";
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from "url";
+import { MyClient } from "base/classes/CustomClient";
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
 
-// client.on(Events.InteractionCreate, async (interaction) => {
-//   console.log("\n\ninteraction ==>", interaction, "\n\n");
-//   if (!interaction.isChatInputCommand()) return;
 
-//   if (interaction.commandName === "ping") {
-//     await interaction.reply("Pong!");
-//   }
-// });
-// client.on(Events.MessageCreate, (message) => {
-//   console.log("\n\nmessage ==>", message, "\n\n");
-// });
+
+
+const client = new MyClient({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
+
+// paths 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+
+
+
 clientReady(client);
+client.commands = new Collection();
+
+
+const foldersPath = path.join(__dirname, 'commands');
+const commandFolders = fs.readdirSync(foldersPath);
+
+for (const folder of commandFolders) {
+    const commandsPath = path.join(foldersPath, folder);
+    const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith('.js') || file.endsWith('.cjs'));
+    for (const file of commandFiles) {
+        const filePath = path.join(commandsPath, file);
+        const command = require(filePath);
+        // Set a new item in the Collection with the key as the command name and the value as the exported module
+        if ('data' in command && 'execute' in command) {
+            client.commands.set(command.data.name, command);
+        } else {
+            console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+        }
+    }
+}
+
 
 
 client.login(discordToken);
 
-// const server = express();
-// // server.use(helmet());
-// // server.use(cors());
-// server.use(express.json());
 
-// bot.on("guildCreate", async (guild) => await deployCommands( guild.id))
-
-// bot.on("interactionCreate", async (interaction) => {
-//   console.log('interactoi', interaction)
-//   if (!interaction.isCommand()) {
-//     return;
-//   }
-//   const { commandName } = interaction;
-//   if (commands[commandName as keyof typeof commands]) {
-//     commands[commandName as keyof typeof commands].execute(interaction);
-//   }
-// });
-
-// connectMongoose(server);
