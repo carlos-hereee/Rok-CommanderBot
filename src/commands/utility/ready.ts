@@ -6,6 +6,6 @@ export default (client: Client): void => {
   // It makes some properties non-nullable.
   client.once(Events.ClientReady, (readyClient) => {
     // console.log('\n\nreadyClient ==>', readyClient,'\n\n')
-    console.log(`\n\nReady! Logged in as ${readyClient.user.tag}`);
+    console.log(`\n\nReady! Logged in as ${readyClient.user.tag}\n`);
   });
 };

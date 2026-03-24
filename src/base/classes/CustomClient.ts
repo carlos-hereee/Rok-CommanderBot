@@ -1,5 +1,5 @@
 import { Client, ClientOptions, Collection } from "discord.js";
-import { ICommand } from "../types/ICommand";
+import { ICommand } from "../types/ICommand.js";
 
 // Extend the Client class to add the 'commands' property
 export class MyClient extends Client {
