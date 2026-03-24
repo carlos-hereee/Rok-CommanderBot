@@ -33,8 +33,6 @@ const rest = new REST().setToken(discordToken);
 
 
 
-// remove this if you want global commands (takes up to 1hr to propagate)
-
 
 try {
     console.log(`Refreshing ${commands.length} application (/) commands...`);
