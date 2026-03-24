@@ -1,5 +1,5 @@
 import { REST, Routes } from "discord.js";
-import { discordToken } from "@utils/config.js";
+import { clientId, discordGuildId, discordToken } from "@utils/config.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -31,17 +31,16 @@ for (const folder of commandFolders) {
 
 const rest = new REST().setToken(discordToken);
 
-// your app/client ID from the Discord developer portal
-const clientId = "YOUR_CLIENT_ID_HERE";
+
 
 // remove this if you want global commands (takes up to 1hr to propagate)
-const guildId = "YOUR_GUILD_ID_HERE";
+
 
 try {
     console.log(`Refreshing ${commands.length} application (/) commands...`);
 
     const data: any = await rest.put(
-        Routes.applicationGuildCommands(clientId, guildId),
+        Routes.applicationGuildCommands(clientId, discordGuildId),
         { body: commands }
     );
 

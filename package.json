@@ -44,6 +44,7 @@
 	"_moduleAliases": {
 		"@utils": "dist/utils",
 		"@events": "dist/events",
+		"@base": "dist/base",
 		"@config": "dist/config"
 	}
 }

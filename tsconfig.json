@@ -26,7 +26,7 @@
     "paths": {
       "@utils/*": ["utils/*"],
       "@events/*": ["events/*"],
-      "@types/*": ["types/*"],
+      "@base/*": ["base/*"],
       "@commands/*": ["commands/*"],
       "@db/*": ["data/*"]
     } /* Specify a set of entries that re-map imports to additional lookup locations. */,

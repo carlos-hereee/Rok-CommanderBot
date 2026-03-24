@@ -24,6 +24,7 @@ client.commands = new Collection();
 const foldersPath = path.join(__dirname, 'commands');
 const commandFolders = fs.readdirSync(foldersPath);
 
+// load commands first
 (async () => {
     for (const folder of commandFolders) {
         const commandsPath = path.join(foldersPath, folder);
@@ -40,30 +41,30 @@ const commandFolders = fs.readdirSync(foldersPath);
             }
         }
     }
+    // then register the inteaction listerner
+    client.on(Events.InteractionCreate, async (interaction) => {
+        //  only handle slash commands
+        if (!interaction.isChatInputCommand()) return;
+        const command = client.commands.get(interaction.commandName);
+
+        if (!command) {
+            console.error(`No command matching ${interaction.commandName} was found.`);
+            return;
+        }
+
+        try {
+            await command.execute(interaction);
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({
+                content: "There was an error executing this command!",
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+    });
+
+    // login the bot after everything is set up 
+    client.login(discordToken);
+
 })()
-
-client.on(Events.InteractionCreate, async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-
-    const command = client.commands.get(interaction.commandName);
-
-    if (!command) {
-        console.error(`No command matching ${interaction.commandName} was found.`);
-        return;
-    }
-
-    try {
-        await command.execute(interaction);
-    } catch (error) {
-        console.error(error);
-        await interaction.reply({
-            content: "There was an error executing this command!",
-            flags: MessageFlags.Ephemeral,
-        });
-    }
-});
-
-
-client.login(discordToken);
-
 
