@@ -1,5 +1,5 @@
 import { Client, EmbedBuilder, TextChannel } from "discord.js";
-import { IGameEvent } from "@features/events/event.types.js";
+import { IGameEvent, IPrepStep } from "@features/events/event.types.js";
 import { reminderStore } from "@db/stores/reminderStore";
 
 
@@ -25,7 +25,7 @@ export async function fireReminder(
         .addFields(
             {
                 name: "📋 Preparation Checklist",
-                value: event.prepSteps
+                value: (event.prepSteps as IPrepStep[])
                     .sort((a, b) => a.order - b.order)
                     .map((step, i) => `${i + 1}. ${step.label}`)
                     .join("\n"),

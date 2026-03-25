@@ -8,7 +8,7 @@ interface CreateEventInput {
     name: string;
     intervalHours: number;
     firstOccurrence: string;
-    description: string;
+    description?: string;
     channelId: string;
 }
 

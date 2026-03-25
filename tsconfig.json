@@ -25,9 +25,8 @@
     "baseUrl": "./src" /* Specify the base directory to resolve non-relative module names. */,
     "paths": {
       "@utils/*": ["utils/*"],
-      "@events/*": ["events/*"],
       "@base/*": ["base/*"],
-      "@features/*": ["@features/*"],
+      "@features/*": ["features/*"],
       "@commands/*": ["commands/*"],
       "@db/*": ["db/*"]
     } /* Specify a set of entries that re-map imports to additional lookup locations. */,
