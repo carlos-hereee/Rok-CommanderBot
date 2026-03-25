@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Collection, Events, MessageFlags, ClientOptions, } from "discord.js";
+import { GatewayIntentBits, Collection, Events, MessageFlags, ClientOptions, } from "discord.js";
 import { discordToken } from "@utils/config.js";
 import clientReady from "@commands/utility/ready.js";
 import fs from 'fs'
