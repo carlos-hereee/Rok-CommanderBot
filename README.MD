@@ -1,9 +1,78 @@
-development has slowed down
-
 # Rise of Kingdom Discord bot
 
+development has slowed down
 This project is to help guide players learn more about the game RISE OF
 KINGDOMS.
+
+## Folder structure
+
+```
+
+  Folder structure 
+
+/src
+  /commands
+    /events
+      create-event.ts
+      list-events.ts
+      delete-event.ts
+    /reminders
+      set-reminder.ts
+      list-reminders.ts
+    /admin
+      leaderboard.ts
+      manage-roles.ts
+    /utility
+      ping.ts
+      help.ts
+
+  /features                   ← each feature is fully self-contained
+    /reminders
+      ReminderScheduler.ts    ← scheduling logic
+      ReminderJob.ts          ← fires individual reminders
+      reminderHelpers.ts      ← pure utility functions for this feature
+      reminder.types.ts       ← types/interfaces scoped to reminders
+    /activity-tracking
+      ActivityTracker.ts
+      ParticipationStore.ts
+      activityHelpers.ts
+      activity.types.ts
+    /events
+      EventManager.ts
+      occurrenceCalculator.ts
+      event.types.ts
+
+  /db
+    /models
+      Event.ts
+      ReminderLog.ts
+      PlayerActivity.ts
+    /repositories            ← one file per model, handles all DB queries
+      eventRepository.ts
+      reminderRepository.ts
+      activityRepository.ts
+    db.ts                    ← connection setup only
+
+  /base
+    /classes
+      CustomClient.ts
+    /interfaces
+      ICommand.ts
+      IEvent.ts
+    /constants
+      BOT_CONSTANTS.ts       ← e.g. default reminder offsets, score weights
+
+  /utils
+    logger.ts
+    dateUtils.ts
+    embedBuilder.ts
+
+  /types
+    global.d.ts              ← augments discord.js types e.g. client.commands
+  
+  main.ts
+  deploy-commands.ts
+  ```
 
 ## Usage
 
