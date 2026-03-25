@@ -1,12 +1,14 @@
 import { ChatInputCommandInteraction } from "discord.js";
-import { eventStore } from "@db/stores/eventStore.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
-import { IGameEvent } from "./event.types.js";
+import { TCreateEventInput } from "./event.types.js";
+import { eventStore } from "@db/stores/eventStore.js";
+import { v4 } from "uuid";
 
 interface CreateEventInput {
     name: string;
     intervalHours: number;
     firstOccurrence: string;
+    description: string;
     channelId: string;
 }
 
@@ -35,16 +37,20 @@ export class GuildEventManager {
         }
 
         // ② shape the data into what the DB expects
-        const newEvent: Omit<IGameEvent, "id"> = {
+        const newEvent: TCreateEventInput = {
             name: input.name,
+            description: input.description ?? "",    // ← add this
             intervalHours: input.intervalHours,
             firstOccurrence: parsedDate,
-            reminderOffsets: BOT_CONSTANTS.DEFAULT_REMINDER_OFFSETS, // [30, 15]
+            reminderOffsets: [...BOT_CONSTANTS.DEFAULT_REMINDER_OFFSETS],
             channelId: input.channelId,
-            prepSteps: BOT_CONSTANTS.DEFAULT_PREP_STEPS,
+            guildId: interaction.guildId!,       // ← add this, comes from Discord
+            prepSteps: BOT_CONSTANTS.DEFAULT_PREP_STEPS.map(step => ({
+                ...step,
+                id: v4(),
+            })),
             active: true,
         };
-
         // ③ delegate the actual write to the store
         const created = await eventStore.create(newEvent);
 

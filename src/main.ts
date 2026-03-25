@@ -1,10 +1,10 @@
 import { GatewayIntentBits, Collection, Events, MessageFlags, ClientOptions, Client, } from "discord.js";
-import { discordToken } from "@utils/config.js";
+import { discordToken, isDev } from "@utils/config.js";
 import clientReady from "@commands/utility/ready.js";
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from "url";
-
+import { startScheduler } from "@features/reminders/ReminderScheduler.js";
 
 // paths 
 const __filename = fileURLToPath(import.meta.url)
@@ -25,6 +25,7 @@ const commandFolders = fs.readdirSync(foldersPath);
 
 // load commands first
 (async () => {
+    // command loader loop
     for (const folder of commandFolders) {
         const commandsPath = path.join(foldersPath, folder);
         const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith('.js') || file.endsWith('.cjs'));
@@ -61,6 +62,17 @@ const commandFolders = fs.readdirSync(foldersPath);
             });
         }
     });
+
+    // start the scheduler after commands are loaded 
+    // && after client is ready (since it relies on the client to send messages)
+    client.once(Events.ClientReady, () => {
+        startScheduler(client)
+        if (isDev) {
+            console.log('====================================');
+            console.log("Scheduler started");
+            console.log('====================================');
+        }
+    })
 
     // login the bot after everything is set up 
     client.login(discordToken);
