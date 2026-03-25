@@ -1,0 +1,3 @@
+export enum BOT_CONSTANTS {
+    DEFAULT_REMINDER_OFFSETS
+}

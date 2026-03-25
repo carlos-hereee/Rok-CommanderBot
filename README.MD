@@ -8,71 +8,150 @@ KINGDOMS.
 
 ```
 
-  Folder structure 
+Folder structure 
 
-/src
-  /commands
-    /events
-      create-event.ts
-      list-events.ts
-      delete-event.ts
-    /reminders
-      set-reminder.ts
-      list-reminders.ts
-    /admin
-      leaderboard.ts
-      manage-roles.ts
-    /utility
-      ping.ts
-      help.ts
-
-  /features                   ← each feature is fully self-contained
-    /reminders
-      ReminderScheduler.ts    ← scheduling logic
-      ReminderJob.ts          ← fires individual reminders
-      reminderHelpers.ts      ← pure utility functions for this feature
-      reminder.types.ts       ← types/interfaces scoped to reminders
-    /activity-tracking
-      ActivityTracker.ts
-      ParticipationStore.ts
-      activityHelpers.ts
-      activity.types.ts
-    /events
-      EventManager.ts
-      occurrenceCalculator.ts
-      event.types.ts
-
-  /db
-    /models
-      Event.ts
-      ReminderLog.ts
-      PlayerActivity.ts
-    /repositories            ← one file per model, handles all DB queries
-      eventRepository.ts
-      reminderRepository.ts
-      activityRepository.ts
-    db.ts                    ← connection setup only
-
-  /base
-    /classes
-      CustomClient.ts
-    /interfaces
-      ICommand.ts
-      IEvent.ts
-    /constants
-      BOT_CONSTANTS.ts       ← e.g. default reminder offsets, score weights
-
-  /utils
-    logger.ts
-    dateUtils.ts
-    embedBuilder.ts
-
-  /types
-    global.d.ts              ← augments discord.js types e.g. client.commands
-  
-  main.ts
-  deploy-commands.ts
+src/
+├── main.ts                                   ← bot entry point, registers all listeners
+├── deploy-commands.ts                        ← run once to register slash commands with Discord
+│
+├── types/
+│   └── global.d.ts                           ← extends discord.js Client with client.commands
+│
+├── base/
+│   ├── classes/
+│   │   └── CustomClient.ts                   ← extended discord.js Client class
+│   ├── interfaces/
+│   │   ├── ICommand.ts                       ← shape every command file must follow
+│   │   └── IClientEvent.ts                   ← shape for discord event listeners
+│   └── constants/
+│       └── BOT_CONSTANTS.ts                  ← default offsets, score weights, magic numbers
+│
+├── commands/
+│   ├── utility/
+│   │   ├── ping.ts                           ← /ping
+│   │   └── help.ts                           ← /help
+│   ├── events/
+│   │   ├── create-event.ts                   ← /create-event (admin only)
+│   │   ├── list-events.ts                    ← /list-events
+│   │   └── delete-event.ts                   ← /delete-event (admin only)
+│   └── admin/
+│       └── leaderboard.ts                    ← /leaderboard shows MGE participation ranking
+│
+├── features/
+│   ├── events/
+│   │   ├── GuildEventManager.ts              ← creates, updates, deletes events in DB
+│   │   ├── occurrenceCalculator.ts           ← computes next event times from interval + anchor
+│   │   └── event.types.ts                    ← IGameEvent, IEventOccurrence
+│   │
+│   ├── reminders/
+│   │   ├── ReminderScheduler.ts              ← cron loop, checks upcoming events every minute
+│   │   ├── ReminderJob.ts                    ← builds embed, posts to channel, logs to DB
+│   │   └── reminder.types.ts                 ← IReminderJob, IReminderConfig
+│   │
+│   └── activity-tracking/
+│       ├── ActivityTracker.ts                ← listeners for reactions, voice, presence
+│       ├── ParticipationStore.ts             ← upserts activity records, computes scores
+│       └── activity.types.ts                 ← IPlayerActivity, IVoiceSession, IActivityScore
+│
+├── db/
+│   ├── models/
+│   │   ├── Event.ts                          ← event document shape + DB schema
+│   │   ├── ReminderLog.ts                    ← log of every reminder that fired
+│   │   └── PlayerActivity.ts                 ← per-player per-occurrence activity record
+│   ├── stores/
+│   │   ├── eventStore.ts                     ← all DB reads/writes for events
+│   │   ├── reminderStore.ts                  ← all DB reads/writes for reminder logs
+│   │   └── activityStore.ts                  ← all DB reads/writes for player activity
+│   └── db.ts                                 ← connection setup, exports db instance
+│
+└── utils/
+    ├── logger.ts                             ← structured logging wrapper
+    ├── dateUtils.ts                          ← interval math, window checks, formatting
+    └── embedBuilder.ts                       ← reusable Discord embed templates
   ```
+
+## System Design
+
+How the system will flow
+
+```
+
+① Admin runs /create-event
+        │
+        ▼
+commands/events/create-event.ts         ← validates input, calls feature
+        │
+        ▼
+features/events/GuildEventManager.ts    ← business logic
+        │
+        ▼
+db/stores/eventStore.ts                 ← writes to DB
+        │
+        ▼
+db/models/Event.ts                      ← document saved ✓
+
+
+② main.ts starts → startScheduler() runs
+        │
+        ▼
+features/reminders/ReminderScheduler.ts ← cron ticks every minute
+        │
+        ▼
+features/events/occurrenceCalculator.ts ← "is an event happening in 15-30min?"
+        │
+        ├── NO  → do nothing, wait for next tick
+        │
+        └── YES ▼
+        
+features/reminders/ReminderJob.ts       ← builds embed, @here message
+        │
+        ├── posts to Discord channel
+        │
+        └── db/stores/reminderStore.ts  ← logs messageId to DB
+
+
+③ Player reacts ✅ to reminder message
+        │
+        ▼
+features/activity-tracking/
+        ActivityTracker.ts              ← Events.MessageReactionAdd fires
+        │
+        ▼
+db/stores/reminderStore.ts              ← looks up which event this messageId belongs to
+        │
+        ▼
+db/stores/activityStore.ts              ← upserts PlayerActivity record
+
+
+④ Event window opens — player joins voice
+        │
+        ▼
+ActivityTracker.ts                      ← Events.VoiceStateUpdate fires
+        │
+        ├── join → cache join time in memory (Map)
+        │
+        └── leave → compute voiceMinutes, write to activityStore
+
+
+⑤ Admin runs /leaderboard
+        │
+        ▼
+commands/admin/leaderboard.ts
+        │
+        ▼
+db/stores/activityStore.ts              ← fetches all PlayerActivity for event
+        │
+        ▼
+features/activity-tracking/
+        ParticipationStore.ts           ← computeScore() ranks players
+        │
+        ▼
+utils/embedBuilder.ts                   ← formats ranked list as embed
+        │
+        ▼
+Discord channel                         ← leaderboard posted ✓
+
+```
 
 ## Usage
 
@@ -117,3 +196,4 @@ This project was made with
 - Node.js
 - Javascript
 - eslint
+- Typscript

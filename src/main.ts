@@ -1,10 +1,9 @@
-import { GatewayIntentBits, Collection, Events, MessageFlags, ClientOptions, } from "discord.js";
+import { GatewayIntentBits, Collection, Events, MessageFlags, ClientOptions, Client, } from "discord.js";
 import { discordToken } from "@utils/config.js";
 import clientReady from "@commands/utility/ready.js";
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from "url";
-import { MyClient } from "./base/classes/CustomClient.js";
 
 
 // paths 
@@ -12,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 
-const client = new MyClient({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
 
 
 
