@@ -1,9 +1,7 @@
 import mongoose from "mongoose";
-import { port, uri } from "@utils/config.js";
-// import { Express } from "express";
-// import type { MongoError } from "mongodb";
+import { isDev, port, uri } from "@utils/config.js";
 
-export const connectMongoose = () =>
-  mongoose.connect(uri).then(() => {
-    console.log(`\n*** Listening on port ${port}***\n`);
-  })
+export async function connectMongoose(): Promise<void> {
+  await mongoose.connect(uri);
+  if (isDev) console.log(`\n*** Listening on port ${port}***\n`);
+}

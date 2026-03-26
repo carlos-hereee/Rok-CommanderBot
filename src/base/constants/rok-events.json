@@ -1,0 +1,41 @@
+{
+  "events": [
+    {
+      "key": "ruins",
+      "name": "Ruins",
+      "intervalHours": 36,
+      "prepSteps": [
+        { "label": "Activate stats token", "order": 1 },
+        { "label": "Fetch rune buff",       "order": 2 },
+        { "label": "Use army expansion",    "order": 3 }
+      ]
+    },
+    {
+      "key": "alliance_battle",
+      "name": "Alliance Battle Day",
+      "intervalHours": 168,
+      "prepSteps": [
+        { "label": "Activate stats token", "order": 1 },
+        { "label": "Rally troops",          "order": 2 }
+      ]
+    },
+    {
+      "key": "trial_of_kau_karuak",
+      "name": "Trial of Kau Karuak",
+      "intervalHours": 84,
+      "prepSteps": [
+        { "label": "Prepare siege units",  "order": 1 },
+        { "label": "Activate stats token", "order": 2 }
+      ]
+    },
+    {
+      "key": "altar_of_darkness",
+      "name": "Altar of Darkness",
+      "intervalHours": 72,
+      "prepSteps": [
+        { "label": "Stockpile offerings",  "order": 1 },
+        { "label": "Activate stats token", "order": 2 }
+      ]
+    }
+  ]
+}

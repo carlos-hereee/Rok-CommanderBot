@@ -5,6 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from "url";
 import { startScheduler } from "@features/reminders/ReminderScheduler.js";
+import { connectMongoose } from "@db/db";
 
 // paths 
 const __filename = fileURLToPath(import.meta.url)
@@ -41,6 +42,10 @@ const commandFolders = fs.readdirSync(foldersPath);
             }
         }
     }
+
+    // connect to db before starting the bot to ensure it's ready when commands are executed
+    await connectMongoose()
+
     // then register the inteaction listerner
     client.on(Events.InteractionCreate, async (interaction) => {
         //  only handle slash commands
