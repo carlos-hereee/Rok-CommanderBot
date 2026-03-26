@@ -3,8 +3,6 @@
 
 // const {choices,resultMap, results }= rps
 
-
-
 // export = {
 //   name: "Rock, Paper, Scissors",
 //   triggers: ["game"],

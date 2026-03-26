@@ -7,30 +7,29 @@ import { playersRouter } from "./routes/players.routes.js";
 import { remindersRouter } from "./routes/reminders.routes.js";
 import { dashboardOrigin, port } from "@utils/config.js";
 
-
 export function startApiServer(): void {
-    const app = express();
+	const app = express();
 
-    // parse JSON bodies
-    app.use(express.json());
+	// parse JSON bodies
+	app.use(express.json());
 
-    // allow your portfolio website to call the API
-    // replace with your actual portfolio domain in production
-    app.use(cors({ origin: dashboardOrigin }));
+	// allow your portfolio website to call the API
+	// replace with your actual portfolio domain in production
+	app.use(cors({ origin: dashboardOrigin }));
 
-    // all routes are protected by API key
-    app.use(apiKeyAuth);
+	// all routes are protected by API key
+	app.use(apiKeyAuth);
 
-    // routes
-    app.use("/api/events", eventsRouter);
-    app.use("/api/leaderboard", leaderboardRouter);
-    app.use("/api/players", playersRouter);
-    app.use("/api/reminders", remindersRouter);
+	// routes
+	app.use("/api/events", eventsRouter);
+	app.use("/api/leaderboard", leaderboardRouter);
+	app.use("/api/players", playersRouter);
+	app.use("/api/reminders", remindersRouter);
 
-    // health check — useful for Railway/Render to know the server is alive
-    app.get("/health", (_, res) => res.json({ status: "ok" }));
+	// health check — useful for Railway/Render to know the server is alive
+	app.get("/health", (_, res) => res.json({ status: "ok" }));
 
-    app.listen(port, () => {
-        console.log(`API server running on port ${port}`);
-    });
+	app.listen(port, () => {
+		console.log(`API server running on port ${port}`);
+	});
 }

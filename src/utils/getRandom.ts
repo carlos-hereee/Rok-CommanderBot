@@ -1,1 +1,1 @@
-export const getRandom = (array: unknown[]) => array[Math.floor(Math.random() * array.length)]
+export const getRandom = (array: unknown[]) => array[Math.floor(Math.random() * array.length)];

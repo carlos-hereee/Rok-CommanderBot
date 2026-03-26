@@ -2,61 +2,54 @@ import { Client, EmbedBuilder, TextChannel } from "discord.js";
 import { IGameEvent, IPrepStep } from "@features/events/event.types.js";
 import { reminderStore } from "@db/stores/reminderStore.js";
 
+export async function fireReminder(client: Client, event: IGameEvent, occurrence: Date, offsetMinutes: number): Promise<void> {
+	// ① fetch the channel
+	const channel = await client.channels.fetch(event.channelId);
+	if (!channel || !(channel instanceof TextChannel)) {
+		console.error(`Channel ${event.channelId} not found or not a text channel`);
+		return;
+	}
 
-export async function fireReminder(
-    client: Client,
-    event: IGameEvent,
-    occurrence: Date,
-    offsetMinutes: number
-): Promise<void> {
+	// ② build the embed
+	const embed = new EmbedBuilder()
+		.setTitle(`⚔️ ${event.name} starts in ${offsetMinutes} minutes!`)
+		.setDescription("Prepare now so you're ready when the event begins.")
+		.setColor("Red")
+		.addFields(
+			{
+				name: "📋 Preparation Checklist",
+				value: (event.prepSteps as IPrepStep[])
+					.sort((a, b) => a.order - b.order)
+					.map((step, i) => `${i + 1}. ${step.label}`)
+					.join("\n"),
+			},
+			{
+				name: "🕐 Event Time",
+				// Discord timestamp — renders in each user's local timezone automatically
+				value: `<t:${Math.floor(occurrence.getTime() / 1000)}:F>`,
+			}
+		)
+		.setTimestamp();
 
-    // ① fetch the channel
-    const channel = await client.channels.fetch(event.channelId);
-    if (!channel || !(channel instanceof TextChannel)) {
-        console.error(`Channel ${event.channelId} not found or not a text channel`);
-        return;
-    }
+	// ③ post the message
+	const message = await channel.send({
+		content: "@here",
+		embeds: [embed],
+	});
 
-    // ② build the embed
-    const embed = new EmbedBuilder()
-        .setTitle(`⚔️ ${event.name} starts in ${offsetMinutes} minutes!`)
-        .setDescription("Prepare now so you're ready when the event begins.")
-        .setColor("Red")
-        .addFields(
-            {
-                name: "📋 Preparation Checklist",
-                value: (event.prepSteps as IPrepStep[])
-                    .sort((a, b) => a.order - b.order)
-                    .map((step, i) => `${i + 1}. ${step.label}`)
-                    .join("\n"),
-            },
-            {
-                name: "🕐 Event Time",
-                // Discord timestamp — renders in each user's local timezone automatically
-                value: `<t:${Math.floor(occurrence.getTime() / 1000)}:F>`,
-            }
-        )
-        .setTimestamp();
+	// ④ add the acknowledgement reaction
+	await message.react("✅");
 
-    // ③ post the message
-    const message = await channel.send({
-        content: "@here",
-        embeds: [embed],
-    });
-
-    // ④ add the acknowledgement reaction
-    await message.react("✅");
-
-    // ⑤ log to DB — this is what prevents duplicate fires
-    // and what the ActivityTracker uses to link reactions back to events
-    await reminderStore.create({
-        eventId: event.eventId,
-        eventOccurrence: occurrence,
-        offsetMinutes,
-        messageId: message.id,
-        channelId: channel.id,
-        firedAt: new Date(),
-    });
+	// ⑤ log to DB — this is what prevents duplicate fires
+	// and what the ActivityTracker uses to link reactions back to events
+	await reminderStore.create({
+		eventId: event.eventId,
+		eventOccurrence: occurrence,
+		offsetMinutes,
+		messageId: message.id,
+		channelId: channel.id,
+		firedAt: new Date(),
+	});
 }
 
 /*

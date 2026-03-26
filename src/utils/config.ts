@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "dotenv/config.js";
 
 const isDev = process.env.NODE_ENV === "dev";
 const dbEnv = process.env.DB_ENV || "development";
@@ -11,4 +11,4 @@ const uri = process.env.MONGOOSE_URI || "";
 const dashboardApiKey = process.env.DASHBOARD_API_KEY || "";
 const dashboardOrigin = process.env.DASHBOARD_ORIGIN || "http://localhost:5173";
 
-export { isDev, dbEnv, clientId, discordToken, discordGuildId, botInviteLink, port, uri, dashboardApiKey, dashboardOrigin, };
+export { isDev, dbEnv, clientId, discordToken, discordGuildId, botInviteLink, port, uri, dashboardApiKey, dashboardOrigin };
