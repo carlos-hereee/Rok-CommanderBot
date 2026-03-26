@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
 import { activityStore } from "@db/stores/activityStore.js";
-import { computeScore } from "@features/activity-tracking/ParticipationStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
 
 export const leaderboardRouter = Router();
@@ -76,6 +75,7 @@ leaderboardRouter.get("/:eventId", async (req: LeaderboardRequest, res: Response
 			data: { event: { eventId: event.eventId, name: event.name }, mode, records },
 		});
 	} catch (error) {
+		console.log("\n\nerror occurred finding leaderboard ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to fetch leaderboard" });
 	}
 });

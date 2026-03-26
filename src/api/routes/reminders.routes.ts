@@ -16,6 +16,7 @@ remindersRouter.get("/:eventId", async (req: RemindersRequest, res: Response) =>
 		const logs = await reminderStore.findByEventId(req.params.eventId);
 		res.json({ data: logs });
 	} catch (error) {
+		console.log("\n\nerror occurred finding reminders ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to fetch reminders" });
 	}
 });

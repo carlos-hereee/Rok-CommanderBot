@@ -54,7 +54,7 @@ const commandFolders = fs.readdirSync(foldersPath);
 
 			if ("data" in command && "execute" in command) {
 				client.commands.set(command.data.name, command);
-			} else if (isDev) console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+			} else console.warn(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
 		}
 	}
 
@@ -68,13 +68,13 @@ const commandFolders = fs.readdirSync(foldersPath);
 		const command = client.commands.get(interaction.commandName);
 
 		if (!command) {
-			if (isDev) console.error(`No command matching ${interaction.commandName} was found.`);
+			console.error(`No command matching ${interaction.commandName} was found.`);
 			return;
 		}
 		try {
 			await command.execute(interaction);
 		} catch (error) {
-			if (isDev) console.error(error);
+			console.error(error);
 			await interaction.reply({
 				content: "There was an error executing this command!",
 				flags: MessageFlags.Ephemeral,
@@ -90,7 +90,7 @@ const commandFolders = fs.readdirSync(foldersPath);
 		startApiServer();
 		if (isDev) {
 			console.log("====================================");
-			console.log("Scheduler started");
+			console.log("Application started");
 			console.log("====================================");
 		}
 	});

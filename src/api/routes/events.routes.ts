@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { eventStore } from "@db/stores/eventStore.js";
-import { GuildEventManager } from "@features/events/GuildEventManager.js";
+// import { GuildEventManager } from "@features/events/GuildEventManager.js";
 
 export const eventsRouter = Router();
 
@@ -17,6 +17,7 @@ eventsRouter.get("/", async (req: EventsRequest, res: Response) => {
 		const events = await eventStore.findAll();
 		res.json({ data: events });
 	} catch (error) {
+		console.log("\n\nerror occurred finding events ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to fetch events" });
 	}
 });
@@ -31,6 +32,7 @@ eventsRouter.get("/:eventId", async (req: EventsRequest, res: Response) => {
 		}
 		res.json({ data: event });
 	} catch (error) {
+		console.log("\n\nerror occurred finding event ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to fetch event" });
 	}
 });
@@ -41,6 +43,7 @@ eventsRouter.post("/", async (req: EventsRequest, res: Response) => {
 		const event = await eventStore.create(req.body);
 		res.status(201).json({ data: event });
 	} catch (error) {
+		console.log("\n\nerror occurred creating event ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to create event" });
 	}
 });
@@ -55,6 +58,7 @@ eventsRouter.patch("/:eventId", async (req: EventsRequest, res: Response) => {
 		}
 		res.json({ data: updated });
 	} catch (error) {
+		console.log("\n\nerror occurred updating event ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to update event" });
 	}
 });
@@ -65,6 +69,7 @@ eventsRouter.delete("/:eventId", async (req: EventsRequest, res: Response) => {
 		await eventStore.delete(req.params.eventId);
 		res.json({ message: "Event deactivated" });
 	} catch (error) {
+		console.log("\n\nerror occurred deleting event ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to delete event" });
 	}
 });

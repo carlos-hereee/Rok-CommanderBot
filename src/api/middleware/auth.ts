@@ -1,4 +1,4 @@
-import { dashboardApiKey } from "@utils/config";
+import { dashboardApiKey } from "@utils/config.js";
 import { Request, Response, NextFunction } from "express";
 
 export function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {

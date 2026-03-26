@@ -20,6 +20,7 @@ playersRouter.get("/:userId", async (req: PlayersRequest, res: Response) => {
 		}
 		res.json({ data: records });
 	} catch (error) {
+		console.log("\n\nerror occurred finding player activity ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to fetch player activity" });
 	}
 });
@@ -30,6 +31,7 @@ playersRouter.get("/", async (req: PlayersRequest, res: Response) => {
 		const records = await activityStore.findAllGroupedByPlayer();
 		res.json({ data: records });
 	} catch (error) {
+		console.log("\n\nerror occurred finding players ==>", error, "\n\n");
 		res.status(500).json({ error: "Failed to fetch players" });
 	}
 });
