@@ -1,6 +1,5 @@
 // import { formatEmbedCastle, errorEmbed, sendEmbed } from "../embed";
 // import { getCastle } from "@db/modal/getCastle";
-// import { notFound } from "@db/error.json";
 
 // export = {
 // 	name: "Castle Upgrades",

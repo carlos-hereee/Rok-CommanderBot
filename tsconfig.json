@@ -16,10 +16,10 @@
     // "emitDecoratorMetadata": true,                    /* Emit design-type metadata for decorated declarations in source files. */
     // "noLib": true,                                    /* Disable including any library files, including the default lib.d.ts. */
     // "useDefineForClassFields": true,                  /* Emit ECMAScript-standard-compliant class fields. */
-    // "moduleDetection": "auto",                        /* Control what method is used to detect module-format JS files. */
+    "moduleDetection": "force",                        /* Control what method is used to detect module-format JS files. */
 
     /* Modules */
-    "module": "es2022" /* Specify what module code is generated. */,
+ "module": "ESNext", /* Specify what module code is generated. */
     // "rootDir": "./",                                  /* Specify the root folder within your source files. */
     "moduleResolution": "bundler" /* Specify how TypeScript looks up a file from a given module specifier. */,
     "baseUrl": "./src" /* Specify the base directory to resolve non-relative module names. */,
@@ -41,7 +41,7 @@
     // "resolvePackageJsonImports": true,                /* Use the package.json 'imports' field when resolving imports. */
     // "customConditions": [],                           /* Conditions to set in addition to the resolver-specific defaults when resolving imports. */
     "resolveJsonModule": true /* Enable importing .json files. */,
-    // "allowArbitraryExtensions": true,                 /* Enable importing files with any extension, provided a declaration file is present. */
+    "allowArbitraryExtensions": true,                 /* Enable importing files with any extension, provided a declaration file is present. */
     // "noResolve": true,                                /* Disallow 'import's, 'require's or '<reference>'s from expanding the number of files TypeScript should add to a project. */
 
     /* JavaScript Support */

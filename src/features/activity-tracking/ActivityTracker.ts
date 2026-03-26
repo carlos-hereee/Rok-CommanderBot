@@ -1,4 +1,4 @@
-import { Client, Events, MessageReaction, User, VoiceState } from "discord.js";
+import { Client, Events, MessageReaction, User, VoiceState, MessageReactionEventDetails, PartialMessageReaction, PartialUser, } from "discord.js";
 import { reminderStore } from "@db/stores/reminderStore.js";
 import { activityStore } from "@db/stores/activityStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
@@ -18,42 +18,41 @@ export function registerActivityListeners(client: Client): void {
     // LISTENER 1 — Reaction tracking
     // fires when any user reacts to any message
     // ─────────────────────────────────────────
-    client.on(Events.MessageReactionAdd, async (reaction: MessageReaction, user: User) => {
-        try {
-            // ignore bot reactions
-            if (user.bot) return;
 
-            // only track the acknowledgement emoji
+    client.on(Events.MessageReactionAdd, async (
+        reaction: MessageReaction | PartialMessageReaction,  // ← union type
+        user: User | PartialUser                            // ← union type
+    ) => {
+        try {
+            if (user.bot) return;
             if (reaction.emoji.name !== "✅") return;
 
-            // discord.js can give you partial reactions for older messages
-            // fetch the full object if needed
-            if (reaction.partial) await reaction.fetch();
+            // always fetch partials before accessing their properties
+            // this is now necessary since reaction could be partial
+            const fullReaction = reaction.partial ? await reaction.fetch() : reaction;
 
-            // check if this message is a reminder we posted
-            const log = await reminderStore.findByMessageId(reaction.message.id);
-            if (!log) return;   // not one of our reminders — ignore
+            const fullUser = user.partial ? await user.fetch() : user;
 
-            // upsert the acknowledgement
-            const activity = await activityStore.upsert({
+            const log = await reminderStore.findByMessageId(fullReaction.message.id);
+            if (!log) return;
+
+            await activityStore.upsert({
                 eventId: log.eventId,
                 eventOccurrence: log.eventOccurrence,
-                userId: user.id,
-                username: user.username,
+                userId: fullUser.id,
+                username: fullUser.username,
                 data: {
                     acknowledgedReminder: true,
                     acknowledgedAt: new Date(),
                 },
             });
 
-            // recompute score after every update
-            await updateScore(log.eventId, log.eventOccurrence, user.id);
+            await updateScore(log.eventId, log.eventOccurrence, fullUser.id);
 
         } catch (error) {
             console.error("Reaction tracking error:", error);
         }
     });
-
 
     // ─────────────────────────────────────────
     // LISTENER 2 — Voice join/leave tracking

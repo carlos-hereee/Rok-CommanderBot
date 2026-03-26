@@ -1,6 +1,5 @@
 // import { errorEmbed, formatEmbedCity, sendEmbed }  from "../embed";
 // import { getCity }    from "@db/modal/getCity";
-// import { notFound }  from "@db/error.json";
 
 // export = {
 //   name: "City Hall Upgrades",

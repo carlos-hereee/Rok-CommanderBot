@@ -1,6 +1,5 @@
 // import { formatEmbed, errorEmbed , sendEmbed}  from "../embed";
 // import { getCommander }  from "@db/modal/getCommander";
-// import { notFound }  from "@db/error.json";
 
 // const builds = {
 //   skill: "SKILL",
@@ -30,4 +29,3 @@
 //           return sendEmbed(message, options)
 //               },
 //             };
-            

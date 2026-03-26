@@ -29,7 +29,7 @@ export function getUpcomingOccurrences(event: IGameEvent, count: number): Date[]
 
 // separate helper used by ActivityTracker to know if an
 // event window is currently open (for voice/presence tracking)
-export function isEventWindowOpen(event: IGameEvent, now = new Date()): boolean {
+export function isEventWindowOpen(event: IGameEvent, now = new Date(), windowMinutes = 60): boolean {
     const occurrences = getUpcomingOccurrences(event, 1);
     if (!occurrences.length) return false;
 
@@ -39,7 +39,7 @@ export function isEventWindowOpen(event: IGameEvent, now = new Date()): boolean 
     const intervalMs = event.intervalHours * 60 * 60 * 1000;
     const lastOccurrence = new Date(nextOccurrence.getTime() - intervalMs);
     const windowEnd = new Date(
-        lastOccurrence.getTime() + (60 * 60 * 1000) // 1 hour window after start
+        lastOccurrence.getTime() + (windowMinutes * 60 * 1000) // windowMinutes window after start
     );
 
     return now >= lastOccurrence && now <= windowEnd;

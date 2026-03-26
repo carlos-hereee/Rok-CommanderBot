@@ -35,12 +35,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     }
 
     // group and sum scores per player
-    const playerMap = new Map<string, {
-        username: string;
-        totalScore: number;
-        eventsAttended: number;
-        totalAcknowledged: number;
-    }>();
+    const playerMap = new Map<string, { username: string; totalScore: number; eventsAttended: number; totalAcknowledged: number; }>();
 
     for (const record of allRecords) {
         const existing = playerMap.get(record.userId);

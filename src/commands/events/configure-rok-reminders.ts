@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
-import rokEvents from "@base/constants/rok-events.json";
+import rokEvents from "@base/constants/rok-events.json" with { type: "json" };
 import { GuildEventManager } from "@features/events/GuildEventManager.js";
 
 export const data = new SlashCommandBuilder()
