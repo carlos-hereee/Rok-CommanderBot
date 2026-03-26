@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "url";
 import { startScheduler } from "@features/reminders/ReminderScheduler.js";
 import { connectMongoose } from "@db/db";
 import { registerActivityListeners } from "@features/activity-tracking/ActivityTracker";
+import { startApiServer } from "@api/server.js";
 
 // paths 
 const __filename = fileURLToPath(import.meta.url)
@@ -94,19 +95,13 @@ const commandFolders = fs.readdirSync(foldersPath);
     client.once(Events.ClientReady, () => {
         startScheduler(client);
         registerActivityListeners(client);
-        if (isDev) console.log("Scheduler and activity tracker started");
-    });
-
-    // start the scheduler after commands are loaded 
-    // && after client is ready (since it relies on the client to send messages)
-    client.once(Events.ClientReady, () => {
-        startScheduler(client)
+        startApiServer()
         if (isDev) {
             console.log('====================================');
             console.log("Scheduler started");
             console.log('====================================');
         }
-    })
+    });
 
     // login the bot after everything is set up 
     client.login(discordToken);

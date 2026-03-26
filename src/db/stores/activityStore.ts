@@ -29,6 +29,30 @@ export const activityStore = {
         );
     },
 
+    // used by leaderboard route for specific occurrence view
+    async findByEventAndOccurrence(eventId: string, eventOccurrence: Date) {
+        return PlayerActivityModel
+            .find({ eventId, eventOccurrence })
+            .sort({ participationScore: -1 });
+    },
+
+    // used by players route for global ranking across all events
+    async findAllGroupedByPlayer() {
+        return PlayerActivityModel.aggregate([
+            {
+                $group: {
+                    _id: "$userId",
+                    username: { $last: "$username" },
+                    totalScore: { $sum: "$participationScore" },
+                    eventsAttended: { $sum: 1 },
+                    totalVoiceMinutes: { $sum: "$voiceMinutes" },
+                    totalAcknowledged: { $sum: { $cond: ["$acknowledgedReminder", 1, 0] } },
+                }
+            },
+            { $sort: { totalScore: -1 } }
+        ]);
+    },
+
     // used by leaderboard command
     async findByEvent(eventId: string) {
         return PlayerActivityModel.find({ eventId }).sort({ participationScore: -1 });

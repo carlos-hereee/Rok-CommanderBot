@@ -26,6 +26,7 @@
     "paths": {
       "@utils/*": ["utils/*"],
       "@base/*": ["base/*"],
+      "@api/*": ["api/*"],
       "@features/*": ["features/*"],
       "@commands/*": ["commands/*"],
       "@db/*": ["db/*"]

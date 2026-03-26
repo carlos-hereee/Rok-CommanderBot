@@ -16,6 +16,16 @@ src/
 │
 ├── types/
 │   └── global.d.ts                           ← extends discord.js Client with client.commands
+|
+├── api/                                      ← new — thin Express API layer
+│   ├── server.ts                             ← Express setup, starts alongside the bot
+│   ├── middleware/
+│   │   └── auth.ts                           ← simple API key auth to protect endpoints
+│   └── routes/
+│       ├── events.routes.ts                  ← GET/POST/DELETE /api/events
+│       ├── reminders.routes.ts               ← GET /api/reminders
+│       ├── players.routes.ts                 ← GET /api/players
+│       └── leaderboard.routes.ts             ← GET /api/leaderboard
 │
 ├── base/
 │   ├── classes/
