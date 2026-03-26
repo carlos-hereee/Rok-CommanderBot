@@ -10,6 +10,7 @@ interface CreateEventInput {
     firstOccurrence: string;
     description?: string;
     channelId: string;
+    prepSteps: { label: string; order: number }[];
 }
 
 export class GuildEventManager {
@@ -39,16 +40,13 @@ export class GuildEventManager {
         // ② shape the data into what the DB expects
         const newEvent: TCreateEventInput = {
             name: input.name,
-            description: input.description ?? "",    // ← add this
+            description: input.description ?? "",
             intervalHours: input.intervalHours,
             firstOccurrence: parsedDate,
             reminderOffsets: [...BOT_CONSTANTS.DEFAULT_REMINDER_OFFSETS],
             channelId: input.channelId,
-            guildId: interaction.guildId!,       // ← add this, comes from Discord
-            prepSteps: BOT_CONSTANTS.DEFAULT_PREP_STEPS.map(step => ({
-                ...step,
-                id: v4(),
-            })),
+            guildId: interaction.guildId!,       //, comes from Discord
+            prepSteps: input.prepSteps.map(step => ({ ...step, id: v4(), })),
             active: true,
         };
         // ③ delegate the actual write to the store

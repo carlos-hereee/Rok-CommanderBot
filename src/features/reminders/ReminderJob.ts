@@ -1,6 +1,6 @@
 import { Client, EmbedBuilder, TextChannel } from "discord.js";
 import { IGameEvent, IPrepStep } from "@features/events/event.types.js";
-import { reminderStore } from "@db/stores/reminderStore";
+import { reminderStore } from "@db/stores/reminderStore.js";
 
 
 export async function fireReminder(
