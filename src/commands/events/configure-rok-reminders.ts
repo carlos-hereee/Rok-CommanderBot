@@ -2,13 +2,13 @@ import {
 	SlashCommandBuilder,
 	ChatInputCommandInteraction,
 	PermissionFlagsBits,
-	EmbedBuilder,
 	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle,
 	ComponentType,
 } from "discord.js";
 import { GuildEventManager } from "@features/events/GuildEventManager.js";
+import { kvkConfirmationEmbed } from "@utils/embedBuilder.js";
 
 export const data = new SlashCommandBuilder()
 	.setName("configure-rok-reminders")
@@ -163,50 +163,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		return;
 	}
 
-	// ── build confirmation embed ─────────────────────────────
-	const t = (date: Date) => `<t:${Math.floor(date.getTime() / 1000)}:F>`;
-
-	const confirmEmbed = new EmbedBuilder()
-		.setTitle("⚔️ KvK Reminder Configuration — Please Confirm")
-		.setDescription(
-			"Verify these dates match what you see in-game before confirming.\nDiscord timestamps shown in **your local timezone**."
-		)
-		.setColor("Yellow")
-		.addFields(
-			{
-				name: "📅 Season End",
-				value: `<t:${Math.floor(seasonEnd.getTime() / 1000)}:D>`,
-				inline: false,
-			},
-			{
-				name: "🏚️ Ancient Ruins",
-				value: [`First occurrence: ${t(ruinsFirst)}`, `Repeats every **36 hours** until season end`].join("\n"),
-				inline: false,
-			},
-			{
-				name: "🕯️ Altar of Darkness",
-				value: [`First occurrence: ${t(altarFirst)}`, `Repeats every **84 hours** until season end`].join("\n"),
-				inline: false,
-			},
-			{
-				name: "⚔️ Trial of Kau Karuak",
-				value: [
-					`Easy:      ${t(kauEasy)}`,
-					`Normal:    ${t(kauNormal)}  *(+14 days)*`,
-					`Hard:      ${t(kauHard)}  *(+17 days)*`,
-					`Nightmare: ${t(kauNightmare)}  *(+6 days)*`,
-				].join("\n"),
-				inline: false,
-			},
-			{
-				name: "📢 Reminder Channel",
-				value: `<#${channel.id}>`,
-				inline: false,
-			}
-		)
-		.setFooter({ text: "All times are shown in your local timezone" })
-		.setTimestamp();
-
+	const confirmEmbed = kvkConfirmationEmbed({
+		seasonEnd,
+		ruinsFirst,
+		altarFirst,
+		kauEasy,
+		kauNormal,
+		kauHard,
+		kauNightmare,
+		channelId: channel.id,
+	});
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder()
 			.setCustomId("confirm_rok_config")
@@ -223,10 +189,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
 	// ── await button press ───────────────────────────────────
 	try {
-		const confirmation = await confirmMessage.awaitMessageComponent({
-			componentType: ComponentType.Button,
-			time: 120_000,
-		});
+		const confirmation = await confirmMessage.awaitMessageComponent({ componentType: ComponentType.Button, time: 120_000 });
 
 		if (confirmation.customId === "edit_rok_config") {
 			await confirmation.update({
@@ -238,11 +201,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		}
 
 		if (confirmation.customId === "confirm_rok_config") {
-			await confirmation.update({
-				content: "⏳ Setting up reminders...",
-				embeds: [],
-				components: [],
-			});
+			await confirmation.update({ content: "⏳ Setting up reminders...", embeds: [], components: [] });
 
 			await GuildEventManager.configureKvKSeason(interaction, {
 				seasonEnd,

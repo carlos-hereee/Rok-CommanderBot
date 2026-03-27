@@ -1,6 +1,7 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, EmbedBuilder, MessageFlags } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, MessageFlags } from "discord.js";
 import { activityStore } from "@db/stores/activityStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
+import { leaderboardEmbed } from "@utils/embedBuilder.js";
 
 export const data = new SlashCommandBuilder()
 	.setName("leaderboard")
@@ -54,25 +55,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		.sort((a, b) => b.totalScore - a.totalScore)
 		.slice(0, 10); // top 10 only — embeds have character limits
 
-	// medal emojis for top 3
-	const medals = ["🥇", "🥈", "🥉"];
-
-	const embed = new EmbedBuilder()
-		.setTitle(`🏆 ${event.name} — Leaderboard`)
-		.setColor("Gold")
-		.setDescription(
-			ranked
-				.map((p, i) => {
-					const medal = medals[i] ?? `**${i + 1}.**`;
-					return [
-						`${medal} **${p.username}**`,
-						`Score: ${p.totalScore} | Events: ${p.eventsAttended} | Reminders acknowledged: ${p.totalAcknowledged}`,
-					].join("\n");
-				})
-				.join("\n\n")
-		)
-		.setFooter({ text: "Full leaderboard and controls available on the admin dashboard" })
-		.setTimestamp();
+	const embed = leaderboardEmbed(event.name, ranked);
 
 	await interaction.reply({
 		embeds: [embed],

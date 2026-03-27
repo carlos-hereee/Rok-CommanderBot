@@ -1,11 +1,12 @@
 import cron from "node-cron";
-import { Client, EmbedBuilder, TextChannel } from "discord.js";
+import { Client, TextChannel } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
 import { fireReminder } from "./ReminderJob.js";
 import { reminderStore } from "@db/stores/reminderStore.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { IGameEvent } from "../events/event.types.js";
+import { seasonEndEmbed } from "@utils/embedBuilder.js";
 
 export function startScheduler(client: Client): void {
 	cron.schedule(BOT_CONSTANTS.SCHEDULER_CRON, async () => {
@@ -88,14 +89,7 @@ async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<voi
 		});
 		if (alreadyAnnounced) return;
 
-		const embed = new EmbedBuilder()
-			.setTitle("🏁 KvK Season Has Ended")
-			.setDescription(
-				"The KvK season has concluded. Reminders have been stopped.\n\n" +
-					"Run `/configure-rok-reminders` when the next season begins."
-			)
-			.setColor("DarkGrey")
-			.setTimestamp();
+		const embed = seasonEndEmbed();
 
 		await channel.send({ embeds: [embed] });
 
