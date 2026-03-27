@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction } from "discord.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { eventStore } from "@db/stores/eventStore.js";
-import rokEvents from "@base/constants/rok-events.json" assert { type: "json" };
+import rokEvents from "@base/constants/rok-events.json" with { type: "json" };
 import { v4 } from "uuid";
 
 interface IKvKSeasonInput {
