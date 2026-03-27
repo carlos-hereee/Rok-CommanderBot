@@ -4,8 +4,10 @@ export interface IGameEvent {
 	eventId: string;
 	name: string;
 	description: string;
+	type: "recurring" | "one-time";
 	intervalHours: number;
 	firstOccurrence: Date;
+	seasonEnd: Date;
 	reminderOffsets: readonly number[]; // ← was number[]
 	channelId: string;
 	guildId: string;

@@ -1,79 +1,277 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
-import rokEvents from "@base/constants/rok-events.json" with { type: "json" };
+import {
+	SlashCommandBuilder,
+	ChatInputCommandInteraction,
+	PermissionFlagsBits,
+	EmbedBuilder,
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ComponentType,
+} from "discord.js";
 import { GuildEventManager } from "@features/events/GuildEventManager.js";
 
 export const data = new SlashCommandBuilder()
 	.setName("configure-rok-reminders")
-	.setDescription("Configure reminder for ROK events")
+	.setDescription("Configure reminders for all ROK KvK events")
 	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
-	// event type is a fixed choice list built from the JSON
-	// so admins can only pick real events, no typos possible
-	.addStringOption((option) =>
+	// ── season ───────────────────────────────────────────────
+	.addIntegerOption((option) =>
 		option
-			.setName("event")
-			.setDescription("Which ROK event to configure")
+			.setName("days-remaining")
+			.setDescription("How many days remain in the current KvK season?")
 			.setRequired(true)
-			.addChoices(...rokEvents.events.map((e) => ({ name: e.name, value: e.key })))
+			.setMinValue(1)
+			.setMaxValue(60)
 	)
+
+	// ── ancient ruins ────────────────────────────────────────
 	.addIntegerOption((option) =>
-		option.setName("month").setDescription("Month the event starts (1-12)").setRequired(true).setMinValue(1).setMaxValue(12)
-	)
-	.addIntegerOption((option) =>
-		option.setName("day").setDescription("Day the event starts (1-31)").setRequired(true).setMinValue(1).setMaxValue(31)
+		option
+			.setName("ruins-month")
+			.setDescription("Month of the next Ancient Ruins (1-12)")
+			.setRequired(true)
+			.setMinValue(1)
+			.setMaxValue(12)
 	)
 	.addIntegerOption((option) =>
 		option
-			.setName("hour")
-			.setDescription("Hour the event starts in 24hr UTC e.g. 20 for 8PM UTC")
+			.setName("ruins-day")
+			.setDescription("Day of the next Ancient Ruins (1-31)")
+			.setRequired(true)
+			.setMinValue(1)
+			.setMaxValue(31)
+	)
+	.addIntegerOption((option) =>
+		option
+			.setName("ruins-hour")
+			.setDescription("Hour of the next Ancient Ruins (0-23 UTC)")
 			.setRequired(true)
 			.setMinValue(0)
 			.setMaxValue(23)
 	)
-	.addChannelOption((option) => option.setName("channel").setDescription("Channel to post reminders in").setRequired(true))
-	.addStringOption((option) =>
-		option.setName("description").setDescription("Optional description for this event").setRequired(false)
-	);
+
+	// ── altar of darkness ────────────────────────────────────
+	.addIntegerOption((option) =>
+		option
+			.setName("altar-month")
+			.setDescription("Month of the next Altar of Darkness (1-12)")
+			.setRequired(true)
+			.setMinValue(1)
+			.setMaxValue(12)
+	)
+	.addIntegerOption((option) =>
+		option
+			.setName("altar-day")
+			.setDescription("Day of the next Altar of Darkness (1-31)")
+			.setRequired(true)
+			.setMinValue(1)
+			.setMaxValue(31)
+	)
+	.addIntegerOption((option) =>
+		option
+			.setName("altar-hour")
+			.setDescription("Hour of the next Altar of Darkness (0-23 UTC)")
+			.setRequired(true)
+			.setMinValue(0)
+			.setMaxValue(23)
+	)
+
+	// ── trial of kau karuak (easy only — rest calculated) ────
+	.addIntegerOption((option) =>
+		option
+			.setName("kau-month")
+			.setDescription("Month of Trial of Kau Karuak Easy (1-12)")
+			.setRequired(true)
+			.setMinValue(1)
+			.setMaxValue(12)
+	)
+	.addIntegerOption((option) =>
+		option
+			.setName("kau-day")
+			.setDescription("Day of Trial of Kau Karuak Easy (1-31)")
+			.setRequired(true)
+			.setMinValue(1)
+			.setMaxValue(31)
+	)
+
+	// ── channel ──────────────────────────────────────────────
+	.addChannelOption((option) => option.setName("channel").setDescription("Channel to post reminders in").setRequired(true));
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-	const eventKey = interaction.options.getString("event", true);
-	const channel = interaction.options.getChannel("channel", true);
-	const description = interaction.options.getString("description") ?? "";
-
-	const month = interaction.options.getInteger("month", true);
-	const day = interaction.options.getInteger("day", true);
-	const hour = interaction.options.getInteger("hour", true);
-
-	// always use current year, pad month/day/hour to 2 digits
 	const year = new Date().getUTCFullYear();
-	const MM = String(month).padStart(2, "0");
-	const DD = String(day).padStart(2, "0");
-	const HH = String(hour).padStart(2, "0");
+	const pad = (n: number) => String(n).padStart(2, "0");
 
-	// build ISO string — minutes and seconds always 00
-	// since ROK events always start on the hour
-	const firstOccurrence = `${year}-${MM}-${DD}T${HH}:00:00Z`;
+	// ── collect inputs ───────────────────────────────────────
+	const daysRemaining = interaction.options.getInteger("days-remaining", true);
+	const channel = interaction.options.getChannel("channel", true);
 
-	// validate the resulting date is real
-	// catches edge cases like month=2 day=31
-	const parsed = new Date(firstOccurrence);
-	if (isNaN(parsed.getTime()) || parsed.getUTCMonth() + 1 !== month) {
-		await interaction.reply({ content: `❌ Invalid date — ${month}/${day} is not a real date.`, ephemeral: true });
+	const ruinsMonth = interaction.options.getInteger("ruins-month", true);
+	const ruinsDay = interaction.options.getInteger("ruins-day", true);
+	const ruinsHour = interaction.options.getInteger("ruins-hour", true);
+
+	const altarMonth = interaction.options.getInteger("altar-month", true);
+	const altarDay = interaction.options.getInteger("altar-day", true);
+	const altarHour = interaction.options.getInteger("altar-hour", true);
+
+	const kauMonth = interaction.options.getInteger("kau-month", true);
+	const kauDay = interaction.options.getInteger("kau-day", true);
+
+	// ── calculate dates ──────────────────────────────────────
+	const seasonEnd = new Date();
+	seasonEnd.setUTCDate(seasonEnd.getUTCDate() + daysRemaining);
+	seasonEnd.setUTCHours(0, 0, 0, 0);
+
+	const ruinsFirst = new Date(`${year}-${pad(ruinsMonth)}-${pad(ruinsDay)}T${pad(ruinsHour)}:00:00Z`);
+	const altarFirst = new Date(`${year}-${pad(altarMonth)}-${pad(altarDay)}T${pad(altarHour)}:00:00Z`);
+
+	// kau karuak always starts at 00:00 UTC
+	const kauEasy = new Date(`${year}-${pad(kauMonth)}-${pad(kauDay)}T00:00:00Z`);
+
+	// calculate remaining difficulties from easy anchor
+	const kauNormal = addDays(kauEasy, 14);
+	const kauHard = addDays(kauNormal, 17);
+	const kauNightmare = addDays(kauHard, 6);
+
+	// ── validate ─────────────────────────────────────────────
+	const errors: string[] = [];
+
+	if (isInvalidDate(ruinsFirst, ruinsMonth)) {
+		errors.push(`Ruins: ${ruinsMonth}/${ruinsDay} is not a valid date`);
+	}
+	if (isInvalidDate(altarFirst, altarMonth)) {
+		errors.push(`Altar: ${altarMonth}/${altarDay} is not a valid date`);
+	}
+	if (isInvalidDate(kauEasy, kauMonth)) {
+		errors.push(`Kau Karuak: ${kauMonth}/${kauDay} is not a valid date`);
+	}
+	if (ruinsFirst >= seasonEnd) {
+		errors.push("Ruins first occurrence must be before the season end date");
+	}
+	if (altarFirst >= seasonEnd) {
+		errors.push("Altar first occurrence must be before the season end date");
+	}
+	if (kauEasy >= seasonEnd) {
+		errors.push("Kau Karuak Easy must be before the season end date");
+	}
+
+	if (errors.length > 0) {
+		await interaction.reply({
+			content: `❌ Invalid inputs:\n${errors.map((e) => `- ${e}`).join("\n")}`,
+			ephemeral: true,
+		});
 		return;
 	}
 
-	const eventConfig = rokEvents.events.find((e) => e.key === eventKey);
-	if (!eventConfig) {
-		await interaction.reply({ content: "Unknown event type. Please select from the list.", ephemeral: true });
-		return;
-	}
+	// ── build confirmation embed ─────────────────────────────
+	const t = (date: Date) => `<t:${Math.floor(date.getTime() / 1000)}:F>`;
 
-	await GuildEventManager.createEvent(interaction, {
-		name: eventConfig.name,
-		description,
-		intervalHours: eventConfig.intervalHours,
-		prepSteps: eventConfig.prepSteps,
-		firstOccurrence,
-		channelId: channel.id,
+	const confirmEmbed = new EmbedBuilder()
+		.setTitle("⚔️ KvK Reminder Configuration — Please Confirm")
+		.setDescription(
+			"Verify these dates match what you see in-game before confirming.\nDiscord timestamps shown in **your local timezone**."
+		)
+		.setColor("Yellow")
+		.addFields(
+			{
+				name: "📅 Season End",
+				value: `<t:${Math.floor(seasonEnd.getTime() / 1000)}:D>`,
+				inline: false,
+			},
+			{
+				name: "🏚️ Ancient Ruins",
+				value: [`First occurrence: ${t(ruinsFirst)}`, `Repeats every **36 hours** until season end`].join("\n"),
+				inline: false,
+			},
+			{
+				name: "🕯️ Altar of Darkness",
+				value: [`First occurrence: ${t(altarFirst)}`, `Repeats every **84 hours** until season end`].join("\n"),
+				inline: false,
+			},
+			{
+				name: "⚔️ Trial of Kau Karuak",
+				value: [
+					`Easy:      ${t(kauEasy)}`,
+					`Normal:    ${t(kauNormal)}  *(+14 days)*`,
+					`Hard:      ${t(kauHard)}  *(+17 days)*`,
+					`Nightmare: ${t(kauNightmare)}  *(+6 days)*`,
+				].join("\n"),
+				inline: false,
+			},
+			{
+				name: "📢 Reminder Channel",
+				value: `<#${channel.id}>`,
+				inline: false,
+			}
+		)
+		.setFooter({ text: "All times are shown in your local timezone" })
+		.setTimestamp();
+
+	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+		new ButtonBuilder()
+			.setCustomId("confirm_rok_config")
+			.setLabel("✅ Confirm — Dates are correct")
+			.setStyle(ButtonStyle.Success),
+		new ButtonBuilder().setCustomId("edit_rok_config").setLabel("✏️ Edit — Dates need changing").setStyle(ButtonStyle.Secondary)
+	);
+
+	const confirmMessage = await interaction.reply({
+		embeds: [confirmEmbed],
+		components: [row],
+		ephemeral: true,
 	});
+
+	// ── await button press ───────────────────────────────────
+	try {
+		const confirmation = await confirmMessage.awaitMessageComponent({
+			componentType: ComponentType.Button,
+			time: 120_000,
+		});
+
+		if (confirmation.customId === "edit_rok_config") {
+			await confirmation.update({
+				content: "❌ Configuration cancelled — run `/configure-rok-reminders` again with the correct dates.",
+				embeds: [],
+				components: [],
+			});
+			return;
+		}
+
+		if (confirmation.customId === "confirm_rok_config") {
+			await confirmation.update({
+				content: "⏳ Setting up reminders...",
+				embeds: [],
+				components: [],
+			});
+
+			await GuildEventManager.configureKvKSeason(interaction, {
+				seasonEnd,
+				ruinsFirst,
+				altarFirst,
+				kauEasy,
+				kauNormal,
+				kauHard,
+				kauNightmare,
+				channelId: channel.id,
+			});
+		}
+	} catch {
+		await interaction.editReply({
+			content: "⏱️ Configuration timed out — please run the command again.",
+			embeds: [],
+			components: [],
+		});
+	}
+}
+
+// ── helpers ──────────────────────────────────────────────────
+
+function addDays(date: Date, days: number): Date {
+	const result = new Date(date);
+	result.setUTCDate(result.getUTCDate() + days);
+	return result;
+}
+
+function isInvalidDate(date: Date, expectedMonth: number): boolean {
+	return isNaN(date.getTime()) || date.getUTCMonth() + 1 !== expectedMonth;
 }

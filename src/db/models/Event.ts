@@ -15,8 +15,10 @@ const eventSchema = new Schema(
 		eventId: { type: String, required: true, unique: true, default: v4 },
 		name: { type: String, required: true }, // e.g. "Ruins"
 		description: { type: String, default: "" },
+		type: { type: String, required: true, enum: ["recurring", "one-time"] },
 		intervalHours: { type: Number, required: true }, // e.g. 36 or 84
 		firstOccurrence: { type: Date, required: true }, // anchor point for schedule calculation
+		seasonEnd: { type: Date, required: true },
 		reminderOffsets: { type: [Number], default: [30, 15] }, // minutes before event
 		channelId: { type: String, required: true }, // Discord channel ID
 		guildId: { type: String, required: true }, // Discord server ID

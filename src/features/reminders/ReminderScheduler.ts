@@ -1,10 +1,11 @@
 import cron from "node-cron";
-import { Client } from "discord.js";
+import { Client, EmbedBuilder, TextChannel } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
 import { fireReminder } from "./ReminderJob.js";
 import { reminderStore } from "@db/stores/reminderStore.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
+import { IGameEvent } from "../events/event.types.js";
 
 export function startScheduler(client: Client): void {
 	cron.schedule(BOT_CONSTANTS.SCHEDULER_CRON, async () => {
@@ -13,35 +14,101 @@ export function startScheduler(client: Client): void {
 			const events = await eventStore.findAll();
 
 			for (const event of events) {
-				// ② for each event, get its upcoming occurrences
-				const occurrences = getUpcomingOccurrences(event, 1);
-				const nextOccurrence = occurrences[0];
-				if (!nextOccurrence) continue;
+				const now = new Date();
 
-				// ③ check each reminder offset e.g. 30min and 15min
-				for (const offsetMinutes of event.reminderOffsets) {
-					const reminderTime = new Date(nextOccurrence.getTime() - offsetMinutes * 60 * 1000);
-					const now = new Date();
-					const diff = reminderTime.getTime() - now.getTime();
+				// ── season ended ─────────────────────────────────────────
+				if (now > new Date(event.seasonEnd)) {
+					await eventStore.update(event.eventId, { active: false });
+					await announceSeasonEnd(client, event);
+					continue;
+				}
 
-					// ④ only fire if we're within the current cron window
-					if (diff < 0 || diff > BOT_CONSTANTS.REMINDER_FIRE_WINDOW_MS) continue;
+				if (event.type === "one-time") {
+					// ── one-time events (kau karuak difficulties) ───────────
+					for (const offsetMinutes of event.reminderOffsets) {
+						const reminderTime = new Date(event.firstOccurrence.getTime() - offsetMinutes * 60 * 1000);
+						const diff = reminderTime.getTime() - now.getTime();
 
-					// ⑤ check if we already fired this exact reminder
-					// this prevents duplicate posts if the cron somehow ticks twice
-					const alreadyFired = await reminderStore.exists({
-						eventId: event.eventId,
-						eventOccurrence: nextOccurrence,
-						offsetMinutes,
-					});
-					if (alreadyFired) continue;
+						if (diff < 0 || diff > BOT_CONSTANTS.REMINDER_FIRE_WINDOW_MS) continue;
 
-					// ⑥ all checks passed — fire it
-					await fireReminder(client, event, nextOccurrence, offsetMinutes);
+						const alreadyFired = await reminderStore.exists({
+							eventId: event.eventId,
+							eventOccurrence: event.firstOccurrence,
+							offsetMinutes,
+						});
+						if (alreadyFired) continue;
+
+						await fireReminder(client, event, event.firstOccurrence, offsetMinutes);
+
+						// deactivate after the last reminder fires
+						// so it doesn't keep getting checked every tick
+						if (offsetMinutes === Math.min(...event.reminderOffsets)) {
+							await eventStore.update(event.eventId, { active: false });
+						}
+					}
+				} else {
+					// ── recurring events (ruins, altar) ────────────────────
+					const [nextOccurrence] = getUpcomingOccurrences(event, 1);
+					if (!nextOccurrence) continue;
+
+					for (const offsetMinutes of event.reminderOffsets) {
+						const reminderTime = new Date(nextOccurrence.getTime() - offsetMinutes * 60 * 1000);
+						const diff = reminderTime.getTime() - now.getTime();
+
+						if (diff < 0 || diff > BOT_CONSTANTS.REMINDER_FIRE_WINDOW_MS) continue;
+
+						const alreadyFired = await reminderStore.exists({
+							eventId: event.eventId,
+							eventOccurrence: nextOccurrence,
+							offsetMinutes,
+						});
+						if (alreadyFired) continue;
+
+						await fireReminder(client, event, nextOccurrence, offsetMinutes);
+					}
 				}
 			}
 		} catch (error) {
 			console.error("Scheduler error:", error);
 		}
 	});
+}
+
+async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<void> {
+	try {
+		const channel = await client.channels.fetch(event.channelId).catch(() => null);
+		if (!channel || !(channel instanceof TextChannel)) return;
+
+		// check if we already announced for this event
+		// prevents announcing multiple times if cron ticks again
+		const alreadyAnnounced = await reminderStore.exists({
+			eventId: event.eventId,
+			eventOccurrence: new Date(event.seasonEnd),
+			offsetMinutes: -1, // ← -1 is a special marker meaning "season end announcement"
+		});
+		if (alreadyAnnounced) return;
+
+		const embed = new EmbedBuilder()
+			.setTitle("🏁 KvK Season Has Ended")
+			.setDescription(
+				"The KvK season has concluded. Reminders have been stopped.\n\n" +
+					"Run `/configure-rok-reminders` when the next season begins."
+			)
+			.setColor("DarkGrey")
+			.setTimestamp();
+
+		await channel.send({ embeds: [embed] });
+
+		// log it so we never announce twice
+		await reminderStore.create({
+			eventId: event.eventId,
+			eventOccurrence: new Date(event.seasonEnd),
+			offsetMinutes: -1, // ← same special marker
+			messageId: "season-end",
+			channelId: event.channelId,
+			firedAt: new Date(),
+		});
+	} catch (error) {
+		console.error("Failed to announce season end:", error);
+	}
 }

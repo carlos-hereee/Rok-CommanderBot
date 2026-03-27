@@ -56,16 +56,16 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 
 **Why the DB write happens last:**
 
-The order here is intentional — post to Discord first, then write to DB. 
+The order here is intentional — post to Discord first, then write to DB.
 If you did it in reverse and the Discord post failed, you'd have a DB record
-saying the reminder fired when it never did, and the duplicate check would 
-block it from ever retrying. Failing fast before writing means a failed post 
+saying the reminder fired when it never did, and the duplicate check would
+block it from ever retrying. Failing fast before writing means a failed post
 is always retryable on the next cron tick.
 
 **Why Discord timestamps (`<t:...:F>`):**
 
-Discord renders `<t:UNIX_TIMESTAMP:F>` in each user's own local timezone automatically. 
-So a Spanish speaker and an Arabic speaker in different timezones both see the event time 
+Discord renders `<t:UNIX_TIMESTAMP:F>` in each user's own local timezone automatically.
+So a Spanish speaker and an Arabic speaker in different timezones both see the event time
 correctly without you doing any timezone math.
 
 ---
@@ -90,7 +90,7 @@ getUpcomingOccurrences()      ← when is the next one? (pure math, no DB)
 diff within fire window?
       ├── NO  → skip, wait for next tick
       └── YES ▼
-      
+
 reminderStore.exists()        ← did we already fire this one?
       ├── YES → skip (duplicate protection)
       └── NO  ▼
