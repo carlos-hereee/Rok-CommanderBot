@@ -8,7 +8,7 @@ KINGDOMS.
 
 ```
 
-Folder structure 
+Folder structure
 
 src/
 ├── main.ts                                   ← bot entry point, registers all listeners
@@ -46,8 +46,13 @@ src/
 │   │   └── delete-event.ts                   ← /delete-event (admin only)
 │   └── admin/
 │       └── leaderboard.ts                    ← /leaderboard shows MGE participation ranking
+│       └── setup.ts                ← /setup command that triggers everything
 │
 ├── features/
+│   └── setup/
+│   |   ├── GuildSetupManager.ts    ← creates the category and channels
+│   |   ├── ChannelContent.ts       ← all the message content posted on setup
+│   |   └── setup.types.ts          ← types for setup config
 │   ├── events/
 │   │   ├── GuildEventManager.ts              ← creates, updates, deletes events in DB
 │   │   ├── occurrenceCalculator.ts           ← computes next event times from interval + anchor
@@ -67,8 +72,10 @@ src/
 │   ├── models/
 │   │   ├── Event.ts                          ← event document shape + DB schema
 │   │   ├── ReminderLog.ts                    ← log of every reminder that fired
+│   |   └── GuildConfig.ts          ← stores channel IDs after setup
 │   │   └── PlayerActivity.ts                 ← per-player per-occurrence activity record
 │   ├── stores/
+|   |   └── guildConfigStore.ts     ← reads/writes guild config
 │   │   ├── eventStore.ts                     ← all DB reads/writes for events
 │   │   ├── reminderStore.ts                  ← all DB reads/writes for reminder logs
 │   │   └── activityStore.ts                  ← all DB reads/writes for player activity
@@ -78,7 +85,7 @@ src/
     ├── logger.ts                             ← structured logging wrapper
     ├── dateUtils.ts                          ← interval math, window checks, formatting
     └── embedBuilder.ts                       ← reusable Discord embed templates
-  ```
+```
 
 ## System Design
 
@@ -112,7 +119,7 @@ features/events/occurrenceCalculator.ts ← "is an event happening in 15-30min?"
         ├── NO  → do nothing, wait for next tick
         │
         └── YES ▼
-        
+
 features/reminders/ReminderJob.ts       ← builds embed, @here message
         │
         ├── posts to Discord channel

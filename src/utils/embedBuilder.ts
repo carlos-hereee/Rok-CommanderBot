@@ -1,45 +1,39 @@
 import { EmbedBuilder, ColorResolvable } from "discord.js";
 import { IGameEvent, IPrepStep } from "@features/events/event.types.js";
+import { embedContent } from "@base/constants/embed-content.js";
 
-// ── base builder — shared config for all embeds ───────────────
-// ensures consistent styling across the whole bot
+// ── private ───────────────────────────────────────────────────
 function base(): EmbedBuilder {
-	return new EmbedBuilder().setTimestamp().setFooter({ text: "ROK Commander Bot" });
+	return new EmbedBuilder().setTimestamp().setFooter({ text: embedContent.FOOTER });
 }
 
-// ── reminder embed ────────────────────────────────────────────
+// ── public ────────────────────────────────────────────────────
 export function reminderEmbed(event: IGameEvent, occurrence: Date, offsetMinutes: number): EmbedBuilder {
+	const c = embedContent.reminder;
 	return base()
-		.setTitle(`⚔️ ${event.name} starts in ${offsetMinutes} minutes!`)
-		.setDescription("Prepare now so you're ready when the event begins.")
-		.setColor("Red")
+		.setTitle(c.title(event.name, offsetMinutes))
+		.setDescription(c.description)
+		.setColor(embedContent.COLORS.REMINDER)
 		.addFields(
 			{
-				name: "📋 Preparation Checklist",
+				name: c.checklistField,
 				value: (event.prepSteps as IPrepStep[])
 					.sort((a, b) => a.order - b.order)
 					.map((step, i) => `${i + 1}. ${step.label}`)
 					.join("\n"),
 			},
 			{
-				name: "🕐 Event Time",
+				name: c.timeField,
 				value: `<t:${Math.floor(occurrence.getTime() / 1000)}:F>`,
 			}
 		);
 }
-
-// ── season end embed ──────────────────────────────────────────
+// ── season end embed ──
 export function seasonEndEmbed(): EmbedBuilder {
-	return base()
-		.setTitle("🏁 KvK Season Has Ended")
-		.setDescription(
-			"The KvK season has concluded. Reminders have been stopped.\n\n" +
-				"Run `/configure-rok-reminders` when the next season begins."
-		)
-		.setColor("DarkGrey");
+	const c = embedContent.seasonEnd;
+	return base().setTitle(c.title).setDescription(c.description).setColor(embedContent.COLORS.SEASON_END);
 }
-
-// ── leaderboard embed ─────────────────────────────────────────
+// ── confirmation embed ──
 export function leaderboardEmbed(
 	eventName: string,
 	ranked: {
@@ -49,28 +43,18 @@ export function leaderboardEmbed(
 		totalAcknowledged: number;
 	}[]
 ): EmbedBuilder {
-	const medals = ["🥇", "🥈", "🥉"];
-
+	const c = embedContent.leaderboard;
 	return base()
-		.setTitle(`🏆 ${eventName} — Leaderboard`)
-		.setColor("Gold")
+		.setTitle(c.title(eventName))
+		.setColor(embedContent.COLORS.LEADERBOARD)
 		.setDescription(
 			ranked
-				.map((p, i) => {
-					const medal = medals[i] ?? `**${i + 1}.**`;
-					return [
-						`${medal} **${p.username}**`,
-						`Score: ${p.totalScore} | Events: ${p.eventsAttended} | Reminders acknowledged: ${p.totalAcknowledged}`,
-					].join("\n");
-				})
+				.map((p, i) => c.row(c.medals[i] ?? `**${i + 1}.**`, p.username, p.totalScore, p.eventsAttended, p.totalAcknowledged))
 				.join("\n\n")
 		)
-		.setFooter({
-			text: "Full leaderboard and controls available on the admin dashboard",
-		});
+		.setFooter({ text: c.footer });
 }
-
-// ── confirmation embed ────────────────────────────────────────
+// ── KvK configuration confirmation embed ──
 export function kvkConfirmationEmbed(dates: {
 	seasonEnd: Date;
 	ruinsFirst: Date;
@@ -81,33 +65,31 @@ export function kvkConfirmationEmbed(dates: {
 	kauNightmare: Date;
 	channelId: string;
 }): EmbedBuilder {
+	const c = embedContent.kvkConfirmation;
 	const t = (date: Date) => `<t:${Math.floor(date.getTime() / 1000)}:F>`;
 
 	return base()
-		.setTitle("⚔️ KvK Reminder Configuration — Please Confirm")
-		.setDescription(
-			"Verify these dates match what you see in-game before confirming.\n" +
-				"Discord timestamps shown in **your local timezone**."
-		)
-		.setColor("Yellow")
+		.setTitle(c.title)
+		.setDescription(c.description)
+		.setColor(embedContent.COLORS.CONFIRMATION)
 		.addFields(
 			{
-				name: "📅 Season End",
+				name: c.fields.seasonEnd,
 				value: `<t:${Math.floor(dates.seasonEnd.getTime() / 1000)}:D>`,
 				inline: false,
 			},
 			{
-				name: "🏚️ Ancient Ruins",
-				value: [`First occurrence: ${t(dates.ruinsFirst)}`, `Repeats every **36 hours** until season end`].join("\n"),
+				name: c.fields.ruins.name,
+				value: [`First occurrence: ${t(dates.ruinsFirst)}`, c.fields.ruins.interval].join("\n"),
 				inline: false,
 			},
 			{
-				name: "🕯️ Altar of Darkness",
-				value: [`First occurrence: ${t(dates.altarFirst)}`, `Repeats every **84 hours** until season end`].join("\n"),
+				name: c.fields.altar.name,
+				value: [`First occurrence: ${t(dates.altarFirst)}`, c.fields.altar.interval].join("\n"),
 				inline: false,
 			},
 			{
-				name: "⚔️ Trial of Kau Karuak",
+				name: c.fields.kau.name,
 				value: [
 					`Easy:      ${t(dates.kauEasy)}`,
 					`Normal:    ${t(dates.kauNormal)}  *(+14 days)*`,
@@ -117,20 +99,22 @@ export function kvkConfirmationEmbed(dates: {
 				inline: false,
 			},
 			{
-				name: "📢 Reminder Channel",
+				name: c.fields.channel,
 				value: `<#${dates.channelId}>`,
 				inline: false,
 			}
 		);
 }
 
-// ── generic error embed ───────────────────────────────────────
-// use this anywhere you need to send a consistent error message
 export function errorEmbed(message: string): EmbedBuilder {
-	return base().setTitle("❌ Error").setDescription(message).setColor("DarkRed");
+	return base().setTitle(embedContent.error.title).setDescription(message).setColor(embedContent.COLORS.ERROR);
 }
 
-// ── generic info embed ────────────────────────────────────────
 export function infoEmbed(title: string, description: string, color: ColorResolvable = "Blurple"): EmbedBuilder {
 	return base().setTitle(title).setDescription(description).setColor(color);
+}
+
+export function arrivalEmbed(guildName: string, ownerId: string): EmbedBuilder {
+	const c = embedContent.arrival;
+	return base().setTitle(c.title).setDescription(c.description(guildName, ownerId)).setColor(embedContent.COLORS.ARRIVAL);
 }

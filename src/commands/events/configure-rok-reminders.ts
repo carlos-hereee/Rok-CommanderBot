@@ -65,8 +65,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	// ── validate ──────────────────────────────────────────────
 	const errors: string[] = [];
 
-	if (!ruinsFirst) errors.push("Ruins date invalid — use format MM/DD@HH e.g. `04/20 @12`");
-	if (!altarFirst) errors.push("Altar date invalid — use format MM/DD@HH e.g. `04/20 @12`");
+	if (!ruinsFirst) errors.push("Ruins date invalid — use format MM/DD @HH e.g. `04/20 @12`");
+	if (!altarFirst) errors.push("Altar date invalid — use format MM/DD @HH e.g. `04/20 @12`");
 	if (!kauEasy) errors.push("Kau Karuak date invalid — use format MM/DD e.g. `04/20`");
 
 	if (errors.length > 0) {

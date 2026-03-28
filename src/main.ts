@@ -1,5 +1,5 @@
 import { GatewayIntentBits, Collection, Events, MessageFlags, Client, Partials } from "discord.js";
-import { discordToken, isDev } from "@utils/config.js";
+import { discordToken } from "@utils/config.js";
 import clientReady from "@commands/utility/ready.js";
 import fs from "fs";
 import path from "path";
@@ -8,6 +8,9 @@ import { startScheduler } from "@features/reminders/ReminderScheduler.js";
 import { connectMongoose } from "@db/db.js";
 import { registerActivityListeners } from "@features/activity-tracking/ActivityTracker.js";
 import { startApiServer } from "@api/server.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
+import { arrivalEmbed, errorEmbed } from "@utils/embedBuilder.js";
+import { embedContent } from "@base/constants/embed-content.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -36,13 +39,17 @@ const client = new Client({
 });
 
 clientReady(client);
-client.commands = new Collection();
 
-const foldersPath = path.join(__dirname, "commands");
-const commandFolders = fs.readdirSync(foldersPath);
+// ── admin commands that require role check ────────────────────
+const ADMIN_COMMANDS = new Set(["configure-rok-reminders", "delete-event", "list-events", "leaderboard"]);
 
 // load commands first
 (async () => {
+	// step 1 - load commands
+	client.commands = new Collection();
+	const foldersPath = path.join(__dirname, "commands");
+	const commandFolders = fs.readdirSync(foldersPath);
+
 	// command loader loop
 	for (const folder of commandFolders) {
 		const commandsPath = path.join(foldersPath, folder);
@@ -58,43 +65,89 @@ const commandFolders = fs.readdirSync(foldersPath);
 		}
 	}
 
-	// connect to db before starting the bot to ensure it's ready when commands are executed
+	// step 2 - connect to db before starting the bot to ensure it's ready when commands are executed
 	await connectMongoose();
+
+	// step 3 - set up event listeners before logging in, to avoid missing any events that fire on startup (like guildCreate)
+	client.on(Events.GuildCreate, async (guild) => {
+		try {
+			// check if already set up — handles bot being removed and re-added
+			const alreadySetup = await guildConfigStore.isSetupComplete(guild.id);
+			if (alreadySetup) return;
+
+			// fetch the owner so we can DM them
+			const owner = await guild.fetchOwner();
+			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
+		} catch (error) {
+			console.error("GuildCreate handler error:", error);
+		}
+	});
 
 	// then register the inteaction listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
-		//  only handle slash commands
 		if (!interaction.isChatInputCommand()) return;
-		const command = client.commands.get(interaction.commandName);
 
+		const command = client.commands.get(interaction.commandName);
 		if (!command) {
 			console.error(`No command matching ${interaction.commandName} was found.`);
 			return;
 		}
+
+		// ── admin role guard ───────────────────────────────────────────
+		// skip for /setup — it has its own owner-only check
+		if (interaction.commandName !== "setup") {
+			const config = await guildConfigStore.findByGuildId(interaction.guildId!);
+
+			if (config && ADMIN_COMMANDS.has(interaction.commandName)) {
+				const member = interaction.guild?.members.cache.get(interaction.user.id);
+				const isOwner = interaction.user.id === interaction.guild?.ownerId;
+				const hasAdminRole = member?.roles.cache.has(config.adminRoleId) ?? false;
+
+				if (!isOwner && !hasAdminRole) {
+					await interaction.reply({
+						embeds: [errorEmbed(embedContent.responses.noWizardPowers)],
+						ephemeral: true,
+					});
+					return;
+				}
+			}
+		}
+
 		try {
 			await command.execute(interaction);
 		} catch (error) {
-			console.error(error);
-			await interaction.reply({
-				content: "There was an error executing this command!",
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-	});
+			console.error(`Error executing ${interaction.commandName}:`, error);
 
-	// start the scheduler after commands are loaded
+			// interaction might already be replied to
+			if (interaction.replied || interaction.deferred) {
+				await interaction.followUp({
+					embeds: [errorEmbed("Something went wrong executing this command.")],
+					flags: MessageFlags.Ephemeral,
+				});
+			} else {
+				await interaction.reply({
+					embeds: [errorEmbed("Something went wrong executing this command.")],
+					flags: MessageFlags.Ephemeral,
+				});
+			}
+		}
+	}); // start the scheduler after commands are loaded
 	// && after client is ready (since it relies on the client to send messages)
 	client.once(Events.ClientReady, () => {
+		// set bot presence
+		client.user?.setPresence({ activities: [{ name: "⚔️ Watching over KvK" }], status: "online" });
+
+		// start scheduler and activity tracker, and API server
 		startScheduler(client);
 		registerActivityListeners(client);
 		startApiServer();
-		if (isDev) {
-			console.log("====================================");
-			console.log("Application started");
-			console.log("====================================");
-		}
+		console.log(
+			"====================================\n" +
+				`🤖 ${client.user?.tag} is online and operational!\n` +
+				"===================================="
+		);
 	});
 
 	// login the bot after everything is set up
-	client.login(discordToken);
+	await client.login(discordToken);
 })();
