@@ -83,6 +83,13 @@ clientReady(client);
 
 	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
+		// handle autocomplete interactions first, before command checks
+		if (interaction.isAutocomplete()) {
+			const command = client.commands.get(interaction.commandName);
+			if (command?.autocomplete) await command.autocomplete(interaction);
+			return;
+		}
+
 		if (!interaction.isChatInputCommand()) return;
 
 		const command = client.commands.get(interaction.commandName);

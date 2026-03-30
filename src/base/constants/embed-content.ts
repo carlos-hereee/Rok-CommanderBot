@@ -36,7 +36,17 @@ export const embedContent = {
 		seasonEndLabel: "Season ends",
 		channelLabel: "Reminder channel",
 	},
-
+	deleteEvent: {
+		confirmTitle: "🗑️ Confirm Deletion",
+		confirmDescription: (name: string) =>
+			`Are you sure you want to delete **${name}**?\n\n` +
+			"This will stop all future reminders for this event.\n" +
+			"*This action cannot be undone.*",
+		successDescription: (name: string) => `✅ **${name}** has been deleted. No further reminders will fire.`,
+		notFound: (input: string) => `❌ No active event found matching **${input}**.`,
+		cancelled: "❌ Deletion cancelled.",
+		timedOut: "⏱️ No response — deletion cancelled.",
+	},
 	reminder: {
 		title: (name: string, minutes: number) => `⚔️ ${name} starts in ${minutes} minutes!`,
 		description: "Prepare now so you're ready when the event begins.",

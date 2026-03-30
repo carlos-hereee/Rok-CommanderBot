@@ -8,5 +8,5 @@ export async function connectMongoose(): Promise<void> {
 	}
 
 	await mongoose.connect(uri);
-	console.log("✅ Connected to MongoDB");
+	console.log("\n\n✅ Connected to MongoDB");
 }
