@@ -15,5 +15,13 @@
 		"editor.formatOnSave": true
 	},
 	"prettier.requireConfig": true, // ← only format if .prettierrc exists
-	"prettier.configPath": ".prettierrc" // ← points to your config file
+	"prettier.configPath": ".prettierrc", // ← points to your config file
+	// ── TypeScript specific ───────────────────────────────────
+	"typescript.updateImportsOnFileMove.enabled": "always", // your existing setting fixed
+	"typescript.suggest.autoImports": true, // suggests imports as you type
+	"typescript.preferences.importModuleSpecifier": "non-relative", // uses relative paths for imports
+	"typescript.inlayHints.parameterNames.enabled": "literals", // shows param names on function calls
+	"typescript.preferences.importModuleSpecifierEnding": "js", // prefer .js extension in imports
+	"typescript.inlayHints.variableTypes.enabled": false, // too noisy if enabled
+	"typescript.inlayHints.functionLikeReturnTypes.enabled": true // shows inferred return types
 }

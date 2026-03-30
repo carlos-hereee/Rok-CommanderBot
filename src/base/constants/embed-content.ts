@@ -191,7 +191,21 @@ export const embedContent = {
 			"to the inner sanctum.\n\n" +
 			"My presence is now known. Inform your alliance.\n" +
 			"They should be grateful.",
+		kvkConfigured: (seasonEnd: number, channelId: string) =>
+			[
+				"✅ **KvK reminders configured successfully!**",
+				"",
+				"**Events scheduled:**",
+				"- 🏚️ Ancient Ruins *(every 36h)*",
+				"- 🕯️ Altar of Darkness *(every 84h)*",
+				"- ⚔️ Trial of Kau Karuak *(Easy → Normal → Hard → Nightmare)*",
+				"",
+				`**Season ends:** <t:${seasonEnd}:D>`,
+				`**Reminder channel:** <#${channelId}>`,
+			].join("\n"),
 		setupFailed: "Something went wrong during setup. Please try again.",
 		setupPending: "🔱 Constructing **BY DIVINE DECREE**... Stand by.",
+		setupRequired:
+			"⚠️ **My throne has not been constructed.**\n\n" + "An admin must run `/setup` before any commands can be used.",
 	},
 };

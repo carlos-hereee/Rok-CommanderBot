@@ -11,6 +11,7 @@ import { startApiServer } from "@api/server.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { arrivalEmbed, errorEmbed } from "@utils/embedBuilder.js";
 import { embedContent } from "@base/constants/embed-content.js";
+import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -39,9 +40,6 @@ const client = new Client({
 });
 
 clientReady(client);
-
-// ── admin commands that require role check ────────────────────
-const ADMIN_COMMANDS = new Set(["configure-rok-reminders", "delete-event", "list-events", "leaderboard"]);
 
 // load commands first
 (async () => {
@@ -83,7 +81,7 @@ const ADMIN_COMMANDS = new Set(["configure-rok-reminders", "delete-event", "list
 		}
 	});
 
-	// then register the inteaction listerner
+	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
 		if (!interaction.isChatInputCommand()) return;
 
@@ -98,7 +96,16 @@ const ADMIN_COMMANDS = new Set(["configure-rok-reminders", "delete-event", "list
 		if (interaction.commandName !== "setup") {
 			const config = await guildConfigStore.findByGuildId(interaction.guildId!);
 
-			if (config && ADMIN_COMMANDS.has(interaction.commandName)) {
+			if (BOT_CONSTANTS.ADMIN_COMMANDS.has(interaction.commandName)) {
+				// guild hasn't run /setup yet — no config means no admin role is defined
+				if (!config) {
+					await interaction.reply({
+						embeds: [errorEmbed(embedContent.responses.setupRequired)],
+						flags: MessageFlags.Ephemeral,
+					});
+					return;
+				}
+
 				const member = interaction.guild?.members.cache.get(interaction.user.id);
 				const isOwner = interaction.user.id === interaction.guild?.ownerId;
 				const hasAdminRole = member?.roles.cache.has(config.adminRoleId) ?? false;
@@ -106,7 +113,7 @@ const ADMIN_COMMANDS = new Set(["configure-rok-reminders", "delete-event", "list
 				if (!isOwner && !hasAdminRole) {
 					await interaction.reply({
 						embeds: [errorEmbed(embedContent.responses.noWizardPowers)],
-						ephemeral: true,
+						flags: MessageFlags.Ephemeral,
 					});
 					return;
 				}

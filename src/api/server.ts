@@ -17,6 +17,10 @@ export function startApiServer(): void {
 	// replace with your actual portfolio domain in production
 	app.use(cors({ origin: dashboardOrigin }));
 
+	// health check — useful for Railway/Render to know the server is alive
+	// can be called by anyone without an API key, so keep it simple and non-sensitive
+	app.get("/health", (_, res) => res.json({ status: "ok" }));
+
 	// all routes are protected by API key
 	app.use(apiKeyAuth);
 
@@ -25,9 +29,6 @@ export function startApiServer(): void {
 	app.use("/api/leaderboard", leaderboardRouter);
 	app.use("/api/players", playersRouter);
 	app.use("/api/reminders", remindersRouter);
-
-	// health check — useful for Railway/Render to know the server is alive
-	app.get("/health", (_, res) => res.json({ status: "ok" }));
 
 	app.listen(port, () => {
 		console.log(`API server running on port ${port}`);

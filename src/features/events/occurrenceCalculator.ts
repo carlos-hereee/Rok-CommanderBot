@@ -3,6 +3,13 @@ import { IGameEvent } from "./event.types.js";
 // pure function — no DB calls, no Discord, just math
 // this makes it trivially easy to unit test
 export function getUpcomingOccurrences(event: IGameEvent, count: number): Date[] {
+	// if intervalHours is 0, it's a one-time event  either it hasn't happened yet (return the single occurrence)
+	// or it has already passed (return an empty array)
+	if (event.intervalHours === 0) {
+		const t = new Date(event.firstOccurrence).getTime();
+		return t > Date.now() ? [new Date(t)] : [];
+	}
+
 	const occurrences: Date[] = [];
 	const intervalMs = event.intervalHours * 60 * 60 * 1000;
 	const now = Date.now();
@@ -30,6 +37,13 @@ export function getUpcomingOccurrences(event: IGameEvent, count: number): Date[]
 // separate helper used by ActivityTracker to know if an
 // event window is currently open (for voice/presence tracking)
 export function isEventWindowOpen(event: IGameEvent, now = new Date(), windowMinutes = 60): boolean {
+	// one-time event: the window is open if we're between firstOccurrence and firstOccurrence + windowMinutes
+	if (event.intervalHours === 0) {
+		const start = new Date(event.firstOccurrence);
+		const windowEnd = new Date(start.getTime() + windowMinutes * 60 * 1000);
+		return now >= start && now <= windowEnd;
+	}
+
 	const occurrences = getUpcomingOccurrences(event, 1);
 	if (!occurrences.length) return false;
 

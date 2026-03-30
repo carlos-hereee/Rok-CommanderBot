@@ -3,6 +3,7 @@ import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import rokEvents from "@base/constants/rok-events.json" with { type: "json" };
 import { v4 } from "uuid";
+import { embedContent } from "@base/constants/embed-content.js";
 
 interface IKvKSeasonInput {
 	seasonEnd: Date;
@@ -71,17 +72,7 @@ export class GuildEventManager {
 			}
 
 			await interaction.editReply({
-				content: [
-					"✅ **KvK reminders configured successfully!**",
-					"",
-					"**Events scheduled:**",
-					"- 🏚️ Ancient Ruins *(every 36h)*",
-					"- 🕯️ Altar of Darkness *(every 84h)*",
-					"- ⚔️ Trial of Kau Karuak *(Easy → Normal → Hard → Nightmare)*",
-					"",
-					`**Season ends:** <t:${Math.floor(input.seasonEnd.getTime() / 1000)}:D>`,
-					`**Reminder channel:** <#${input.channelId}>`,
-				].join("\n"),
+				content: embedContent.responses.kvkConfigured(Math.floor(input.seasonEnd.getTime() / 1000), input.channelId),
 			});
 		} catch (error) {
 			console.error("Failed to configure KvK season:", error);
