@@ -1,6 +1,6 @@
-import { Guild, PermissionFlagsBits, ChannelType, TextChannel, CategoryChannel } from "discord.js";
+import { Guild, PermissionFlagsBits, ChannelType, CategoryChannel } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { ISetupConfig, ICreatedChannels } from "./setup.types.js";
+import { ISetupConfig, ICreatedChannels, IChannelObjects } from "./setup.types.js";
 import { ChannelContent } from "./ChannelContent.js";
 import { embedContent } from "@base/constants/embed-content.js";
 
@@ -37,29 +37,33 @@ export class GuildSetupManager {
 			],
 		});
 
-		// ── create channels ───────────────────────────────────
-		const setUpChannels = await GuildSetupManager.createChannels(guild, category, config);
-
-		// ── post intro content in each channel ────────────────
-		await GuildSetupManager.populateChannels(guild, setUpChannels, config);
+		// ── create channels + populate in one pass ────────────
+		// ids go to the DB, objects go straight to populateChannels
+		// no need to re-fetch channels we just created
+		const { ids, objects } = await GuildSetupManager.createChannels(guild, category, config);
+		await GuildSetupManager.populateChannels(objects, config);
 
 		// ── save config to DB ─────────────────────────────────
 		await guildConfigStore.create({
 			guildId: config.guildId,
 			adminRoleId: config.adminRoleId,
 			categoryId: category.id,
-			introChannelId: setUpChannels.introChannelId,
-			commandsChannelId: setUpChannels.commandsChannelId,
-			leaderboardChannelId: setUpChannels.leaderboardChannelId,
-			scheduleChannelId: setUpChannels.scheduleChannelId,
-			announcementsChannelId: setUpChannels.announcementsChannelId,
-			adminChannelId: setUpChannels.adminChannelId,
+			introChannelId: ids.introChannelId,
+			commandsChannelId: ids.commandsChannelId,
+			leaderboardChannelId: ids.leaderboardChannelId,
+			scheduleChannelId: ids.scheduleChannelId,
+			announcementsChannelId: ids.announcementsChannelId,
+			adminChannelId: ids.adminChannelId,
 			setupComplete: true,
 		});
 	}
 
 	// ── channel creation ──────────────────────────────────────
-	private static async createChannels(guild: Guild, category: CategoryChannel, config: ISetupConfig): Promise<ICreatedChannels> {
+	private static async createChannels(
+		guild: Guild,
+		category: CategoryChannel,
+		config: ISetupConfig
+	): Promise<{ ids: ICreatedChannels; objects: IChannelObjects }> {
 		// public channels — visible to everyone
 		const publicOverwrites = [
 			{
@@ -130,29 +134,31 @@ export class GuildSetupManager {
 			]);
 
 		return {
-			categoryId: category.id,
-			introChannelId: introChannel.id,
-			commandsChannelId: commandsChannel.id,
-			leaderboardChannelId: leaderboardChannel.id,
-			scheduleChannelId: scheduleChannel.id,
-			announcementsChannelId: announcementsChannel.id,
-			adminChannelId: adminChannel.id,
+			ids: {
+				categoryId: category.id,
+				introChannelId: introChannel.id,
+				commandsChannelId: commandsChannel.id,
+				leaderboardChannelId: leaderboardChannel.id,
+				scheduleChannelId: scheduleChannel.id,
+				announcementsChannelId: announcementsChannel.id,
+				adminChannelId: adminChannel.id,
+			},
+			objects: {
+				introChannel,
+				commandsChannel,
+				leaderboardChannel,
+				scheduleChannel,
+				announcementsChannel,
+				adminChannel,
+			},
 		};
 	}
 
 	// ── populate channels with intro content ──────────────────
-	private static async populateChannels(guild: Guild, populatedChannels: ICreatedChannels, config: ISetupConfig): Promise<void> {
-		const fetch = (id: string) => guild.channels.fetch(id) as Promise<TextChannel>;
-
-		const [introChannel, commandsChannel, leaderboardChannel, scheduleChannel, announcementsChannel, adminChannel] =
-			await Promise.all([
-				fetch(populatedChannels.introChannelId),
-				fetch(populatedChannels.commandsChannelId),
-				fetch(populatedChannels.leaderboardChannelId),
-				fetch(populatedChannels.scheduleChannelId),
-				fetch(populatedChannels.announcementsChannelId),
-				fetch(populatedChannels.adminChannelId),
-			]);
+	// receives channel objects directly — no fetch needed
+	private static async populateChannels(discordChannels: IChannelObjects, config: ISetupConfig): Promise<void> {
+		const { introChannel, commandsChannel, leaderboardChannel, scheduleChannel, announcementsChannel, adminChannel } =
+			discordChannels;
 
 		// post intro content — all in parallel
 		await Promise.all([
@@ -161,9 +167,7 @@ export class GuildSetupManager {
 			leaderboardChannel.send({ embeds: [ChannelContent.leaderboardIntro()] }),
 			scheduleChannel.send({ embeds: [ChannelContent.scheduleIntro()] }),
 			announcementsChannel.send({ embeds: [ChannelContent.announcementsIntro()] }),
-			adminChannel.send({
-				embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId)],
-			}),
+			adminChannel.send({ embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId)] }),
 		]);
 	}
 }
