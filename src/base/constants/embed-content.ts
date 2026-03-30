@@ -24,6 +24,19 @@ export const embedContent = {
 		ADMIN: "DarkPurple",
 	} satisfies Record<string, ColorResolvable>,
 
+	listEvents: {
+		title: "📅 Active KvK Events",
+		noEvents:
+			"📭 No active events are configured for this server yet.\n\n" +
+			"Run `/configure-rok-reminders` to set up the season schedule.",
+		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
+		nextOccurrenceLabel: "Next occurrence",
+		scheduledDateLabel: "Scheduled date",
+		intervalLabel: (hours: number) => `Repeats every **${hours} hours**`,
+		seasonEndLabel: "Season ends",
+		channelLabel: "Reminder channel",
+	},
+
 	reminder: {
 		title: (name: string, minutes: number) => `⚔️ ${name} starts in ${minutes} minutes!`,
 		description: "Prepare now so you're ready when the event begins.",

@@ -7,6 +7,9 @@ export const eventStore = {
 	async findById(eventId: string) {
 		return EventModel.findOne({ eventId });
 	},
+	async findByGuildId(guildId: string) {
+		return EventModel.find({ guildId, active: true });
+	},
 	async create(data: object) {
 		return EventModel.create(data);
 	},

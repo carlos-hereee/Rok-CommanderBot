@@ -2,6 +2,36 @@ import { EmbedBuilder, ColorResolvable } from "discord.js";
 import { IGameEvent, IPrepStep } from "@features/events/event.types.js";
 import { embedContent } from "@base/constants/embed-content.js";
 
+interface IListEventField {
+	name: string;
+	type: "recurring" | "one-time";
+	nextOccurrenceTs: number; // unix seconds
+	intervalHours: number | null; // null for one-time
+	seasonEndTs: number; // unix seconds
+	channelId: string;
+}
+
+export function listEventsEmbed(fields: IListEventField[]): EmbedBuilder {
+	const c = embedContent.listEvents;
+	const embed = base().setTitle(c.title).setColor(embedContent.COLORS.SCHEDULE);
+
+	for (const field of fields) {
+		const lines: string[] = [];
+		const occurrenceLabel = field.type === "recurring" ? c.nextOccurrenceLabel : c.scheduledDateLabel;
+
+		lines.push(`**${occurrenceLabel}:** <t:${field.nextOccurrenceTs}:F>`);
+		if (field.type === "recurring" && field.intervalHours !== null) {
+			lines.push(c.intervalLabel(field.intervalHours));
+		}
+		lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
+		lines.push(`**${c.channelLabel}:** <#${field.channelId}>`);
+
+		embed.addFields({ name: c.fieldName(field.name, field.type), value: lines.join("\n"), inline: false });
+	}
+
+	return embed;
+}
+
 // ── private ───────────────────────────────────────────────────
 function base(): EmbedBuilder {
 	return new EmbedBuilder().setTimestamp().setFooter({ text: embedContent.FOOTER });

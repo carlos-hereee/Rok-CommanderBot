@@ -1,7 +1,12 @@
 import mongoose from "mongoose";
-import { isDev, port, uri } from "@utils/config.js";
+import { uri } from "@utils/config.js";
 
 export async function connectMongoose(): Promise<void> {
+	if (!uri) {
+		console.error("[ERROR] MONGOOSE_URI environment variable is not set.");
+		process.exit(1);
+	}
+
 	await mongoose.connect(uri);
-	if (isDev) console.log(`\n*** Listening on port ${port}***\n`);
+	console.log("✅ Connected to MongoDB");
 }
