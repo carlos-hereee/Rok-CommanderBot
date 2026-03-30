@@ -185,12 +185,15 @@ export const embedContent = {
 			"🔱 **BY DIVINE DECREE already stands.**\n\n" +
 			"My throne has already been constructed.\n" +
 			"It does not need to be built twice.",
-		setupSuccess: (adminRoleId: string) =>
-			"🔱 **BY DIVINE DECREE has been established.**\n\n" +
-			`<@&${adminRoleId}> has been granted access ` +
-			"to the inner sanctum.\n\n" +
-			"My presence is now known. Inform your alliance.\n" +
-			"They should be grateful.",
+		setupSuccess: (adminRoleId: string) => ({
+			title: "🔱 BY DIVINE DECREE Established",
+			description:
+				"🔱 **BY DIVINE DECREE has been established.**\n\n" +
+				`<@&${adminRoleId}> has been granted access ` +
+				"to the inner sanctum.\n\n" +
+				"My presence is now known. Inform your alliance.\n" +
+				"They should be grateful.",
+		}),
 		kvkConfigured: (seasonEnd: number, channelId: string) =>
 			[
 				"✅ **KvK reminders configured successfully!**",
@@ -204,7 +207,10 @@ export const embedContent = {
 				`**Reminder channel:** <#${channelId}>`,
 			].join("\n"),
 		setupFailed: "Something went wrong during setup. Please try again.",
-		setupPending: "🔱 Constructing **BY DIVINE DECREE**... Stand by.",
+		setupPending: {
+			title: "🔱 Setting Up",
+			description: "Constructing **BY DIVINE DECREE**... Stand by.",
+		},
 		setupRequired:
 			"⚠️ **My throne has not been constructed.**\n\n" + "An admin must run `/setup` before any commands can be used.",
 	},

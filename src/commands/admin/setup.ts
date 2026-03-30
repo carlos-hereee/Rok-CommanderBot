@@ -2,7 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits }
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { embedContent } from "@base/constants/embed-content.js";
-import { errorEmbed } from "@utils/embedBuilder.js";
+import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 
 const { responses } = embedContent;
 
@@ -30,8 +30,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	}
 
 	const adminRole = interaction.options.getRole("admin-role", true);
-	await interaction.reply({ content: responses.setupPending, ephemeral: true });
-
+	await interaction.reply({
+		embeds: [infoEmbed(responses.setupPending.title, responses.setupPending.description, embedContent.COLORS.ARRIVAL)],
+		ephemeral: true,
+	});
 	try {
 		await GuildSetupManager.setup(interaction.guild!, {
 			guildId: interaction.guildId!,
@@ -39,7 +41,15 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			ownerId: interaction.guild!.ownerId,
 		});
 
-		await interaction.editReply({ content: responses.setupSuccess(adminRole.id) });
+		await interaction.editReply({
+			embeds: [
+				infoEmbed(
+					responses.setupSuccess(adminRole.id).title,
+					responses.setupSuccess(adminRole.id).description,
+					embedContent.COLORS.ARRIVAL
+				),
+			],
+		});
 	} catch (error) {
 		console.error("Setup failed:", error);
 		await interaction.editReply({ embeds: [errorEmbed(responses.setupFailed)] });
