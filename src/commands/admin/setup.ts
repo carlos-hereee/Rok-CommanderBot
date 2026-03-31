@@ -14,10 +14,7 @@ export const data = new SlashCommandBuilder()
 		option.setName("admin-role").setDescription("The role that will have access to bot configuration").setRequired(true)
 	)
 	.addRoleOption((option) =>
-		option
-			.setName("member-role")
-			.setDescription("The role assigned to verified members (Community servers only)")
-			.setRequired(false)
+		option.setName("member-role").setDescription("The role assigned to verified members").setRequired(false)
 	);
 
 export async function execute(interaction: ChatInputCommandInteraction) {

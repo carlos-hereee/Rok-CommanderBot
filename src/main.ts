@@ -73,17 +73,20 @@ clientReady(client);
 	client.on(Events.GuildCreate, async (guild) => {
 		try {
 			const alreadyBuilt = await guildConfigStore.findByGuildId(guild.id);
-			if (alreadyBuilt?.categoryId) return; // already constructed
-
-			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
+			if (alreadyBuilt?.setupComplete) return;
 
 			const owner = await guild.fetchOwner();
+			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
 			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
 		} catch (error) {
-			console.error("GuildCreate handler error:", error);
+			console.error(`Auto-setup failed for guild ${guild.id}, leaving:`, error);
+			try {
+				await guild.leave();
+			} catch (leaveError) {
+				console.error(`Failed to leave guild ${guild.id}:`, leaveError);
+			}
 		}
 	});
-
 	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
 		// handle autocomplete interactions first, before command checks
@@ -163,15 +166,15 @@ clientReady(client);
 		for (const guild of client.guilds.cache.values()) {
 			try {
 				const existing = await guildConfigStore.findByGuildId(guild.id);
-				if (existing?.setupComplete) continue; // already set up, no need to introduce
+				if (existing?.setupComplete) continue;
 
 				const owner = await guild.fetchOwner();
+				await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
 				await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
 			} catch (error) {
-				console.error(`Failed to DM owner of guild ${guild.id}:`, error);
+				console.error(`Auto-setup failed for guild ${guild.id}, skipping:`, error);
 			}
 		}
-
 		console.log(
 			"====================================\n" +
 				`🤖 ${client.user?.tag} is online and operational!\n` +
