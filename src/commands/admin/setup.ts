@@ -8,7 +8,7 @@ const { responses } = embedContent;
 
 export const data = new SlashCommandBuilder()
 	.setName("setup")
-	.setDescription("Construct 🔱 BY DIVINE DECREE and initialize the bot")
+	.setDescription("Assign an admin role to configure the bot")
 	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 	.addRoleOption((option) =>
 		option.setName("admin-role").setDescription("The role that will have access to bot configuration").setRequired(true)
@@ -21,10 +21,19 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		return;
 	}
 
-	// ── check if already set up ───────────────────────────────
-	const alreadySetup = await guildConfigStore.isSetupComplete(interaction.guildId!);
+	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
 
-	if (alreadySetup) {
+	// channels haven't been built yet
+	if (!config?.categoryId) {
+		await interaction.reply({
+			embeds: [errorEmbed("Channels not yet constructed. Please wait a moment and try again.")],
+			ephemeral: true,
+		});
+		return;
+	}
+
+	// already fully set up
+	if (config.setupComplete) {
 		await interaction.reply({ embeds: [errorEmbed(responses.alreadySetup)], ephemeral: true });
 		return;
 	}
@@ -34,11 +43,12 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		embeds: [infoEmbed(responses.setupPending.title, responses.setupPending.description, embedContent.COLORS.ARRIVAL)],
 		ephemeral: true,
 	});
+
 	try {
-		await GuildSetupManager.setup(interaction.guild!, {
+		await GuildSetupManager.applyAdminRole(interaction.guild!, {
 			guildId: interaction.guildId!,
-			adminRoleId: adminRole.id,
 			ownerId: interaction.guild!.ownerId,
+			adminRoleId: adminRole.id,
 		});
 
 		await interaction.editReply({

@@ -195,6 +195,8 @@ export const embedContent = {
 	},
 
 	responses: {
+		adminRolePending:
+			"⚠️ **No admin role has been designated yet.**\n\n" + "Run `/setup` to assign a role that can configure this bot.",
 		noWizardPowers:
 			"⚠️ **Oops. You don't have wizard powers.**\n\n" +
 			"This command is reserved for alliance commanders.\n" +

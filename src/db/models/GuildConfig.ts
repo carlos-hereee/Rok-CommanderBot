@@ -7,7 +7,7 @@ const guildConfigSchema = new Schema(
 	{
 		configId: { type: String, required: true, unique: true, default: v4 },
 		guildId: { type: String, required: true, unique: true },
-		adminRoleId: { type: String, required: true }, // role that can configure the bot
+		adminRoleId: { type: String, required: false, default: null }, // role that can configure the bot
 
 		// category
 		categoryId: { type: String, required: true },

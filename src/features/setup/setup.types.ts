@@ -2,8 +2,13 @@ import type { TextChannel } from "discord.js";
 
 export interface ISetupConfig {
 	guildId: string;
-	adminRoleId: string;
 	ownerId: string;
+}
+
+export interface IAdminRoleConfig {
+	guildId: string;
+	ownerId: string;
+	adminRoleId: string;
 }
 
 // shape of IDs saved to the database after setup

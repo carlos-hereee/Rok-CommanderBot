@@ -1,52 +1,39 @@
-import { Guild, PermissionFlagsBits, ChannelType, CategoryChannel } from "discord.js";
+import { Guild, PermissionFlagsBits, ChannelType, CategoryChannel, GuildChannel } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { ISetupConfig, ICreatedChannels, IChannelObjects } from "./setup.types.js";
+import { ISetupConfig, IAdminRoleConfig, ICreatedChannels, IChannelObjects } from "./setup.types.js";
 import { ChannelContent } from "./ChannelContent.js";
 import { embedContent } from "@base/constants/embed-content.js";
 
 const { channels } = embedContent.setup;
 
 export class GuildSetupManager {
-	static async setup(guild: Guild, config: ISetupConfig): Promise<void> {
-		// ── check if already set up ───────────────────────────
+	// ── Phase 1: auto-construct on join / restart ─────────────
+	static async autoSetup(guild: Guild, config: ISetupConfig): Promise<void> {
 		const existing = await guildConfigStore.findByGuildId(config.guildId);
-		if (existing?.setupComplete) return;
+		if (existing?.categoryId) return; // already constructed
 
-		// ── create the category ───────────────────────────────
-		// hidden from @everyone by default
-		// only visible to owner and admin role
+		// owner-only category until admin role is assigned in Phase 2
 		const category = await guild.channels.create({
 			name: embedContent.setup.categoryName,
 			type: ChannelType.GuildCategory,
 			permissionOverwrites: [
 				{
-					// deny everyone by default
 					id: guild.roles.everyone.id,
 					deny: [PermissionFlagsBits.ViewChannel],
 				},
 				{
-					// grant admin role full access
-					id: config.adminRoleId,
-					allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
-				},
-				{
-					// grant server owner full access
 					id: config.ownerId,
 					allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
 				},
 			],
 		});
 
-		// ── create channels + populate in one pass ────────────
-		// ids go to the DB, objects go straight to populateChannels
-		// no need to re-fetch channels we just created
 		const { ids, objects } = await GuildSetupManager.createChannels(guild, category, config);
-		await GuildSetupManager.populateChannels(objects, config);
+		await GuildSetupManager.populateChannels(objects);
 
-		// ── save config to DB ─────────────────────────────────
 		await guildConfigStore.create({
 			guildId: config.guildId,
-			adminRoleId: config.adminRoleId,
+			adminRoleId: null,
 			categoryId: category.id,
 			introChannelId: ids.introChannelId,
 			commandsChannelId: ids.commandsChannelId,
@@ -54,8 +41,54 @@ export class GuildSetupManager {
 			scheduleChannelId: ids.scheduleChannelId,
 			announcementsChannelId: ids.announcementsChannelId,
 			adminChannelId: ids.adminChannelId,
-			setupComplete: true,
+			setupComplete: false,
 		});
+	}
+
+	// ── Phase 2: apply admin role to existing channels ────────
+	static async applyAdminRole(guild: Guild, config: IAdminRoleConfig): Promise<void> {
+		const stored = await guildConfigStore.findByGuildId(config.guildId);
+		if (!stored) throw new Error("No guild config found — channels have not been constructed yet.");
+
+		const [category, introChannel, commandsChannel, leaderboardChannel, scheduleChannel, announcementsChannel, adminChannel] =
+			(await Promise.all([
+				guild.channels.fetch(stored.categoryId),
+				guild.channels.fetch(stored.introChannelId),
+				guild.channels.fetch(stored.commandsChannelId),
+				guild.channels.fetch(stored.leaderboardChannelId),
+				guild.channels.fetch(stored.scheduleChannelId),
+				guild.channels.fetch(stored.announcementsChannelId),
+				guild.channels.fetch(stored.adminChannelId),
+			])) as (GuildChannel | null)[];
+
+		// grant admin role access to category
+		await category?.permissionOverwrites.create(config.adminRoleId, {
+			ViewChannel: true,
+			SendMessages: true,
+			ReadMessageHistory: true,
+		});
+
+		// grant admin role send permissions on public channels
+		for (const ch of [introChannel, commandsChannel, leaderboardChannel, scheduleChannel, announcementsChannel]) {
+			await ch?.permissionOverwrites.create(config.adminRoleId, {
+				ViewChannel: true,
+				SendMessages: true,
+			});
+		}
+
+		// grant admin role full access to admin channel
+		await adminChannel?.permissionOverwrites.create(config.adminRoleId, {
+			ViewChannel: true,
+			SendMessages: true,
+			ReadMessageHistory: true,
+		});
+
+		// post the real welcome message now that the role is known
+		if (adminChannel?.isTextBased()) {
+			await adminChannel.send({ embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId)] });
+		}
+
+		await guildConfigStore.update(config.guildId, { adminRoleId: config.adminRoleId, setupComplete: true });
 	}
 
 	// ── channel creation ──────────────────────────────────────
@@ -64,28 +97,24 @@ export class GuildSetupManager {
 		category: CategoryChannel,
 		config: ISetupConfig
 	): Promise<{ ids: ICreatedChannels; objects: IChannelObjects }> {
-		// public channels — visible to everyone
+		// public channels — owner can send, everyone else read-only
 		const publicOverwrites = [
 			{
 				id: guild.roles.everyone.id,
 				allow: [PermissionFlagsBits.ViewChannel],
-				deny: [PermissionFlagsBits.SendMessages], // read only for regular members
+				deny: [PermissionFlagsBits.SendMessages],
 			},
 			{
-				id: config.adminRoleId,
+				id: config.ownerId,
 				allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
 			},
 		];
 
-		// admin only channel — completely hidden from everyone else
+		// admin channel — owner only until Phase 2
 		const adminOverwrites = [
 			{
 				id: guild.roles.everyone.id,
-				deny: [PermissionFlagsBits.ViewChannel], // completely invisible
-			},
-			{
-				id: config.adminRoleId,
-				allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+				deny: [PermissionFlagsBits.ViewChannel],
 			},
 			{
 				id: config.ownerId,
@@ -154,20 +183,18 @@ export class GuildSetupManager {
 		};
 	}
 
-	// ── populate channels with intro content ──────────────────
-	// receives channel objects directly — no fetch needed
-	private static async populateChannels(discordChannels: IChannelObjects, config: ISetupConfig): Promise<void> {
+	// ── populate channels with initial content ────────────────
+	private static async populateChannels(discordChannels: IChannelObjects): Promise<void> {
 		const { introChannel, commandsChannel, leaderboardChannel, scheduleChannel, announcementsChannel, adminChannel } =
 			discordChannels;
 
-		// post intro content — all in parallel
 		await Promise.all([
 			introChannel.send({ embeds: [ChannelContent.introduction()] }),
 			commandsChannel.send({ embeds: [ChannelContent.commandGuide()] }),
 			leaderboardChannel.send({ embeds: [ChannelContent.leaderboardIntro()] }),
 			scheduleChannel.send({ embeds: [ChannelContent.scheduleIntro()] }),
 			announcementsChannel.send({ embeds: [ChannelContent.announcementsIntro()] }),
-			adminChannel.send({ embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId)] }),
+			adminChannel.send({ embeds: [ChannelContent.adminPending()] }),
 		]);
 	}
 }

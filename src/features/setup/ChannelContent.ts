@@ -14,7 +14,9 @@ export const ChannelContent = {
 			...cc.commandGuide.fields
 		);
 	},
-
+	adminPending(): EmbedBuilder {
+		return infoEmbed(cc.adminWelcome.title, embedContent.responses.adminRolePending, embedContent.COLORS.ADMIN);
+	},
 	scheduleIntro(): EmbedBuilder {
 		return infoEmbed(cc.schedule.title, cc.schedule.description, embedContent.COLORS.SCHEDULE);
 	},
