@@ -8,10 +8,16 @@ const { responses } = embedContent;
 
 export const data = new SlashCommandBuilder()
 	.setName("setup")
-	.setDescription("Assign an admin role to configure the bot")
+	.setDescription("Assign roles to configure the bot")
 	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 	.addRoleOption((option) =>
 		option.setName("admin-role").setDescription("The role that will have access to bot configuration").setRequired(true)
+	)
+	.addRoleOption((option) =>
+		option
+			.setName("member-role")
+			.setDescription("The role assigned to verified members (Community servers only)")
+			.setRequired(false)
 	);
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -39,6 +45,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	}
 
 	const adminRole = interaction.options.getRole("admin-role", true);
+	const memberRole = interaction.options.getRole("member-role");
+
 	await interaction.reply({
 		embeds: [infoEmbed(responses.setupPending.title, responses.setupPending.description, embedContent.COLORS.ARRIVAL)],
 		ephemeral: true,
@@ -49,6 +57,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			guildId: interaction.guildId!,
 			ownerId: interaction.guild!.ownerId,
 			adminRoleId: adminRole.id,
+			memberRoleId: memberRole?.id ?? null,
 		});
 
 		await interaction.editReply({

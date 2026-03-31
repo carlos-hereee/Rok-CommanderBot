@@ -34,6 +34,7 @@ export class GuildSetupManager {
 		await guildConfigStore.create({
 			guildId: config.guildId,
 			adminRoleId: null,
+			memberRoleId: null,
 			categoryId: category.id,
 			introChannelId: ids.introChannelId,
 			commandsChannelId: ids.commandsChannelId,
@@ -88,7 +89,11 @@ export class GuildSetupManager {
 			await adminChannel.send({ embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId)] });
 		}
 
-		await guildConfigStore.update(config.guildId, { adminRoleId: config.adminRoleId, setupComplete: true });
+		await guildConfigStore.update(config.guildId, {
+			adminRoleId: config.adminRoleId,
+			memberRoleId: config.memberRoleId,
+			setupComplete: true,
+		});
 	}
 
 	// ── channel creation ──────────────────────────────────────

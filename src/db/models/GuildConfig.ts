@@ -11,7 +11,8 @@ const guildConfigSchema = new Schema(
 
 		// category
 		categoryId: { type: String, required: true },
-
+		// member role assigned to verified users during onboarding — stored here for easy access when assigning during onboarding
+		memberRoleId: { type: String, required: false, default: null },
 		// channel IDs — stored so bot always knows where to post
 		introChannelId: { type: String, required: true },
 		commandsChannelId: { type: String, required: true },

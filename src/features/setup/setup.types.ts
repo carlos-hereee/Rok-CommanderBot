@@ -9,6 +9,7 @@ export interface IAdminRoleConfig {
 	guildId: string;
 	ownerId: string;
 	adminRoleId: string;
+	memberRoleId: string | null;
 }
 
 // shape of IDs saved to the database after setup
