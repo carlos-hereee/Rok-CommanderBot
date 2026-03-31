@@ -1,6 +1,6 @@
 import { REST, RESTPostAPIApplicationCommandsJSONBody, Routes } from "discord.js";
 import type { RESTPutAPIApplicationGuildCommandsResult } from "discord-api-types/v10";
-import { clientId, discordGuildId, discordToken } from "@utils/config.js";
+import { clientId, discordGuildId, discordToken, isProduction } from "@utils/config.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -28,22 +28,36 @@ for (const folder of commandFolders) {
 		}
 	}
 }
-// console.log("Commands to deploy:", commands);
-if (!clientId || !discordToken || !discordGuildId) {
-	console.error("[ERROR] Missing required environment variables: DISCORD_CLIENT_ID, DISCORD_TOKEN, or DISCORD_GUILD_ID.");
+
+if (!clientId || !discordToken) {
+	console.error("[ERROR] Missing required environment variables: DISCORD_CLIENT_ID or DISCORD_TOKEN.");
+	process.exit(1);
+}
+
+if (!isProduction && !discordGuildId) {
+	console.error("[ERROR] Missing DISCORD_GUILD_ID — required for development guild-scoped deployment.");
 	process.exit(1);
 }
 
 const rest = new REST().setToken(discordToken);
 
 try {
-	console.log(`Refreshing ${commands.length} application (/) commands...`);
+	console.log(`Refreshing ${commands.length} application (/) commands [${isProduction ? "GLOBAL" : "GUILD"}]...`);
 
-	const data = (await rest.put(Routes.applicationGuildCommands(clientId, discordGuildId), {
-		body: commands,
-	})) as RESTPutAPIApplicationGuildCommandsResult;
+	if (isProduction) {
+		const data = (await rest.put(Routes.applicationCommands(clientId), {
+			body: commands,
+		})) as RESTPutAPIApplicationGuildCommandsResult;
 
-	console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+		console.log(`Successfully reloaded ${data.length} global application (/) commands.`);
+		console.log("Note: global commands can take up to 1 hour to propagate across all servers.");
+	} else {
+		const data = (await rest.put(Routes.applicationGuildCommands(clientId, discordGuildId!), {
+			body: commands,
+		})) as RESTPutAPIApplicationGuildCommandsResult;
+
+		console.log(`Successfully reloaded ${data.length} guild application (/) commands.`);
+	}
 } catch (error) {
 	console.error(error);
 	process.exit(1);
