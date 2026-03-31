@@ -163,14 +163,12 @@ clientReady(client);
 		for (const guild of client.guilds.cache.values()) {
 			try {
 				const existing = await guildConfigStore.findByGuildId(guild.id);
-				if (existing?.categoryId) continue; // already constructed
-
-				await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
+				if (existing?.setupComplete) continue; // already set up, no need to introduce
 
 				const owner = await guild.fetchOwner();
 				await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
 			} catch (error) {
-				console.error(`Failed to auto-setup guild ${guild.id}:`, error);
+				console.error(`Failed to DM owner of guild ${guild.id}:`, error);
 			}
 		}
 
