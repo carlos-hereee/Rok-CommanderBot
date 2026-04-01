@@ -13,6 +13,8 @@ import { arrivalEmbed, errorEmbed } from "@utils/embedBuilder.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
+import { botLogStore } from "@db/stores/botLogStore.js";
+import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -78,6 +80,7 @@ clientReady(client);
 			const owner = await guild.fetchOwner();
 			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
 			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
+			await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
 		} catch (error) {
 			console.error(`Auto-setup failed for guild ${guild.id}, leaving:`, error);
 			try {
@@ -165,12 +168,17 @@ clientReady(client);
 		// check all guilds the bot is in — auto-construct for any that haven't been set up
 		for (const guild of client.guilds.cache.values()) {
 			try {
+				// if the bot has already sent the intro DM, skip any further checks to avoid spamming DMs to guilds
+				const alreadyIntroduced = await botLogStore.has(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT);
+				if (alreadyIntroduced) continue;
+
 				const existing = await guildConfigStore.findByGuildId(guild.id);
 				if (existing?.setupComplete) continue;
 
 				const owner = await guild.fetchOwner();
 				await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
 				await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
+				await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
 			} catch (error) {
 				console.error(`Auto-setup failed for guild ${guild.id}, skipping:`, error);
 			}
