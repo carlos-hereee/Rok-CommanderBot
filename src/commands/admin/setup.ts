@@ -3,6 +3,7 @@ import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
+import { creatorId } from "@utils/config.js";
 
 const { responses } = embedContent;
 
@@ -18,8 +19,11 @@ export const data = new SlashCommandBuilder()
 	);
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-	// ── owner only ────────────────────────────────────────────
-	if (interaction.user.id !== interaction.guild?.ownerId) {
+	// ── owner / creator only ──────────────────────────────────
+	const isOwner = interaction.user.id === interaction.guild?.ownerId;
+	const isCreator = interaction.user.id === creatorId;
+
+	if (!isOwner && !isCreator) {
 		await interaction.reply({ embeds: [errorEmbed(responses.ownerOnly)], ephemeral: true });
 		return;
 	}
