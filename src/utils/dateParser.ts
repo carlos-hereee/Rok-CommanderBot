@@ -2,7 +2,7 @@
 // used for Ruins and Altar which need a specific hour
 export function parseEventDateTime(input: string, year = new Date().getUTCFullYear()): Date | null {
 	// expected format: MM/DD@HH
-	const match = input.trim().match(/^(\d{1,2})\/(\d{1,2})@(\d{1,2})$/);
+	const match = input.trim().match(/^(\d{1,2})\/(\d{1,2})\s*@\s*(\d{1,2})$/);
 	if (!match) return null;
 
 	const [, mm, dd, hh] = match.map(Number);
