@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { listEventsEmbed } from "@utils/embedBuilder.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
@@ -19,6 +20,12 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		return;
 	}
 
+	// resolve the guild's announcements channel once so every row can
+	// render the actual destination even when the event itself carries no
+	// per-event override (which is the default post v1.1 of the spec).
+	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
+	const announcementsChannelId = config?.announcementsChannelId ?? null;
+
 	const fields = events.map((event) => {
 		let nextOccurrenceTs: number;
 
@@ -37,7 +44,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			nextOccurrenceTs,
 			intervalHours: event.type === "recurring" ? event.intervalHours : null,
 			seasonEndTs: Math.floor(new Date(event.seasonEnd).getTime() / 1000),
-			channelId: event.channelId,
+			channelId: event.channelId ?? announcementsChannelId,
 		};
 	});
 

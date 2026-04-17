@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { Client, TextChannel } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
 import { fireReminder } from "./ReminderJob.js";
 import { reminderStore } from "@db/stores/reminderStore.js";
@@ -77,7 +78,16 @@ export function startScheduler(client: Client): void {
 
 async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<void> {
 	try {
-		const channel = await client.channels.fetch(event.channelId).catch(() => null);
+		// resolve the same way as fireReminder: event override first, else
+		// the guild's configured announcements channel.
+		const config = await guildConfigStore.findByGuildId(event.guildId);
+		const targetChannelId = event.channelId ?? config?.announcementsChannelId ?? null;
+		if (!targetChannelId) {
+			console.error(`[season-end] no channel available for guild ${event.guildId}`);
+			return;
+		}
+
+		const channel = await client.channels.fetch(targetChannelId).catch(() => null);
 		if (!channel || !(channel instanceof TextChannel)) return;
 
 		// check if we already announced for this event
@@ -99,7 +109,7 @@ async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<voi
 			eventOccurrence: new Date(event.seasonEnd),
 			offsetMinutes: -1, // ← same special marker
 			messageId: "season-end",
-			channelId: event.channelId,
+			channelId: targetChannelId,
 			firedAt: new Date(),
 		});
 	} catch (error) {

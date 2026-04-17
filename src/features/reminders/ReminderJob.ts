@@ -1,26 +1,54 @@
 import { Client, TextChannel } from "discord.js";
 import { IGameEvent } from "@features/events/event.types.js";
 import { reminderStore } from "@db/stores/reminderStore.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { reminderEmbed } from "@utils/embedBuilder.js";
 
 export async function fireReminder(client: Client, event: IGameEvent, occurrence: Date, offsetMinutes: number): Promise<void> {
-	// ① fetch the channel
-	const channel = await client.channels.fetch(event.channelId);
+	// ① resolve the destination channel. source of truth is the guild's
+	// configured announcements channel. the event.channelId field only wins
+	// when an admin has explicitly set a per-event override (v1.1 feature).
+	// if neither is present we bail out — there is no sensible fallback and
+	// blindly posting to a wrong channel would be worse than missing a fire.
+	const config = await guildConfigStore.findByGuildId(event.guildId);
+	if (!config) {
+		console.error(`[reminder] no GuildConfig for guild ${event.guildId} — skipping fire`);
+		return;
+	}
+
+	const targetChannelId = event.channelId ?? config.announcementsChannelId;
+	if (!targetChannelId) {
+		console.error(`[reminder] no announcements channel configured for guild ${event.guildId} — skipping fire`);
+		return;
+	}
+
+	const channel = await client.channels.fetch(targetChannelId);
 	if (!channel || !(channel instanceof TextChannel)) {
-		console.error(`Channel ${event.channelId} not found or not a text channel`);
+		console.error(`Channel ${targetChannelId} not found or not a text channel`);
 		return;
 	}
 
 	// ② build the embed
 	const embed = reminderEmbed(event, occurrence, offsetMinutes);
 
-	// ③ post the message
-	const message = await channel.send({ content: "@here", embeds: [embed] });
+	// ③ compose the mention. we ping the configured member role so only
+	// warriors opted into the alliance see the notification. if the guild
+	// has not yet assigned a member role (legacy configs from before /setup
+	// required it), fall back to @here so the reminder is not silent.
+	const mention = config.memberRoleId ? `<@&${config.memberRoleId}>` : "@here";
 
-	// ④ add the acknowledgement reaction
+	// ④ post the message. allowedMentions is set explicitly so a malformed
+	// event description cannot accidentally ping @everyone.
+	const message = await channel.send({
+		content: mention,
+		embeds: [embed],
+		allowedMentions: config.memberRoleId ? { roles: [config.memberRoleId] } : { parse: ["everyone"] },
+	});
+
+	// ⑤ add the acknowledgement reaction
 	await message.react("✅");
 
-	// ⑤ log to DB — this is what prevents duplicate fires
+	// ⑥ log to DB — this is what prevents duplicate fires
 	// and what the ActivityTracker uses to link reactions back to events
 	await reminderStore.create({
 		eventId: event.eventId,
@@ -76,9 +104,9 @@ reminderStore.exists()        ← did we already fire this one?
       └── NO  ▼
 
 fireReminder()
-      ├── fetch channel
+      ├── resolve channel from GuildConfig.announcementsChannelId
       ├── build embed
-      ├── post message + react ✅
+      ├── post message with role ping + react ✅
       └── reminderStore.create() ← write LAST, so failures are retryable
 
       */

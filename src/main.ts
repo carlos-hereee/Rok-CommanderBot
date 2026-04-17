@@ -163,7 +163,7 @@ clientReady(client);
 		// start scheduler and activity tracker, and API server
 		startScheduler(client);
 		registerActivityListeners(client);
-		startApiServer();
+		startApiServer(client);
 
 		// check all guilds the bot is in — auto-construct for any that haven't been set up
 		for (const guild of client.guilds.cache.values()) {

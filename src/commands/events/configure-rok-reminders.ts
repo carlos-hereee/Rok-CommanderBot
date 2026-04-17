@@ -8,7 +8,8 @@ import {
 	ComponentType,
 } from "discord.js";
 import { GuildEventManager } from "@features/events/GuildEventManager.js";
-import { kvkConfirmationEmbed } from "@utils/embedBuilder.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
+import { kvkConfirmationEmbed, errorEmbed } from "@utils/embedBuilder.js";
 import { addDays, parseEventDate, parseEventDateTime } from "@utils/dateParser.js";
 
 export const data = new SlashCommandBuilder()
@@ -45,17 +46,33 @@ export const data = new SlashCommandBuilder()
 	// ── trial of kau karuak ──────────────────────────────────────
 	.addStringOption((option) =>
 		option.setName("kau-date").setDescription("Trial of Kau Karuak Easy date — format: MM/DD e.g. 03/14").setRequired(true)
-	)
+	);
 
-	// ── channel ──────────────────────────────────────────────
-	.addChannelOption((option) => option.setName("channel").setDescription("Channel to post reminders in").setRequired(true));
+// NOTE: the old `channel` option has been removed. reminders always post to
+// the guild's announcements channel (guildConfig.announcementsChannelId),
+// which the bot auto-creates during onboarding. asking the admin to pick a
+// channel every time they ran this command was dead weight since the home
+// base already has exactly one announcement channel.
 
 export async function execute(interaction: ChatInputCommandInteraction) {
 	const daysRemaining = interaction.options.getInteger("days-remaining", true);
-	const channel = interaction.options.getChannel("channel", true);
 	const ruinsInput = interaction.options.getString("ruins-date-time", true);
 	const altarInput = interaction.options.getString("altar-date-time", true);
 	const kauInput = interaction.options.getString("kau-date", true);
+
+	// ── resolve the announcements channel from guild config ─────
+	// the source of truth for "where do reminders go" is the guild's
+	// configured announcements channel, not a per-command option. if
+	// /setup has not run yet this command cannot proceed.
+	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
+	if (!config?.announcementsChannelId) {
+		await interaction.reply({
+			embeds: [errorEmbed("This guild has not finished setup. Run /setup before configuring reminders.")],
+			ephemeral: true,
+		});
+		return;
+	}
+	const announcementsChannelId = config.announcementsChannelId;
 
 	// ── parse ─────────────────────────────────────────────────
 	const ruinsFirst = parseEventDateTime(ruinsInput);
@@ -102,6 +119,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	}
 
 	// ── confirmation embed ────────────────────────────────────
+	// still passes channelId through so the confirmation preview can show the
+	// admin exactly where the reminders will post, even though it is no longer
+	// a user-supplied option.
 	const confirmEmbed = kvkConfirmationEmbed({
 		seasonEnd,
 		ruinsFirst: ruinsFirst!,
@@ -110,7 +130,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		kauNormal,
 		kauHard,
 		kauNightmare,
-		channelId: channel.id,
+		channelId: announcementsChannelId,
 	});
 
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -151,7 +171,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 				kauNormal,
 				kauHard,
 				kauNightmare,
-				channelId: channel.id,
 			});
 		}
 	} catch {

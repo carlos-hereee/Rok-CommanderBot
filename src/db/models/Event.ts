@@ -20,7 +20,12 @@ const eventSchema = new Schema(
 		firstOccurrence: { type: Date, required: true }, // anchor point for schedule calculation
 		seasonEnd: { type: Date, required: true },
 		reminderOffsets: { type: [Number], default: [30, 15] }, // minutes before event
-		channelId: { type: String, required: true }, // Discord channel ID
+		// per-event channel override — optional. when null/absent, the reminder
+		// falls back to guildConfig.announcementsChannelId at fire time. this
+		// is why event creation no longer prompts for a channel: the home base
+		// announcement channel is the source of truth unless an admin explicitly
+		// overrides it for one specific event.
+		channelId: { type: String, required: false, default: null },
 		guildId: { type: String, required: true }, // Discord server ID
 		prepSteps: { type: [prepStepSchema], default: [] },
 		active: { type: Boolean, default: true }, // soft delete flag

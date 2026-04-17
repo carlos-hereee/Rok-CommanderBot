@@ -26,4 +26,18 @@ export const BOT_CONSTANTS = {
 	// scheduler
 	SCHEDULER_CRON: "* * * * *", // every minute
 	REMINDER_FIRE_WINDOW_MS: 60_000, // how close to reminder time before we fire it
+
+	// ── reminder log sentinel offsets ──────────────────────────────
+	// offsetMinutes values that aren't real "N minutes before event" markers.
+	// these exist so the compound unique index on
+	// { eventId, eventOccurrence, offsetMinutes } stays honest even for
+	// non-standard fires (season end announcements, dashboard test fires).
+	REMINDER_LOG_OFFSETS: {
+		SEASON_END: -1, // used by ReminderScheduler when announcing end of season
+		TEST: -2, // used by test reminder fires dispatched from the dashboard
+	},
+
+	// ── dashboard test reminder ───────────────────────────────────
+	// rate limit so a jumpy admin cannot spam their alliance channel
+	TEST_REMINDER_COOLDOWN_MS: 60_000, // one test per event per 60 seconds
 } as const; // ← this is important, explained below

@@ -1,13 +1,17 @@
 import express from "express";
 import cors from "cors";
+import { Client } from "discord.js";
 import { apiKeyAuth } from "./middleware/auth.js";
-import { eventsRouter } from "./routes/events.routes.js";
+import { createEventsRouter } from "./routes/events.routes.js";
 import { leaderboardRouter } from "./routes/leaderboard.routes.js";
 import { playersRouter } from "./routes/players.routes.js";
 import { remindersRouter } from "./routes/reminders.routes.js";
 import { dashboardOrigin, port } from "@utils/config.js";
 
-export function startApiServer(): void {
+// the Discord client is a dependency because the events router has one route
+// (POST /api/events/:eventId/test-reminder) that needs to post to a channel.
+// the rest of the API is pure DB reads/writes and does not touch the client.
+export function startApiServer(client: Client): void {
 	const app = express();
 
 	// parse JSON bodies
@@ -25,7 +29,7 @@ export function startApiServer(): void {
 	app.use(apiKeyAuth);
 
 	// routes
-	app.use("/api/events", eventsRouter);
+	app.use("/api/events", createEventsRouter(client));
 	app.use("/api/leaderboard", leaderboardRouter);
 	app.use("/api/players", playersRouter);
 	app.use("/api/reminders", remindersRouter);

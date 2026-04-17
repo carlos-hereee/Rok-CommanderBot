@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction } from "discord.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { eventStore } from "@db/stores/eventStore.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import rokEvents from "@base/constants/rok-events.json" with { type: "json" };
 import { v4 } from "uuid";
 import { embedContent } from "@base/constants/embed-content.js";
@@ -13,13 +14,22 @@ interface IKvKSeasonInput {
 	kauNormal: Date;
 	kauHard: Date;
 	kauNightmare: Date;
-	channelId: string;
+	// NOTE: channelId intentionally removed. source of truth is
+	// guildConfig.announcementsChannelId, resolved at fire time by ReminderJob.
 }
 
 export class GuildEventManager {
 	static async configureKvKSeason(interaction: ChatInputCommandInteraction, input: IKvKSeasonInput): Promise<void> {
 		try {
 			const guildId = interaction.guildId!;
+
+			// read the announcements channel once for the reply footer. the
+			// event rows themselves do not store a channelId anymore — that
+			// would freeze the channel into stale data if the admin later
+			// reconfigures the home base. ReminderJob reads GuildConfig fresh
+			// every tick.
+			const config = await guildConfigStore.findByGuildId(guildId);
+			const announcementsChannelId = config?.announcementsChannelId ?? "";
 
 			// ── recurring events ─────────────────────────────────
 			const recurringEvents = [
@@ -38,7 +48,8 @@ export class GuildEventManager {
 					firstOccurrence,
 					seasonEnd: input.seasonEnd,
 					reminderOffsets: [...BOT_CONSTANTS.DEFAULT_REMINDER_OFFSETS],
-					channelId: input.channelId,
+					// channelId intentionally omitted — falls back to
+					// guildConfig.announcementsChannelId at fire time
 					guildId,
 					prepSteps: config.prepSteps.map((step) => ({ ...step, id: v4() })),
 					active: true,
@@ -64,7 +75,7 @@ export class GuildEventManager {
 					firstOccurrence: date,
 					seasonEnd: input.seasonEnd,
 					reminderOffsets: [...BOT_CONSTANTS.DEFAULT_REMINDER_OFFSETS],
-					channelId: input.channelId,
+					// channelId intentionally omitted — see note above
 					guildId,
 					prepSteps: config.prepSteps.map((step) => ({ ...step, id: v4() })),
 					active: true,
@@ -72,7 +83,10 @@ export class GuildEventManager {
 			}
 
 			await interaction.editReply({
-				content: embedContent.responses.kvkConfigured(Math.floor(input.seasonEnd.getTime() / 1000), input.channelId),
+				content: embedContent.responses.kvkConfigured(
+					Math.floor(input.seasonEnd.getTime() / 1000),
+					announcementsChannelId
+				),
 			});
 		} catch (error) {
 			console.error("Failed to configure KvK season:", error);

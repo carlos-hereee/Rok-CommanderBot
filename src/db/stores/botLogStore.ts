@@ -1,4 +1,3 @@
-// src/db/stores/botLogStore.ts
 import { BotLog } from "@db/models/BotLog.js";
 
 export const botLogStore = {

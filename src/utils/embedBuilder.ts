@@ -8,7 +8,10 @@ interface IListEventField {
 	nextOccurrenceTs: number; // unix seconds
 	intervalHours: number | null; // null for one-time
 	seasonEndTs: number; // unix seconds
-	channelId: string;
+	// nullable: when the event has no per-event override, the command caller
+	// resolves the guild's announcementsChannelId and passes it through so
+	// the list always shows where the reminder will actually post.
+	channelId: string | null;
 }
 
 export function listEventsEmbed(fields: IListEventField[]): EmbedBuilder {
@@ -24,7 +27,7 @@ export function listEventsEmbed(fields: IListEventField[]): EmbedBuilder {
 			lines.push(c.intervalLabel(field.intervalHours));
 		}
 		lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
-		lines.push(`**${c.channelLabel}:** <#${field.channelId}>`);
+		lines.push(`**${c.channelLabel}:** ${field.channelId ? `<#${field.channelId}>` : "_alliance announcements (unset)_"}`);
 
 		embed.addFields({ name: c.fieldName(field.name, field.type), value: lines.join("\n"), inline: false });
 	}
@@ -58,6 +61,32 @@ export function reminderEmbed(event: IGameEvent, occurrence: Date, offsetMinutes
 			}
 		);
 }
+// ── test reminder embed ──
+// dispatched from the admin dashboard as a drill.
+// renders the same checklist + time fields as reminderEmbed so admins can
+// verify prep step formatting end to end, but prefixes the title with [TEST]
+// so warriors instantly know it is not a real alert.
+export function testReminderEmbed(event: IGameEvent, nextOccurrence: Date): EmbedBuilder {
+	const c = embedContent.testReminder;
+	return base()
+		.setTitle(c.title(event.name))
+		.setDescription(c.description)
+		.setColor(embedContent.COLORS.REMINDER)
+		.addFields(
+			{
+				name: c.checklistField,
+				value: (event.prepSteps as IPrepStep[])
+					.sort((a, b) => a.order - b.order)
+					.map((step, i) => `${i + 1}. ${step.label}`)
+					.join("\n"),
+			},
+			{
+				name: c.timeField,
+				value: `<t:${Math.floor(nextOccurrence.getTime() / 1000)}:F>`,
+			}
+		);
+}
+
 // ── season end embed ──
 export function seasonEndEmbed(): EmbedBuilder {
 	const c = embedContent.seasonEnd;

@@ -9,7 +9,11 @@ export interface IAdminRoleConfig {
 	guildId: string;
 	ownerId: string;
 	adminRoleId: string;
-	memberRoleId: string | null;
+	// required as of the April 2026 update. the member role is pinged on every
+	// event reminder so it must be set before reminders can fire cleanly.
+	// GuildConfigModel still allows null at the schema layer to keep legacy
+	// pre-update rows readable, but every new /setup run must supply this.
+	memberRoleId: string;
 }
 
 // shape of IDs saved to the database after setup

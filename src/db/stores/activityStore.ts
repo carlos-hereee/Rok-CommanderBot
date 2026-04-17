@@ -50,6 +50,38 @@ export const activityStore = {
 		]);
 	},
 
+	// same as findAllGroupedByPlayer but scoped to a fixed set of eventIds.
+	// used by the dashboard's players route so a query is scoped to a single
+	// guild's events. the route handler fetches the guild's events first,
+	// collects their eventIds, and passes them here.
+	// if eventIds is empty, returns an empty array (no matching events → no data).
+	async findAllGroupedByPlayerInEvents(eventIds: string[]) {
+		if (eventIds.length === 0) return [];
+		return PlayerActivityModel.aggregate([
+			{ $match: { eventId: { $in: eventIds } } },
+			{
+				$group: {
+					_id: "$userId",
+					username: { $last: "$username" },
+					totalScore: { $sum: "$participationScore" },
+					eventsAttended: { $sum: 1 },
+					totalVoiceMinutes: { $sum: "$voiceMinutes" },
+					totalAcknowledged: { $sum: { $cond: ["$acknowledgedReminder", 1, 0] } },
+				},
+			},
+			{ $sort: { totalScore: -1 } },
+		]);
+	},
+
+	// same as findByUser but scoped to a fixed set of eventIds.
+	// used by the dashboard's per-player history route so a player's activity
+	// is only returned for events belonging to the requesting guild.
+	// if eventIds is empty, returns an empty array.
+	async findByUserInEvents(userId: string, eventIds: string[]) {
+		if (eventIds.length === 0) return [];
+		return PlayerActivityModel.find({ userId, eventId: { $in: eventIds } }).sort({ eventOccurrence: -1 });
+	},
+
 	// used by leaderboard command
 	async findByEvent(eventId: string) {
 		return PlayerActivityModel.find({ eventId }).sort({ participationScore: -1 });

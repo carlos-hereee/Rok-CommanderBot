@@ -6,6 +6,7 @@ import { isEventWindowOpen } from "@features/events/occurrenceCalculator.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
 import { IVoiceSession } from "./activity.types.js";
 import { computeScore } from "./ParticipationStore.js";
+import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 
 // in-memory map of active voice sessions
 // key is userId, value is the session details
@@ -36,6 +37,14 @@ export function registerActivityListeners(client: Client): void {
 
 				const log = await reminderStore.findByMessageId(fullReaction.message.id);
 				if (!log) return;
+
+				// ── test reminder safety guard ─────────────────────────
+				// test fires from the dashboard are stored in ReminderLog with
+				// the TEST sentinel offset so they appear in the audit trail
+				// but are never counted as real participation. if a warrior
+				// manually adds a ✅ to a [TEST] embed we ignore it here. this
+				// is the critical invariant from the dashboard spec section 7.9.
+				if (log.offsetMinutes === BOT_CONSTANTS.REMINDER_LOG_OFFSETS.TEST) return;
 
 				await activityStore.upsert({
 					eventId: log.eventId,

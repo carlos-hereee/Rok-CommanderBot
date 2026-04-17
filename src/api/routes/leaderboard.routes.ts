@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { activityStore } from "@db/stores/activityStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
+import { requireGuildId } from "../middleware/requireGuildId.js";
 
 export const leaderboardRouter = Router();
 
@@ -8,20 +9,24 @@ type LeaderboardRequest = Request<
 	{ eventId: string }, // ← Params:      req.params.eventId
 	any, // ← ResBody:      what res.json() sends back
 	any, // ← ReqBody:      req.body shape
-	{ mode?: string; occurrence?: string } // ← QueryString:  req.query shape
+	{ mode?: string; occurrence?: string; guildId?: string } // ← QueryString:  req.query shape
 >;
 
-// GET /api/leaderboard/:eventId?mode=alltime|occurrence&occurrence=ISO_DATE
+// GET /api/leaderboard/:eventId?guildId=...&mode=alltime|occurrence&occurrence=ISO_DATE
 // mode=alltime    → cumulative scores across all occurrences
 // mode=occurrence → scores for one specific occurrence
 leaderboardRouter.get("/:eventId", async (req: LeaderboardRequest, res: Response) => {
+	const guildId = requireGuildId(req, res);
+	if (guildId === null) return;
 	try {
 		const { eventId } = req.params;
 		const mode = (req.query.mode as string) ?? "alltime";
 		const occurrence = req.query.occurrence as string;
 
 		const event = await eventStore.findById(eventId);
-		if (!event) {
+		// 404 (not 403) for wrong-guild is deliberate: do not leak the
+		// existence of events belonging to other guilds.
+		if (!event || event.guildId !== guildId) {
 			res.status(404).json({ error: "Event not found" });
 			return;
 		}

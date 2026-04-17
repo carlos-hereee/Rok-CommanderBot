@@ -54,6 +54,18 @@ export const embedContent = {
 		timeField: "🕐 Event Time",
 	},
 
+	testReminder: {
+		// [TEST] prefix is not optional. it is the user-facing safety signal
+		// that this fire is a drill dispatched from the dashboard and not a real alert.
+		title: (name: string) => `[TEST] ⚔️ ${name} — reminder drill`,
+		description:
+			"This is a drill dispatched from the admin dashboard. " +
+			"No warrior is expected to act on it. " +
+			"The real decree will arrive at the scheduled time.",
+		checklistField: "📋 Preparation Checklist (preview)",
+		timeField: "🕐 Next Real Occurrence",
+	},
+
 	seasonEnd: {
 		title: "🏁 KvK Season Has Ended",
 		description:

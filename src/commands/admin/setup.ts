@@ -15,7 +15,10 @@ export const data = new SlashCommandBuilder()
 		option.setName("admin-role").setDescription("The role that will have access to bot configuration").setRequired(true)
 	)
 	.addRoleOption((option) =>
-		option.setName("member-role").setDescription("The role assigned to verified members").setRequired(false)
+		option
+			.setName("member-role")
+			.setDescription("The role assigned to verified warriors — this role is pinged on every event reminder")
+			.setRequired(true)
 	);
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -46,7 +49,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	}
 
 	const adminRole = interaction.options.getRole("admin-role", true);
-	const memberRole = interaction.options.getRole("member-role");
+	const memberRole = interaction.options.getRole("member-role", true);
 
 	await interaction.reply({
 		embeds: [infoEmbed(responses.setupPending.title, responses.setupPending.description, embedContent.COLORS.ARRIVAL)],
@@ -58,7 +61,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			guildId: interaction.guildId!,
 			ownerId: interaction.guild!.ownerId,
 			adminRoleId: adminRole.id,
-			memberRoleId: memberRole?.id ?? null,
+			memberRoleId: memberRole.id,
 		});
 
 		await interaction.editReply({
