@@ -34,7 +34,11 @@ export const embedContent = {
 		scheduledDateLabel: "Scheduled date",
 		intervalLabel: (hours: number) => `Repeats every **${hours} hours**`,
 		seasonEndLabel: "Season ends",
-		channelLabel: "Reminder channel",
+		// single destination line shown once at the top of the list. reminders
+		// always post to the guild's announcements channel, so repeating it
+		// per event was dead weight.
+		postedToHeader: (channelId: string) => `📢 All reminders post to <#${channelId}>`,
+		postedToHeaderUnset: "⚠️ No announcements channel configured. Run `/setup` to build the home base.",
 	},
 	deleteEvent: {
 		confirmTitle: "🗑️ Confirm Deletion",
@@ -81,6 +85,30 @@ export const embedContent = {
 		medals: ["🥇", "🥈", "🥉"],
 	},
 
+	// ── schedule board (public, lives in the event-schedule channel) ──
+	// this is the content of the pinned message ScheduleBoard keeps fresh.
+	// it is different copy from listEvents (which is an ephemeral admin reply)
+	// because this one is read by every warrior in the alliance, so the voice
+	// leans kingdom flavored and skips the admin only language.
+	scheduleBoard: {
+		title: "📅 Decree Calendar",
+		description: (announcementsChannelId: string | null) =>
+			announcementsChannelId
+				? `⚔️ Reminders will ring out in <#${announcementsChannelId}>. Warriors, stand ready.`
+				: "⚠️ The heralds have no channel to shout from. An admin must finish `/setup` before reminders can fire.",
+		noEvents:
+			"📭 No decrees stand. The kingdom rests.\n\n" +
+			"An admin must run `/configure-rok-reminders` to summon the season's events.",
+		seasonEnded:
+			"🏁 The KvK season has ended. The kingdom stands down.\n\n" +
+			"Run `/configure-rok-reminders` when the next campaign begins.",
+		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
+		nextOccurrenceLabel: "Next",
+		scheduledDateLabel: "Scheduled",
+		intervalLabel: (hours: number) => `Repeats every **${hours} hours**`,
+		seasonEndLabel: "Season ends",
+		footer: "Updated automatically. The scroll refreshes itself.",
+	},
 	kvkConfirmation: {
 		title: "⚔️ KvK Reminder Configuration — Please Confirm",
 		description: "Verify these dates match what you see in-game.\n" + "Timestamps shown in **your local timezone**.",

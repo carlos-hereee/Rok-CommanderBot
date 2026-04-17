@@ -21,6 +21,12 @@ const guildConfigSchema = new Schema(
 		announcementsChannelId: { type: String, required: true },
 		adminChannelId: { type: String, required: true },
 
+		// id of the pinned message inside scheduleChannelId that ScheduleBoard
+		// keeps up to date. null until autoSetup finishes posting the intro,
+		// at which point this is populated and every subsequent refresh edits
+		// that one message in place so the channel never accumulates clutter.
+		scheduleMessageId: { type: String, required: false, default: null },
+
 		setupComplete: { type: Boolean, default: false },
 	},
 	{ timestamps: true }

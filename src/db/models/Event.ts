@@ -20,12 +20,12 @@ const eventSchema = new Schema(
 		firstOccurrence: { type: Date, required: true }, // anchor point for schedule calculation
 		seasonEnd: { type: Date, required: true },
 		reminderOffsets: { type: [Number], default: [30, 15] }, // minutes before event
-		// per-event channel override — optional. when null/absent, the reminder
-		// falls back to guildConfig.announcementsChannelId at fire time. this
-		// is why event creation no longer prompts for a channel: the home base
-		// announcement channel is the source of truth unless an admin explicitly
-		// overrides it for one specific event.
-		channelId: { type: String, required: false, default: null },
+		// NOTE: there is no per-event channel override. the source of truth for
+		// where a reminder posts is guildConfig.announcementsChannelId, resolved
+		// fresh by ReminderJob on every fire. this keeps the home base
+		// announcement channel as the one place an admin can move reminders,
+		// and guarantees legacy documents that still carry a stray channelId
+		// field are silently ignored by mongoose strict mode.
 		guildId: { type: String, required: true }, // Discord server ID
 		prepSteps: { type: [prepStepSchema], default: [] },
 		active: { type: Boolean, default: true }, // soft delete flag

@@ -3,28 +3,23 @@ import { IGameEvent } from "@features/events/event.types.js";
 import { reminderStore } from "@db/stores/reminderStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { reminderEmbed } from "@utils/embedBuilder.js";
+import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 
 export async function fireReminder(client: Client, event: IGameEvent, occurrence: Date, offsetMinutes: number): Promise<void> {
-	// ① resolve the destination channel. source of truth is the guild's
-	// configured announcements channel. the event.channelId field only wins
-	// when an admin has explicitly set a per-event override (v1.1 feature).
-	// if neither is present we bail out — there is no sensible fallback and
-	// blindly posting to a wrong channel would be worse than missing a fire.
+	// ① resolve the destination channel. the single source of truth is the
+	// guild's configured announcements channel. there is no per-event override
+	// and never will be — the home base's announcement channel is the one place
+	// an admin can move reminders. if the guild has not finished /setup we bail
+	// because blindly posting to a wrong channel is worse than missing a fire.
 	const config = await guildConfigStore.findByGuildId(event.guildId);
-	if (!config) {
-		console.error(`[reminder] no GuildConfig for guild ${event.guildId} — skipping fire`);
-		return;
-	}
-
-	const targetChannelId = event.channelId ?? config.announcementsChannelId;
-	if (!targetChannelId) {
+	if (!config?.announcementsChannelId) {
 		console.error(`[reminder] no announcements channel configured for guild ${event.guildId} — skipping fire`);
 		return;
 	}
 
-	const channel = await client.channels.fetch(targetChannelId);
+	const channel = await client.channels.fetch(config.announcementsChannelId);
 	if (!channel || !(channel instanceof TextChannel)) {
-		console.error(`Channel ${targetChannelId} not found or not a text channel`);
+		console.error(`Channel ${config.announcementsChannelId} not found or not a text channel`);
 		return;
 	}
 
@@ -58,6 +53,13 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 		channelId: channel.id,
 		firedAt: new Date(),
 	});
+
+	// ⑦ refresh the pinned schedule board so the "next occurrence" for this
+	// event advances visibly. fire and forget so a Discord hiccup here
+	// cannot undo the successful reminder fire.
+	refreshSchedule(client, event.guildId).catch((err) =>
+		console.error("[schedule] refresh after fireReminder failed:", err)
+	);
 }
 
 /*

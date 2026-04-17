@@ -8,8 +8,23 @@ import { reminderStore } from "@db/stores/reminderStore.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { IGameEvent } from "../events/event.types.js";
 import { seasonEndEmbed } from "@utils/embedBuilder.js";
+import { refreshAllSchedules, refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 
 export function startScheduler(client: Client): void {
+	// ── hourly schedule board safety tick ──
+	// every event mutation and reminder fire already triggers a board
+	// refresh, but this hourly sweep is the floor. if something failed
+	// silently (Discord hiccup, stored messageId deleted, etc) the next
+	// hour at minute :00 will re synchronize every guild. node-cron's
+	// "0 * * * *" fires at the top of every hour.
+	cron.schedule("0 * * * *", async () => {
+		try {
+			await refreshAllSchedules(client);
+		} catch (error) {
+			console.error("[schedule] hourly refreshAllSchedules failed:", error);
+		}
+	});
+
 	cron.schedule(BOT_CONSTANTS.SCHEDULER_CRON, async () => {
 		try {
 			// ① fetch all active events from DB
@@ -78,10 +93,10 @@ export function startScheduler(client: Client): void {
 
 async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<void> {
 	try {
-		// resolve the same way as fireReminder: event override first, else
-		// the guild's configured announcements channel.
+		// resolve the same way as fireReminder: always the guild's configured
+		// announcements channel, no per-event override.
 		const config = await guildConfigStore.findByGuildId(event.guildId);
-		const targetChannelId = event.channelId ?? config?.announcementsChannelId ?? null;
+		const targetChannelId = config?.announcementsChannelId ?? null;
 		if (!targetChannelId) {
 			console.error(`[season-end] no channel available for guild ${event.guildId}`);
 			return;
@@ -112,6 +127,13 @@ async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<voi
 			channelId: targetChannelId,
 			firedAt: new Date(),
 		});
+
+		// flip the pinned schedule board into its "season ended" state. fire
+		// and forget so a Discord error here does not prevent the season end
+		// log write above from being considered successful.
+		refreshSchedule(client, event.guildId).catch((err) =>
+			console.error("[schedule] refresh after announceSeasonEnd failed:", err)
+		);
 	} catch (error) {
 		console.error("Failed to announce season end:", error);
 	}

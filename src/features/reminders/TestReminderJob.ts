@@ -41,24 +41,24 @@ export type TTestReminderResult =
  *      function does not re-check the cooldown.
  */
 export async function fireTestReminder(client: Client, event: IGameEvent): Promise<TTestReminderResult> {
-	// ① resolve the destination channel. the source of truth is the guild's
-	// configured announcements channel, mirroring fireReminder. event.channelId
-	// only wins when an admin has set a per-event override.
+	// ① resolve the destination channel. mirrors fireReminder: the single
+	// source of truth is the guild's announcements channel set during /setup.
+	// no per-event override. if the guild has not finished /setup the test
+	// fire surfaces a readable reason to the dashboard.
 	const config = await guildConfigStore.findByGuildId(event.guildId);
 	if (!config) {
 		return { ok: false, reason: "guild_not_configured", detail: "No GuildConfig found for this guild. Run /setup first." };
 	}
 
-	const targetChannelId = event.channelId ?? config.announcementsChannelId;
-	if (!targetChannelId) {
+	if (!config.announcementsChannelId) {
 		return { ok: false, reason: "channel_not_found", detail: "No announcements channel configured for this guild." };
 	}
 
 	let channel;
 	try {
-		channel = await client.channels.fetch(targetChannelId);
+		channel = await client.channels.fetch(config.announcementsChannelId);
 	} catch (error) {
-		console.error(`[test-reminder] failed to fetch channel ${targetChannelId}:`, error);
+		console.error(`[test-reminder] failed to fetch channel ${config.announcementsChannelId}:`, error);
 		return { ok: false, reason: "channel_not_found", detail: (error as Error).message };
 	}
 
@@ -95,7 +95,7 @@ export async function fireTestReminder(client: Client, event: IGameEvent): Promi
 			allowedMentions: { parse: [], roles: [], users: [] },
 		});
 	} catch (error) {
-		console.error(`[test-reminder] failed to post to channel ${targetChannelId}:`, error);
+		console.error(`[test-reminder] failed to post to channel ${config.announcementsChannelId}:`, error);
 		return { ok: false, reason: "post_failed", detail: (error as Error).message };
 	}
 

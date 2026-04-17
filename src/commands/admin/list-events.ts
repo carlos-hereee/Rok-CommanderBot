@@ -20,9 +20,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		return;
 	}
 
-	// resolve the guild's announcements channel once so every row can
-	// render the actual destination even when the event itself carries no
-	// per-event override (which is the default post v1.1 of the spec).
+	// reminders always post to the guild's announcements channel, so resolve
+	// it once and hand it to the embed to render in the description. the rows
+	// themselves no longer carry a channel, because per event overrides were
+	// removed from the data model.
 	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
 	const announcementsChannelId = config?.announcementsChannelId ?? null;
 
@@ -44,12 +45,11 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			nextOccurrenceTs,
 			intervalHours: event.type === "recurring" ? event.intervalHours : null,
 			seasonEndTs: Math.floor(new Date(event.seasonEnd).getTime() / 1000),
-			channelId: event.channelId ?? announcementsChannelId,
 		};
 	});
 
 	await interaction.reply({
-		embeds: [listEventsEmbed(fields)],
+		embeds: [listEventsEmbed(fields, announcementsChannelId)],
 		flags: MessageFlags.Ephemeral,
 	});
 }

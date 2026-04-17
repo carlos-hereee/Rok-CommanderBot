@@ -9,9 +9,10 @@ export interface IGameEvent {
 	firstOccurrence: Date;
 	seasonEnd: Date;
 	reminderOffsets: readonly number[]; // ← was number[]
-	// per-event channel override. null means "use guildConfig.announcementsChannelId
-	// at fire time". see db/models/Event.ts for the invariant.
-	channelId: string | null;
+	// NOTE: there is no per-event channel field. reminders always post to the
+	// guild's announcements channel, resolved at fire time from GuildConfig.
+	// keeping this invariant at the type level prevents a future UI from
+	// accidentally reintroducing a channel picker on the event form.
 	guildId: string;
 	prepSteps: readonly IPrepStep[]; // ← was IPrepStep[]
 	active: boolean;

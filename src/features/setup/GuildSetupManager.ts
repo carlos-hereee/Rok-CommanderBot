@@ -29,7 +29,7 @@ export class GuildSetupManager {
 		});
 
 		const { ids, objects } = await GuildSetupManager.createChannels(guild, category, config);
-		await GuildSetupManager.populateChannels(objects);
+		const { scheduleMessageId } = await GuildSetupManager.populateChannels(objects);
 
 		await guildConfigStore.create({
 			guildId: config.guildId,
@@ -42,6 +42,10 @@ export class GuildSetupManager {
 			scheduleChannelId: ids.scheduleChannelId,
 			announcementsChannelId: ids.announcementsChannelId,
 			adminChannelId: ids.adminChannelId,
+			// scheduleMessageId anchors the pinned schedule board that
+			// ScheduleBoard.refreshSchedule keeps up to date. see
+			// src/features/schedule/ScheduleBoard.ts for the lifecycle.
+			scheduleMessageId,
 			setupComplete: false,
 		});
 	}
@@ -189,11 +193,15 @@ export class GuildSetupManager {
 	}
 
 	// ── populate channels with initial content ────────────────
-	private static async populateChannels(discordChannels: IChannelObjects): Promise<void> {
+	// returns the scheduleMessageId so autoSetup can persist it. the schedule
+	// channel is special: its message is the anchor for the live schedule
+	// board that ScheduleBoard.refreshSchedule edits in place. pinning is
+	// best effort — a missing pin does not break the feature.
+	private static async populateChannels(discordChannels: IChannelObjects): Promise<{ scheduleMessageId: string }> {
 		const { introChannel, commandsChannel, leaderboardChannel, scheduleChannel, announcementsChannel, adminChannel } =
 			discordChannels;
 
-		await Promise.all([
+		const [, , , scheduleMessage] = await Promise.all([
 			introChannel.send({ embeds: [ChannelContent.introduction()] }),
 			commandsChannel.send({ embeds: [ChannelContent.commandGuide()] }),
 			leaderboardChannel.send({ embeds: [ChannelContent.leaderboardIntro()] }),
@@ -201,5 +209,15 @@ export class GuildSetupManager {
 			announcementsChannel.send({ embeds: [ChannelContent.announcementsIntro()] }),
 			adminChannel.send({ embeds: [ChannelContent.adminPending()] }),
 		]);
+
+		try {
+			await scheduleMessage.pin();
+		} catch (error) {
+			// pin requires ManageMessages. if the bot's role lacks it the
+			// board still works, the intro just floats in recent history.
+			console.warn(`[setup] failed to pin schedule intro message for guild ${discordChannels.scheduleChannel.guildId}:`, error);
+		}
+
+		return { scheduleMessageId: scheduleMessage.id };
 	}
 }

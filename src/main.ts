@@ -15,6 +15,7 @@ import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
+import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -183,6 +184,21 @@ clientReady(client);
 				console.error(`Auto-setup failed for guild ${guild.id}, skipping:`, error);
 			}
 		}
+
+		// ── startup rehydration of the schedule board ──
+		// What: refresh every guild's pinned schedule message so it reflects
+		//       current state after any downtime.
+		// Who:  every guild the bot is in, regardless of setup state. Guilds
+		//       still mid autoSetup are no-ops inside refreshSchedule.
+		// When: once per process lifecycle, right after auto setup sweeps and
+		//       before we hand control over to the schedulers.
+		// Where: pairs with the hourly safety tick inside startScheduler and
+		//        the on-change triggers scattered across events.routes,
+		//        ReminderJob, and GuildEventManager.
+		// How:  iterates client.guilds.cache sequentially (alphabetical by
+		//       guild id) so errors on one guild cannot stall the rest.
+		await refreshAllSchedules(client);
+
 		console.log(
 			"====================================\n" +
 				`🤖 ${client.user?.tag} is online and operational!\n` +

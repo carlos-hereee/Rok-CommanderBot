@@ -4,6 +4,14 @@ import { eventStore } from "@db/stores/eventStore.js";
 import { fireTestReminder } from "@features/reminders/TestReminderJob.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { requireGuildId } from "../middleware/requireGuildId.js";
+import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
+
+// fire and forget helper. the schedule board refresh is a Discord API call
+// that should never block the HTTP response. errors are logged; on the
+// next successful mutation or the hourly tick the board converges.
+function kickScheduleRefresh(client: Client, guildId: string, trigger: string): void {
+	refreshSchedule(client, guildId).catch((err) => console.error(`[schedule] refresh after ${trigger} failed:`, err));
+}
 
 // ── rate limiter for POST /:eventId/test-reminder ─────────────
 // in-memory map keyed by `${guildId}:${eventId}` -> last fire timestamp (ms).
@@ -69,14 +77,15 @@ export function createEventsRouter(client: Client): Router {
 				return;
 			}
 			body.guildId = guildId;
-			// v1 has no UI for per-event channel overrides. drop any channelId
-			// the client might send so the event falls back to the guild's
-			// announcements channel at fire time. this keeps the home base
-			// announcement channel as the single source of truth, which is
-			// what the admin expects when they configured /setup.
+			// defensive strip: the Event schema has no channelId field and
+			// mongoose strict mode would silently drop it anyway, but we
+			// remove it here too so an older dashboard build sending the old
+			// shape does not get a confusing silent success. the single source
+			// of truth for where a reminder posts is guildConfig.announcementsChannelId.
 			delete body.channelId;
 			const event = await eventStore.create(body);
 			res.status(201).json({ data: event });
+			kickScheduleRefresh(client, guildId, "POST /api/events");
 		} catch (error) {
 			console.log("\n\nerror occurred creating event ==>", error, "\n\n");
 			res.status(500).json({ error: "Failed to create event" });
@@ -103,6 +112,7 @@ export function createEventsRouter(client: Client): Router {
 			delete body.guildId;
 			const updated = await eventStore.update(req.params.eventId, body);
 			res.json({ data: updated });
+			kickScheduleRefresh(client, guildId, "PATCH /api/events/:eventId");
 		} catch (error) {
 			console.log("\n\nerror occurred updating event ==>", error, "\n\n");
 			res.status(500).json({ error: "Failed to update event" });
@@ -121,6 +131,7 @@ export function createEventsRouter(client: Client): Router {
 			}
 			await eventStore.delete(req.params.eventId);
 			res.json({ message: "Event deactivated" });
+			kickScheduleRefresh(client, guildId, "DELETE /api/events/:eventId");
 		} catch (error) {
 			console.log("\n\nerror occurred deleting event ==>", error, "\n\n");
 			res.status(500).json({ error: "Failed to delete event" });

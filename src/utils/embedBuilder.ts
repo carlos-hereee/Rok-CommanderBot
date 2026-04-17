@@ -8,15 +8,17 @@ interface IListEventField {
 	nextOccurrenceTs: number; // unix seconds
 	intervalHours: number | null; // null for one-time
 	seasonEndTs: number; // unix seconds
-	// nullable: when the event has no per-event override, the command caller
-	// resolves the guild's announcementsChannelId and passes it through so
-	// the list always shows where the reminder will actually post.
-	channelId: string | null;
 }
 
-export function listEventsEmbed(fields: IListEventField[]): EmbedBuilder {
+export function listEventsEmbed(fields: IListEventField[], announcementsChannelId: string | null = null): EmbedBuilder {
 	const c = embedContent.listEvents;
-	const embed = base().setTitle(c.title).setColor(embedContent.COLORS.SCHEDULE);
+	// the destination channel is the same for every event in the guild, so it
+	// renders once in the embed description instead of being repeated per row.
+	// an unset value (guild has not finished /setup) is treated as a soft warning.
+	const description = announcementsChannelId
+		? c.postedToHeader(announcementsChannelId)
+		: c.postedToHeaderUnset;
+	const embed = base().setTitle(c.title).setDescription(description).setColor(embedContent.COLORS.SCHEDULE);
 
 	for (const field of fields) {
 		const lines: string[] = [];
@@ -27,7 +29,6 @@ export function listEventsEmbed(fields: IListEventField[]): EmbedBuilder {
 			lines.push(c.intervalLabel(field.intervalHours));
 		}
 		lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
-		lines.push(`**${c.channelLabel}:** ${field.channelId ? `<#${field.channelId}>` : "_alliance announcements (unset)_"}`);
 
 		embed.addFields({ name: c.fieldName(field.name, field.type), value: lines.join("\n"), inline: false });
 	}
@@ -91,6 +92,63 @@ export function testReminderEmbed(event: IGameEvent, nextOccurrence: Date): Embe
 export function seasonEndEmbed(): EmbedBuilder {
 	const c = embedContent.seasonEnd;
 	return base().setTitle(c.title).setDescription(c.description).setColor(embedContent.COLORS.SEASON_END);
+}
+
+// ── schedule board embed ──
+// rendered into the pinned message in the event-schedule channel. three
+// states: season ended, no events configured, or a roster of active events
+// with one row per event. the caller resolves the events + the guild's
+// announcements channel id so this function stays pure.
+export interface IScheduleField {
+	name: string;
+	type: "recurring" | "one-time";
+	// unix seconds. null when the event has no remaining future occurrences
+	// (one-time event already in the past, but still active).
+	nextOccurrenceTs: number | null;
+	intervalHours: number | null;
+	seasonEndTs: number;
+}
+
+export function scheduleBoardEmbed(
+	fields: IScheduleField[],
+	announcementsChannelId: string | null,
+	options: { seasonEnded?: boolean } = {}
+): EmbedBuilder {
+	const c = embedContent.scheduleBoard;
+	const embed = base().setTitle(c.title).setColor(embedContent.COLORS.SCHEDULE).setFooter({ text: c.footer });
+
+	if (options.seasonEnded) {
+		return embed.setDescription(c.seasonEnded).setColor(embedContent.COLORS.SEASON_END);
+	}
+
+	if (fields.length === 0) {
+		return embed.setDescription(c.noEvents);
+	}
+
+	embed.setDescription(c.description(announcementsChannelId));
+
+	for (const field of fields) {
+		const lines: string[] = [];
+		const occurrenceLabel = field.type === "recurring" ? c.nextOccurrenceLabel : c.scheduledDateLabel;
+
+		if (field.nextOccurrenceTs !== null) {
+			// both relative ("in 2 hours") and full date, so warriors in any
+			// timezone see a correct local time.
+			lines.push(`**${occurrenceLabel}:** <t:${field.nextOccurrenceTs}:R> · <t:${field.nextOccurrenceTs}:f>`);
+		} else {
+			lines.push(`**${occurrenceLabel}:** _awaiting next season_`);
+		}
+
+		if (field.type === "recurring" && field.intervalHours !== null) {
+			lines.push(c.intervalLabel(field.intervalHours));
+		}
+
+		lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
+
+		embed.addFields({ name: c.fieldName(field.name, field.type), value: lines.join("\n"), inline: false });
+	}
+
+	return embed;
 }
 // ── confirmation embed ──
 export function leaderboardEmbed(

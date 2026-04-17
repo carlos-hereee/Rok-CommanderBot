@@ -5,6 +5,7 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import rokEvents from "@base/constants/rok-events.json" with { type: "json" };
 import { v4 } from "uuid";
 import { embedContent } from "@base/constants/embed-content.js";
+import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 
 interface IKvKSeasonInput {
 	seasonEnd: Date;
@@ -88,6 +89,13 @@ export class GuildEventManager {
 					announcementsChannelId
 				),
 			});
+
+			// refresh the pinned schedule board now that events exist. fire
+			// and forget — the admin's reply has already gone out and the
+			// schedule is eventually consistent via the hourly safety tick.
+			refreshSchedule(interaction.client, guildId).catch((err) =>
+				console.error("[schedule] refresh after configureKvKSeason failed:", err)
+			);
 		} catch (error) {
 			console.error("Failed to configure KvK season:", error);
 			await interaction.editReply({
