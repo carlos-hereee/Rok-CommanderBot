@@ -7,6 +7,7 @@ import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js
 import { IVoiceSession } from "./activity.types.js";
 import { computeScore } from "./ParticipationStore.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 // in-memory map of active voice sessions
 // key is userId, value is the session details
@@ -59,7 +60,7 @@ export function registerActivityListeners(client: Client): void {
 
 				await updateScore(log.eventId, log.eventOccurrence, fullUser.id);
 			} catch (error) {
-				console.error("Reaction tracking error:", error);
+				console.error(LOG_MESSAGES.activity.reactionError, error);
 			}
 		}
 	);
@@ -129,7 +130,7 @@ export function registerActivityListeners(client: Client): void {
 				await updateScore(session.eventId, session.eventOccurrence, userId);
 			}
 		} catch (error) {
-			console.error("Voice tracking error:", error);
+			console.error(LOG_MESSAGES.activity.voiceError, error);
 		}
 	});
 
@@ -163,7 +164,7 @@ export function registerActivityListeners(client: Client): void {
 
 			await updateScore(activeEvent.eventId, activeEvent.occurrence, userId);
 		} catch (error) {
-			console.error("Presence tracking error:", error);
+			console.error(LOG_MESSAGES.activity.presenceError, error);
 		}
 	});
 }

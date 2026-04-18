@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { activityStore } from "@db/stores/activityStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { requireGuildId } from "../middleware/requireGuildId.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 export const playersRouter = Router();
 
@@ -33,7 +34,7 @@ playersRouter.get("/", async (req: PlayersRequest, res: Response) => {
 		const records = await activityStore.findAllGroupedByPlayerInEvents(eventIds);
 		res.json({ data: records });
 	} catch (error) {
-		console.log("\n\nerror occurred finding players ==>", error, "\n\n");
+		console.log(LOG_MESSAGES.api.errorFindingPlayers, error, LOG_MESSAGES.api.errorSuffix);
 		res.status(500).json({ error: "Failed to fetch players" });
 	}
 });
@@ -52,7 +53,7 @@ playersRouter.get("/:userId", async (req: PlayersRequest, res: Response) => {
 		}
 		res.json({ data: records });
 	} catch (error) {
-		console.log("\n\nerror occurred finding player activity ==>", error, "\n\n");
+		console.log(LOG_MESSAGES.api.errorFindingPlayerActivity, error, LOG_MESSAGES.api.errorSuffix);
 		res.status(500).json({ error: "Failed to fetch player activity" });
 	}
 });

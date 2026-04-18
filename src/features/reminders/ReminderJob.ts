@@ -4,6 +4,7 @@ import { reminderStore } from "@db/stores/reminderStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { reminderEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 export async function fireReminder(client: Client, event: IGameEvent, occurrence: Date, offsetMinutes: number): Promise<void> {
 	// ① resolve the destination channel. the single source of truth is the
@@ -13,13 +14,13 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 	// because blindly posting to a wrong channel is worse than missing a fire.
 	const config = await guildConfigStore.findByGuildId(event.guildId);
 	if (!config?.announcementsChannelId) {
-		console.error(`[reminder] no announcements channel configured for guild ${event.guildId} — skipping fire`);
+		console.error(LOG_MESSAGES.reminder.noAnnouncementsChannel(event.guildId));
 		return;
 	}
 
 	const channel = await client.channels.fetch(config.announcementsChannelId);
 	if (!channel || !(channel instanceof TextChannel)) {
-		console.error(`Channel ${config.announcementsChannelId} not found or not a text channel`);
+		console.error(LOG_MESSAGES.reminder.channelNotFound(config.announcementsChannelId));
 		return;
 	}
 
@@ -58,7 +59,7 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 	// event advances visibly. fire and forget so a Discord hiccup here
 	// cannot undo the successful reminder fire.
 	refreshSchedule(client, event.guildId).catch((err) =>
-		console.error("[schedule] refresh after fireReminder failed:", err)
+		console.error(LOG_MESSAGES.schedule.refreshAfterReminderFailed, err)
 	);
 }
 

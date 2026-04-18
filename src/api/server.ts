@@ -7,6 +7,7 @@ import { leaderboardRouter } from "./routes/leaderboard.routes.js";
 import { playersRouter } from "./routes/players.routes.js";
 import { remindersRouter } from "./routes/reminders.routes.js";
 import { dashboardOrigin, port } from "@utils/config.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 // the Discord client is a dependency because the events router has one route
 // (POST /api/events/:eventId/test-reminder) that needs to post to a channel.
@@ -35,6 +36,6 @@ export function startApiServer(client: Client): void {
 	app.use("/api/reminders", remindersRouter);
 
 	app.listen(port, () => {
-		console.log(`API server running on port ${port}`);
+		console.log(LOG_MESSAGES.api.serverRunning(port));
 	});
 }

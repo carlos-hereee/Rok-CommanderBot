@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits }
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { embedContent } from "@base/constants/embed-content.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { creatorId } from "@utils/config.js";
 
@@ -36,7 +37,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	// channels haven't been built yet
 	if (!config?.categoryId) {
 		await interaction.reply({
-			embeds: [errorEmbed("Channels not yet constructed. Please wait a moment and try again.")],
+			embeds: [errorEmbed(responses.setupChannelsPending)],
 			ephemeral: true,
 		});
 		return;
@@ -74,7 +75,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			],
 		});
 	} catch (error) {
-		console.error("Setup failed:", error);
+		console.error(LOG_MESSAGES.setup.commandFailed, error);
 		await interaction.editReply({ embeds: [errorEmbed(responses.setupFailed)] });
 	}
 }

@@ -5,6 +5,7 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { testReminderEmbed } from "@utils/embedBuilder.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 // ── return type ───────────────────────────────────────────────
 // route handler surfaces this to the dashboard. ok === true means the embed
@@ -58,7 +59,7 @@ export async function fireTestReminder(client: Client, event: IGameEvent): Promi
 	try {
 		channel = await client.channels.fetch(config.announcementsChannelId);
 	} catch (error) {
-		console.error(`[test-reminder] failed to fetch channel ${config.announcementsChannelId}:`, error);
+		console.error(LOG_MESSAGES.testReminder.fetchChannelFailed(config.announcementsChannelId), error);
 		return { ok: false, reason: "channel_not_found", detail: (error as Error).message };
 	}
 
@@ -95,7 +96,7 @@ export async function fireTestReminder(client: Client, event: IGameEvent): Promi
 			allowedMentions: { parse: [], roles: [], users: [] },
 		});
 	} catch (error) {
-		console.error(`[test-reminder] failed to post to channel ${config.announcementsChannelId}:`, error);
+		console.error(LOG_MESSAGES.testReminder.postFailed(config.announcementsChannelId), error);
 		return { ok: false, reason: "post_failed", detail: (error as Error).message };
 	}
 
@@ -117,7 +118,7 @@ export async function fireTestReminder(client: Client, event: IGameEvent): Promi
 	} catch (error) {
 		// the post already went out, so we still return ok: true.
 		// the audit trail is the only thing affected by a log write failure.
-		console.error("[test-reminder] embed posted but log write failed:", error);
+		console.error(LOG_MESSAGES.testReminder.logWriteFailedAfterPost, error);
 	}
 
 	return { ok: true, messageId: message.id, channelId: channel.id, firedAt };

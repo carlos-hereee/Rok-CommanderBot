@@ -17,4 +17,13 @@ export const guildConfigStore = {
 		const config = await GuildConfigModel.findOne({ guildId });
 		return config?.setupComplete ?? false;
 	},
+
+	// Delete this bot's GuildConfig for a guild. Used by the homebase stale
+	// recovery path in ScheduleBoard when we detect the stored channels or
+	// schedule message were authored by a different bot (rotated token, data
+	// seeded from a sibling environment, or an earlier shared-DB era). After
+	// this deletion GuildSetupManager.autoSetup can build a fresh homebase.
+	async deleteByGuildId(guildId: string) {
+		return GuildConfigModel.deleteOne({ guildId });
+	},
 };

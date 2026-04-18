@@ -16,6 +16,7 @@ import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -65,7 +66,7 @@ clientReady(client);
 
 			if ("data" in command && "execute" in command) {
 				client.commands.set(command.data.name, command);
-			} else console.warn(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+			} else console.warn(LOG_MESSAGES.main.commandLoadWarning(filePath));
 		}
 	}
 
@@ -83,11 +84,11 @@ clientReady(client);
 			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
 			await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
 		} catch (error) {
-			console.error(`Auto-setup failed for guild ${guild.id}, leaving:`, error);
+			console.error(LOG_MESSAGES.main.autoSetupFailedLeaving(guild.id), error);
 			try {
 				await guild.leave();
 			} catch (leaveError) {
-				console.error(`Failed to leave guild ${guild.id}:`, leaveError);
+				console.error(LOG_MESSAGES.main.leaveFailed(guild.id), leaveError);
 			}
 		}
 	});
@@ -104,7 +105,7 @@ clientReady(client);
 
 		const command = client.commands.get(interaction.commandName);
 		if (!command) {
-			console.error(`No command matching ${interaction.commandName} was found.`);
+			console.error(LOG_MESSAGES.main.noCommandMatch(interaction.commandName));
 			return;
 		}
 
@@ -140,17 +141,17 @@ clientReady(client);
 		try {
 			await command.execute(interaction);
 		} catch (error) {
-			console.error(`Error executing ${interaction.commandName}:`, error);
+			console.error(LOG_MESSAGES.main.commandExecuteError(interaction.commandName), error);
 
 			// interaction might already be replied to
 			if (interaction.replied || interaction.deferred) {
 				await interaction.followUp({
-					embeds: [errorEmbed("Something went wrong executing this command.")],
+					embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
 					flags: MessageFlags.Ephemeral,
 				});
 			} else {
 				await interaction.reply({
-					embeds: [errorEmbed("Something went wrong executing this command.")],
+					embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
 					flags: MessageFlags.Ephemeral,
 				});
 			}
@@ -166,22 +167,47 @@ clientReady(client);
 		registerActivityListeners(client);
 		startApiServer(client);
 
-		// check all guilds the bot is in — auto-construct for any that haven't been set up
+		// ── homebase self heal on wake up ──────────────────────────
+		// What: every guild the bot is cached in gets an ensureHomebase pass.
+		//       Missing or foreign homebases (category gone, or stored
+		//       schedule message authored by a different bot) are rebuilt in
+		//       place. Intact bot owned homebases are no ops.
+		// Who:  ensureHomebase lives on GuildSetupManager and centralizes the
+		//       detect + rebuild logic so the runtime self heal in
+		//       ScheduleBoard.postOrEdit and this boot time sweep follow the
+		//       same provenance rules.
+		// When: exactly once per process boot, right after the scheduler /
+		//       activity / api server are up so anything ensureHomebase posts
+		//       into the new schedule channel can be refreshed immediately by
+		//       refreshAllSchedules below.
+		// Where: DM on first time builds only. Rebuilds (stale config cleared)
+		//        skip the DM because the owner was already introduced at the
+		//        original join — re DMing them after a token rotation or env
+		//        swap would be noise.
+		// How:  ensureHomebase returns { action: "built" | "rebuilt" | "skipped" }.
+		//       "built" is the only branch that warrants the arrival DM, and
+		//       even then we respect the INTRO_DM_SENT log so re running a
+		//       build in edge cases (DB wipe but owner already greeted) does
+		//       not double DM.
 		for (const guild of client.guilds.cache.values()) {
 			try {
-				// if the bot has already sent the intro DM, skip any further checks to avoid spamming DMs to guilds
-				const alreadyIntroduced = await botLogStore.has(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT);
-				if (alreadyIntroduced) continue;
+				const result = await GuildSetupManager.ensureHomebase(client, guild);
 
-				const existing = await guildConfigStore.findByGuildId(guild.id);
-				if (existing?.setupComplete) continue;
-
-				const owner = await guild.fetchOwner();
-				await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
-				await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
-				await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
+				if (result.action === "built") {
+					// first time build for this guild. preserve the original
+					// arrival DM behavior, guarded by the existing bot log so
+					// we never spam an owner we've already greeted.
+					const alreadyIntroduced = await botLogStore.has(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT);
+					if (!alreadyIntroduced) {
+						const owner = await guild.fetchOwner();
+						await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
+						await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
+					}
+				}
+				// "rebuilt" and "skipped" paths are intentionally silent: the
+				// owner already got their arrival DM on the original join.
 			} catch (error) {
-				console.error(`Auto-setup failed for guild ${guild.id}, skipping:`, error);
+				console.error(LOG_MESSAGES.main.autoSetupFailedSkipping(guild.id), error);
 			}
 		}
 
@@ -199,11 +225,7 @@ clientReady(client);
 		//       guild id) so errors on one guild cannot stall the rest.
 		await refreshAllSchedules(client);
 
-		console.log(
-			"====================================\n" +
-				`🤖 ${client.user?.tag} is online and operational!\n` +
-				"===================================="
-		);
+		console.log(LOG_MESSAGES.main.readyBanner(client.user?.tag ?? "unknown"));
 	});
 
 	// login the bot after everything is set up

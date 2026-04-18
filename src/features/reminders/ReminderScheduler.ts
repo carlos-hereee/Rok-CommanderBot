@@ -9,6 +9,7 @@ import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { IGameEvent } from "../events/event.types.js";
 import { seasonEndEmbed } from "@utils/embedBuilder.js";
 import { refreshAllSchedules, refreshSchedule } from "@features/schedule/ScheduleBoard.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 export function startScheduler(client: Client): void {
 	// ── hourly schedule board safety tick ──
@@ -21,7 +22,7 @@ export function startScheduler(client: Client): void {
 		try {
 			await refreshAllSchedules(client);
 		} catch (error) {
-			console.error("[schedule] hourly refreshAllSchedules failed:", error);
+			console.error(LOG_MESSAGES.schedule.hourlyRefreshFailed, error);
 		}
 	});
 
@@ -86,7 +87,7 @@ export function startScheduler(client: Client): void {
 				}
 			}
 		} catch (error) {
-			console.error("Scheduler error:", error);
+			console.error(LOG_MESSAGES.scheduler.tickError, error);
 		}
 	});
 }
@@ -98,7 +99,7 @@ async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<voi
 		const config = await guildConfigStore.findByGuildId(event.guildId);
 		const targetChannelId = config?.announcementsChannelId ?? null;
 		if (!targetChannelId) {
-			console.error(`[season-end] no channel available for guild ${event.guildId}`);
+			console.error(LOG_MESSAGES.scheduler.seasonEndNoChannel(event.guildId));
 			return;
 		}
 
@@ -132,9 +133,9 @@ async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<voi
 		// and forget so a Discord error here does not prevent the season end
 		// log write above from being considered successful.
 		refreshSchedule(client, event.guildId).catch((err) =>
-			console.error("[schedule] refresh after announceSeasonEnd failed:", err)
+			console.error(LOG_MESSAGES.schedule.refreshAfterSeasonEndFailed, err)
 		);
 	} catch (error) {
-		console.error("Failed to announce season end:", error);
+		console.error(LOG_MESSAGES.scheduler.seasonEndFailed, error);
 	}
 }

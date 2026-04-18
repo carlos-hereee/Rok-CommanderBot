@@ -11,6 +11,9 @@ import { GuildEventManager } from "@features/events/GuildEventManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { kvkConfirmationEmbed, errorEmbed } from "@utils/embedBuilder.js";
 import { addDays, parseEventDate, parseEventDateTime } from "@utils/dateParser.js";
+import { embedContent } from "@base/constants/embed-content.js";
+
+const { configureReminders } = embedContent;
 
 export const data = new SlashCommandBuilder()
 	.setName("configure-rok-reminders")
@@ -67,7 +70,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
 	if (!config?.announcementsChannelId) {
 		await interaction.reply({
-			embeds: [errorEmbed("This guild has not finished setup. Run /setup before configuring reminders.")],
+			embeds: [errorEmbed(configureReminders.setupRequired)],
 			ephemeral: true,
 		});
 		return;
@@ -82,13 +85,13 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	// ── validate ──────────────────────────────────────────────
 	const errors: string[] = [];
 
-	if (!ruinsFirst) errors.push("Ruins date invalid — use format MM/DD @HH e.g. `04/20 @12`");
-	if (!altarFirst) errors.push("Altar date invalid — use format MM/DD @HH e.g. `04/20 @12`");
-	if (!kauEasy) errors.push("Kau Karuak date invalid — use format MM/DD e.g. `04/20`");
+	if (!ruinsFirst) errors.push(configureReminders.ruinsInvalid);
+	if (!altarFirst) errors.push(configureReminders.altarInvalid);
+	if (!kauEasy) errors.push(configureReminders.kauInvalid);
 
 	if (errors.length > 0) {
 		await interaction.reply({
-			content: `❌ Invalid inputs:\n${errors.map((e) => `- ${e}`).join("\n")}`,
+			content: `${configureReminders.invalidInputsHeader}\n${configureReminders.bulletList(errors)}`,
 			ephemeral: true,
 		});
 		return;
@@ -106,13 +109,13 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	// ── season range checks ───────────────────────────────────
 	const rangeErrors: string[] = [];
 
-	if (ruinsFirst! >= seasonEnd) rangeErrors.push("Ruins date must be before the season end date");
-	if (altarFirst! >= seasonEnd) rangeErrors.push("Altar date must be before the season end date");
-	if (kauEasy! >= seasonEnd) rangeErrors.push("Kau Karuak Easy date must be before the season end date");
+	if (ruinsFirst! >= seasonEnd) rangeErrors.push(configureReminders.ruinsAfterSeason);
+	if (altarFirst! >= seasonEnd) rangeErrors.push(configureReminders.altarAfterSeason);
+	if (kauEasy! >= seasonEnd) rangeErrors.push(configureReminders.kauAfterSeason);
 
 	if (rangeErrors.length > 0) {
 		await interaction.reply({
-			content: `❌ Date conflicts:\n${rangeErrors.map((e) => `- ${e}`).join("\n")}`,
+			content: `${configureReminders.dateConflictsHeader}\n${configureReminders.bulletList(rangeErrors)}`,
 			ephemeral: true,
 		});
 		return;
@@ -136,9 +139,12 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder()
 			.setCustomId("confirm_rok_config")
-			.setLabel("✅ Confirm — Dates are correct")
+			.setLabel(configureReminders.confirmButtonLabel)
 			.setStyle(ButtonStyle.Success),
-		new ButtonBuilder().setCustomId("edit_rok_config").setLabel("✏️ Edit — Dates need changing").setStyle(ButtonStyle.Secondary)
+		new ButtonBuilder()
+			.setCustomId("edit_rok_config")
+			.setLabel(configureReminders.editButtonLabel)
+			.setStyle(ButtonStyle.Secondary)
 	);
 
 	const confirmMessage = await interaction.reply({
@@ -153,7 +159,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
 		if (confirmation.customId === "edit_rok_config") {
 			await confirmation.update({
-				content: "❌ Configuration cancelled — run `/configure-rok-reminders` again with the correct dates.",
+				content: configureReminders.cancelled,
 				embeds: [],
 				components: [],
 			});
@@ -161,7 +167,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		}
 
 		if (confirmation.customId === "confirm_rok_config") {
-			await confirmation.update({ content: "⏳ Setting up reminders...", embeds: [], components: [] });
+			await confirmation.update({ content: configureReminders.settingUp, embeds: [], components: [] });
 
 			await GuildEventManager.configureKvKSeason(interaction, {
 				seasonEnd,
@@ -175,7 +181,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		}
 	} catch {
 		await interaction.editReply({
-			content: "⏱️ Configuration timed out — please run the command again.",
+			content: configureReminders.timedOut,
 			embeds: [],
 			components: [],
 		});

@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { reminderStore } from "@db/stores/reminderStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { requireGuildId } from "../middleware/requireGuildId.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 export const remindersRouter = Router();
 
@@ -28,7 +29,7 @@ remindersRouter.get("/:eventId", async (req: RemindersRequest, res: Response) =>
 		const logs = await reminderStore.findByEventId(req.params.eventId);
 		res.json({ data: logs });
 	} catch (error) {
-		console.log("\n\nerror occurred finding reminders ==>", error, "\n\n");
+		console.log(LOG_MESSAGES.api.errorFindingReminders, error, LOG_MESSAGES.api.errorSuffix);
 		res.status(500).json({ error: "Failed to fetch reminders" });
 	}
 });

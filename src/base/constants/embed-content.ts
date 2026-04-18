@@ -109,6 +109,28 @@ export const embedContent = {
 		seasonEndLabel: "Season ends",
 		footer: "Updated automatically. The scroll refreshes itself.",
 	},
+	// user-facing strings for the /configure-rok-reminders command. lives
+	// here so every line the warrior sees in Discord can be audited and
+	// adjusted from one place alongside the rest of the kingdom voice.
+	configureReminders: {
+		setupRequired: "This guild has not finished setup. Run /setup before configuring reminders.",
+		ruinsInvalid: "Ruins date invalid — use format MM/DD @HH e.g. `04/20 @12`",
+		altarInvalid: "Altar date invalid — use format MM/DD @HH e.g. `04/20 @12`",
+		kauInvalid: "Kau Karuak date invalid — use format MM/DD e.g. `04/20`",
+		invalidInputsHeader: "❌ Invalid inputs:",
+		ruinsAfterSeason: "Ruins date must be before the season end date",
+		altarAfterSeason: "Altar date must be before the season end date",
+		kauAfterSeason: "Kau Karuak Easy date must be before the season end date",
+		dateConflictsHeader: "❌ Date conflicts:",
+		cancelled: "❌ Configuration cancelled — run `/configure-rok-reminders` again with the correct dates.",
+		settingUp: "⏳ Setting up reminders...",
+		timedOut: "⏱️ Configuration timed out — please run the command again.",
+		confirmButtonLabel: "✅ Confirm — Dates are correct",
+		editButtonLabel: "✏️ Edit — Dates need changing",
+		// formats an array of error lines into the bulleted block that sits
+		// under invalidInputsHeader or dateConflictsHeader.
+		bulletList: (items: string[]) => items.map((item) => `- ${item}`).join("\n"),
+	},
 	kvkConfirmation: {
 		title: "⚔️ KvK Reminder Configuration — Please Confirm",
 		description: "Verify these dates match what you see in-game.\n" + "Timestamps shown in **your local timezone**.",
@@ -149,6 +171,12 @@ export const embedContent = {
 
 	setup: {
 		categoryName: "🔱 BY DIVINE DECREE",
+		// appended to categoryName when NODE_ENV=development so a dev instance
+		// sharing a guild with prod builds a visually distinct home base.
+		// GuildSetupManager reads this and composes the final name. keeping the
+		// string here rather than inlining the check means the wording stays
+		// editable from one place alongside the rest of the kingdom voice.
+		devSuffix: " (dev)",
 		channels: {
 			intro: "📜introductions",
 			commands: "📖command-center",
@@ -272,6 +300,16 @@ export const embedContent = {
 				`**Reminder channel:** <#${channelId}>`,
 			].join("\n"),
 		setupFailed: "Something went wrong during setup. Please try again.",
+		// shown to the admin when GuildEventManager.configureKvKSeason throws.
+		// keeps the error vague on purpose: real diagnosis lives in the logs,
+		// the user just needs to know to retry.
+		kvkConfigureFailed: "❌ Something went wrong saving the configuration. Please try again.",
+		// generic fallback surfaced when a slash command's execute handler
+		// throws. logs have the stack; user sees a soft failure message.
+		commandExecuteFailure: "Something went wrong executing this command.",
+		// shown during /setup when the bot hasn't finished autoSetup yet (the
+		// category + channels are still being constructed by the server).
+		setupChannelsPending: "Channels not yet constructed. Please wait a moment and try again.",
 		setupPending: {
 			title: "🔱 Setting Up",
 			description: "Constructing **BY DIVINE DECREE**... Stand by.",

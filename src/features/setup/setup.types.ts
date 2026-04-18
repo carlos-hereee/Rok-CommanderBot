@@ -37,3 +37,15 @@ export interface IChannelObjects {
 	announcementsChannel: TextChannel;
 	adminChannel: TextChannel;
 }
+
+// return shape of GuildSetupManager.ensureHomebase. the ready sweep in main.ts
+// reads action to decide whether to send the owner the first-time arrival DM:
+//   • "built"   — no prior GuildConfig existed, a fresh homebase was just
+//                 constructed. DM the owner, log INTRO_DM_SENT.
+//   • "rebuilt" — a stale GuildConfig was cleared and replaced. The owner was
+//                 already introduced at the original join so skip the DM to
+//                 avoid re spamming them on every rotation / env swap.
+//   • "skipped" — the stored homebase exists and is owned by this bot. no op.
+export interface IEnsureHomebaseResult {
+	action: "built" | "rebuilt" | "skipped";
+}

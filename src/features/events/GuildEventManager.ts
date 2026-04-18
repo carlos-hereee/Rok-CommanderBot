@@ -6,6 +6,7 @@ import rokEvents from "@base/constants/rok-events.json" with { type: "json" };
 import { v4 } from "uuid";
 import { embedContent } from "@base/constants/embed-content.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 interface IKvKSeasonInput {
 	seasonEnd: Date;
@@ -94,12 +95,12 @@ export class GuildEventManager {
 			// and forget — the admin's reply has already gone out and the
 			// schedule is eventually consistent via the hourly safety tick.
 			refreshSchedule(interaction.client, guildId).catch((err) =>
-				console.error("[schedule] refresh after configureKvKSeason failed:", err)
+				console.error(LOG_MESSAGES.schedule.refreshAfterConfigureFailed, err)
 			);
 		} catch (error) {
-			console.error("Failed to configure KvK season:", error);
+			console.error(LOG_MESSAGES.guildEvent.configureKvkFailed, error);
 			await interaction.editReply({
-				content: "❌ Something went wrong saving the configuration. Please try again.",
+				content: embedContent.responses.kvkConfigureFailed,
 			});
 		}
 	}

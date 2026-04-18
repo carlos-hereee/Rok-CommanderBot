@@ -5,12 +5,13 @@ import { fireTestReminder } from "@features/reminders/TestReminderJob.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { requireGuildId } from "../middleware/requireGuildId.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 // fire and forget helper. the schedule board refresh is a Discord API call
 // that should never block the HTTP response. errors are logged; on the
 // next successful mutation or the hourly tick the board converges.
 function kickScheduleRefresh(client: Client, guildId: string, trigger: string): void {
-	refreshSchedule(client, guildId).catch((err) => console.error(`[schedule] refresh after ${trigger} failed:`, err));
+	refreshSchedule(client, guildId).catch((err) => console.error(LOG_MESSAGES.schedule.refreshAfterRouteFailed(trigger), err));
 }
 
 // ── rate limiter for POST /:eventId/test-reminder ─────────────
@@ -39,7 +40,7 @@ export function createEventsRouter(client: Client): Router {
 			const events = await eventStore.findByGuildId(guildId);
 			res.json({ data: events });
 		} catch (error) {
-			console.log("\n\nerror occurred finding events ==>", error, "\n\n");
+			console.log(LOG_MESSAGES.api.errorFindingEvents, error, LOG_MESSAGES.api.errorSuffix);
 			res.status(500).json({ error: "Failed to fetch events" });
 		}
 	});
@@ -56,7 +57,7 @@ export function createEventsRouter(client: Client): Router {
 			}
 			res.json({ data: event });
 		} catch (error) {
-			console.log("\n\nerror occurred finding event ==>", error, "\n\n");
+			console.log(LOG_MESSAGES.api.errorFindingEvent, error, LOG_MESSAGES.api.errorSuffix);
 			res.status(500).json({ error: "Failed to fetch event" });
 		}
 	});
@@ -87,7 +88,7 @@ export function createEventsRouter(client: Client): Router {
 			res.status(201).json({ data: event });
 			kickScheduleRefresh(client, guildId, "POST /api/events");
 		} catch (error) {
-			console.log("\n\nerror occurred creating event ==>", error, "\n\n");
+			console.log(LOG_MESSAGES.api.errorCreatingEvent, error, LOG_MESSAGES.api.errorSuffix);
 			res.status(500).json({ error: "Failed to create event" });
 		}
 	});
@@ -114,7 +115,7 @@ export function createEventsRouter(client: Client): Router {
 			res.json({ data: updated });
 			kickScheduleRefresh(client, guildId, "PATCH /api/events/:eventId");
 		} catch (error) {
-			console.log("\n\nerror occurred updating event ==>", error, "\n\n");
+			console.log(LOG_MESSAGES.api.errorUpdatingEvent, error, LOG_MESSAGES.api.errorSuffix);
 			res.status(500).json({ error: "Failed to update event" });
 		}
 	});
@@ -133,7 +134,7 @@ export function createEventsRouter(client: Client): Router {
 			res.json({ message: "Event deactivated" });
 			kickScheduleRefresh(client, guildId, "DELETE /api/events/:eventId");
 		} catch (error) {
-			console.log("\n\nerror occurred deleting event ==>", error, "\n\n");
+			console.log(LOG_MESSAGES.api.errorDeletingEvent, error, LOG_MESSAGES.api.errorSuffix);
 			res.status(500).json({ error: "Failed to delete event" });
 		}
 	});
@@ -214,7 +215,7 @@ export function createEventsRouter(client: Client): Router {
 				},
 			});
 		} catch (error) {
-			console.log("\n\nerror occurred firing test reminder ==>", error, "\n\n");
+			console.log(LOG_MESSAGES.api.errorTestReminder, error, LOG_MESSAGES.api.errorSuffix);
 			res.status(500).json({ error: "Failed to fire test reminder" });
 		}
 	});
