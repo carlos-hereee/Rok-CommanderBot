@@ -22,7 +22,7 @@ export const BOT_CONSTANTS = {
 	],
 
 	// ── admin commands that require role check ────────────────────
-	ADMIN_COMMANDS: new Set<string>(["configure-rok-reminders", "delete-event", "list-events", "leaderboard"]),
+	ADMIN_COMMANDS: new Set<string>(["configure-kvk-season", "delete-event", "list-events", "leaderboard"]),
 	// scheduler
 	SCHEDULER_CRON: "* * * * *", // every minute
 	REMINDER_FIRE_WINDOW_MS: 60_000, // how close to reminder time before we fire it

@@ -25,6 +25,10 @@ export interface ICreatedChannels {
 	scheduleChannelId: string;
 	announcementsChannelId: string;
 	adminChannelId: string;
+	// id of 🛡️next-decree. separate channel from announcements so
+	// the NextUpBoard's permanent-post audit trail does not drown the
+	// 15/30 minute reminder pings.
+	nextDecreeChannelId: string;
 }
 
 // live channel objects returned from createChannels
@@ -36,16 +40,27 @@ export interface IChannelObjects {
 	scheduleChannel: TextChannel;
 	announcementsChannel: TextChannel;
 	adminChannel: TextChannel;
+	nextDecreeChannel: TextChannel;
 }
 
 // return shape of GuildSetupManager.ensureHomebase. the ready sweep in main.ts
 // reads action to decide whether to send the owner the first-time arrival DM:
-//   • "built"   — no prior GuildConfig existed, a fresh homebase was just
-//                 constructed. DM the owner, log INTRO_DM_SENT.
-//   • "rebuilt" — a stale GuildConfig was cleared and replaced. The owner was
-//                 already introduced at the original join so skip the DM to
-//                 avoid re spamming them on every rotation / env swap.
-//   • "skipped" — the stored homebase exists and is owned by this bot. no op.
+//   • "built"    — no prior GuildConfig existed, a fresh homebase was just
+//                  constructed. DM the owner, log INTRO_DM_SENT.
+//   • "rebuilt"  — a stale GuildConfig was cleared and replaced (category
+//                  gone or foreign). A "castle rebuilt" notice is posted in
+//                  the new inner sanctum by ensureHomebase itself. No DM.
+//   • "repaired" — category was intact and owned by this bot, but one or
+//                  more individual channels were missing and were rebuilt.
+//                  repairedChannels lists the human readable names (same
+//                  strings embedContent.setup.channels exposes). A per
+//                  channel notice is posted to the inner sanctum.
+//   • "skipped"  — stored homebase exists in full and is owned by this bot.
 export interface IEnsureHomebaseResult {
-	action: "built" | "rebuilt" | "skipped";
+	action: "built" | "rebuilt" | "repaired" | "skipped";
+	// populated only when action === "repaired". empty array on every other
+	// branch. kept on the result even though the caller currently does not
+	// read it so tests and future wiring (dashboard audit log, etc) have a
+	// structured signal instead of only log strings.
+	repairedChannels: string[];
 }

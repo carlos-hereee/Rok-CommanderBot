@@ -28,7 +28,7 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 	const embed = reminderEmbed(event, occurrence, offsetMinutes);
 
 	// ③ compose the mention. we ping the configured member role so only
-	// warriors opted into the alliance see the notification. if the guild
+	// Mortals opted into the alliance see the notification. if the guild
 	// has not yet assigned a member role (legacy configs from before /setup
 	// required it), fall back to @here so the reminder is not silent.
 	const mention = config.memberRoleId ? `<@&${config.memberRoleId}>` : "@here";
@@ -58,9 +58,7 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 	// ⑦ refresh the pinned schedule board so the "next occurrence" for this
 	// event advances visibly. fire and forget so a Discord hiccup here
 	// cannot undo the successful reminder fire.
-	refreshSchedule(client, event.guildId).catch((err) =>
-		console.error(LOG_MESSAGES.schedule.refreshAfterReminderFailed, err)
-	);
+	refreshSchedule(client, event.guildId).catch((err) => console.error(LOG_MESSAGES.schedule.refreshAfterReminderFailed, err));
 }
 
 /*

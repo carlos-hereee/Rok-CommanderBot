@@ -6,6 +6,10 @@ import {
 	ButtonBuilder,
 	ButtonStyle,
 	ComponentType,
+	ModalBuilder,
+	TextInputBuilder,
+	TextInputStyle,
+	EmbedBuilder,
 } from "discord.js";
 import { GuildEventManager } from "@features/events/GuildEventManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
@@ -16,7 +20,7 @@ import { embedContent } from "@base/constants/embed-content.js";
 const { configureReminders } = embedContent;
 
 export const data = new SlashCommandBuilder()
-	.setName("configure-rok-reminders")
+	.setName("configure-kvk-season")
 	.setDescription("Configure reminders for all ROK KvK events")
 	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
@@ -167,8 +171,173 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		}
 
 		if (confirmation.customId === "confirm_rok_config") {
-			await confirmation.update({ content: configureReminders.settingUp, embeds: [], components: [] });
+			// ── ① checklist prompt ─────────────────────────────
+			// What:  second ephemeral step. Admin already confirmed the
+			//        dates; now they pick which preparation checklist
+			//        gets baked into every event created by this call.
+			// Who:   only the admin who ran the command sees it — same
+			//        ephemeral reply is being edited, so Discord scopes
+			//        visibility automatically.
+			// When:  immediately after "Confirm dates are correct".
+			// Where: the resolved customChecklist (or undefined) is
+			//        passed to GuildEventManager.configureKvKSeason,
+			//        which forwards it to every eventStore.create call.
+			// How:   we show three buttons — Accept defaults, Customize,
+			//        Skip. Customize opens a modal; the other two resolve
+			//        immediately. On modal submit the text is split on
+			//        newlines, trimmed, and empty lines are dropped.
+			const checklistRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+				new ButtonBuilder()
+					.setCustomId("checklist_accept")
+					.setLabel(configureReminders.checklistAcceptButtonLabel)
+					.setStyle(ButtonStyle.Success),
+				new ButtonBuilder()
+					.setCustomId("checklist_customize")
+					.setLabel(configureReminders.checklistCustomizeButtonLabel)
+					.setStyle(ButtonStyle.Primary),
+				new ButtonBuilder()
+					.setCustomId("checklist_skip")
+					.setLabel(configureReminders.checklistSkipButtonLabel)
+					.setStyle(ButtonStyle.Secondary)
+			);
 
+			const checklistEmbed = new EmbedBuilder()
+				.setTitle(configureReminders.checklistPromptTitle)
+				.setDescription(configureReminders.checklistPromptDescription);
+
+			await confirmation.update({
+				embeds: [checklistEmbed],
+				components: [checklistRow],
+			});
+
+			// ── ② resolve the admin's checklist choice ─────────
+			// Default to undefined (meaning "use per event type defaults
+			// from rok-events.json"). Only Customize with at least one
+			// non empty line flips this to a concrete array.
+			let customChecklist: readonly string[] | undefined;
+			let resolutionMessage: string = configureReminders.checklistResolvedAccept;
+
+			try {
+				// await the three way button press. 120s matches the
+				// earlier confirmation window for consistency. On timeout
+				// or modal error we fall through to defaults.
+				const choice = await confirmMessage.awaitMessageComponent({
+					componentType: ComponentType.Button,
+					time: 120_000,
+				});
+
+				if (choice.customId === "checklist_accept") {
+					customChecklist = undefined;
+					resolutionMessage = configureReminders.checklistResolvedAccept;
+					await choice.update({
+						content: configureReminders.settingUp,
+						embeds: [],
+						components: [],
+					});
+				} else if (choice.customId === "checklist_skip") {
+					// Semantically identical to Accept at persist time —
+					// both leave customChecklist undefined so defaults
+					// apply. We keep them separate so the admin's intent
+					// ("I'll configure later") reads clearly in the
+					// resolved reply.
+					customChecklist = undefined;
+					resolutionMessage = configureReminders.checklistResolvedSkipped;
+					await choice.update({
+						content: configureReminders.settingUp,
+						embeds: [],
+						components: [],
+					});
+				} else if (choice.customId === "checklist_customize") {
+					// ── Customize: open modal ──────────────────
+					// Discord requires showModal() be the first ack of
+					// the component interaction. We cannot deferUpdate
+					// before showing a modal. After modal submit we come
+					// back and edit the original ephemeral via the
+					// submission interaction's update().
+					const modal = new ModalBuilder()
+						.setCustomId("checklist_modal")
+						.setTitle(configureReminders.checklistModalTitle);
+
+					const input = new TextInputBuilder()
+						.setCustomId("checklist_items")
+						.setLabel(configureReminders.checklistModalInputLabel)
+						.setStyle(TextInputStyle.Paragraph)
+						.setPlaceholder(configureReminders.checklistModalInputPlaceholder)
+						.setRequired(true)
+						.setMaxLength(4000);
+
+					modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+
+					await choice.showModal(modal);
+
+					// awaitModalSubmit is scoped to this interaction so we
+					// do not accidentally capture another admin's modal.
+					// filter is defensive — Discord should already scope
+					// this to the same interaction, but the custom id
+					// filter guards against any stray submission.
+					const submission = await choice.awaitModalSubmit({
+						time: 180_000,
+						filter: (i) => i.user.id === choice.user.id && i.customId === "checklist_modal",
+					});
+
+					const raw = submission.fields.getTextInputValue("checklist_items");
+
+					// Parse: split on newline, trim each line, drop empty
+					// lines. This is the one place the raw admin input is
+					// sanitized — GuildEventManager trusts its caller.
+					const parsed = raw
+						.split(/\r?\n/)
+						.map((line) => line.trim())
+						.filter((line) => line.length > 0);
+
+					if (parsed.length === 0) {
+						// Admin submitted only whitespace or empty lines.
+						// Bail out of the modal branch with an error and
+						// stop the whole command — safer than silently
+						// falling back to defaults, because the admin
+						// clearly intended to customize.
+						await submission.reply({
+							content: configureReminders.checklistEmptyError,
+							ephemeral: true,
+						});
+						return;
+					}
+
+					customChecklist = parsed;
+					resolutionMessage = configureReminders.checklistResolvedCustom(parsed.length);
+
+					// Ack the modal so Discord stops spinning, then edit the
+					// original slash command ephemeral into the "settingUp"
+					// state. ModalSubmitInteraction does not expose update()
+					// the way ButtonInteraction does (the types only permit
+					// it after isFromMessage() narrowing), so the clean path
+					// is deferUpdate on the submission + editReply on the
+					// parent interaction. End result is identical to the
+					// Accept/Skip branches above.
+					await submission.deferUpdate();
+					await interaction.editReply({
+						content: configureReminders.settingUp,
+						embeds: [],
+						components: [],
+					});
+				}
+			} catch {
+				// Timeout on the checklist prompt OR on the modal submit.
+				// Either way we fall back to defaults so the admin's date
+				// work is never wasted — the season gets configured with
+				// per event type defaults from rok-events.json.
+				customChecklist = undefined;
+				resolutionMessage = configureReminders.checklistPromptTimedOut;
+				await interaction.editReply({
+					content: configureReminders.settingUp,
+					embeds: [],
+					components: [],
+				});
+			}
+
+			// ── ③ persist the season ────────────────────────────
+			// GuildEventManager handles the "undefined means defaults"
+			// contract. All resolvePrepSteps logic lives there, not here.
 			await GuildEventManager.configureKvKSeason(interaction, {
 				seasonEnd,
 				ruinsFirst: ruinsFirst!,
@@ -177,7 +346,23 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 				kauNormal,
 				kauHard,
 				kauNightmare,
+				customChecklist,
 			});
+
+			// ── ④ surface the checklist resolution ──────────────
+			// configureKvKSeason already edited the reply with the
+			// "configured" message. We append the checklist resolution
+			// so the audit trail shows both: what was scheduled and
+			// which checklist was applied.
+			try {
+				await interaction.followUp({
+					content: resolutionMessage,
+					ephemeral: true,
+				});
+			} catch {
+				// Non critical — if the follow up fails the primary
+				// reply still stands and the events are persisted.
+			}
 		}
 	} catch {
 		await interaction.editReply({

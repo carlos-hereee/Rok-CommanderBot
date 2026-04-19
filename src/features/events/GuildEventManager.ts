@@ -18,6 +18,22 @@ interface IKvKSeasonInput {
 	kauNightmare: Date;
 	// NOTE: channelId intentionally removed. source of truth is
 	// guildConfig.announcementsChannelId, resolved at fire time by ReminderJob.
+
+	// What:  optional admin-authored preparation checklist that overrides the
+	//        per-event-type defaults baked into rok-events.json.
+	// Who:   /configure-kvk-season command, populated only when the admin
+	//        picks "Customize" in the post confirmation button flow.
+	// When:  undefined means "use each event type's default prepSteps from
+	//        rok-events.json." A non-empty array means "apply this exact list
+	//        (in order) to every event created in this season call."
+	// Where: applied at eventStore.create time below. Events store their own
+	//        prepSteps copy so the list rendered in reminders never drifts
+	//        with a config change mid season.
+	// How:   raw strings from the modal. We wrap each into the IPrepStep
+	//        shape ({ id, label, order }) at persist time. Empty string
+	//        items are filtered upstream by the command; this contract
+	//        assumes the caller has already sanitized.
+	customChecklist?: readonly string[];
 }
 
 export class GuildEventManager {
@@ -32,6 +48,30 @@ export class GuildEventManager {
 			// every tick.
 			const config = await guildConfigStore.findByGuildId(guildId);
 			const announcementsChannelId = config?.announcementsChannelId ?? "";
+
+			// ── checklist resolution ──────────────────────────────
+			// What:  pick the prepSteps list applied to every event created in
+			//        this call. Admin chose "Customize" → use their typed list.
+			//        Admin chose "Accept defaults" (or skipped) → fall back to
+			//        each event type's per-type defaults from rok-events.json.
+			// Who:   all eventStore.create calls below.
+			// Where: the per-event-type defaults live in rok-events.json and
+			//        remain authoritative for event shape (name, interval).
+			//        Only prepSteps is overridden when customChecklist is set.
+			// How:   resolvePrepSteps is a local helper (below) that returns
+			//        the canonical [{ id, label, order }] shape either way.
+			const resolvePrepSteps = (perTypeDefault: { prepSteps: Array<{ label: string; order: number }> }) => {
+				if (input.customChecklist && input.customChecklist.length > 0) {
+					// preserve admin's exact ordering. order is 1 based so the
+					// rendered list in embedBuilder reads "1. … 2. …".
+					return input.customChecklist.map((label, index) => ({
+						id: v4(),
+						label,
+						order: index + 1,
+					}));
+				}
+				return perTypeDefault.prepSteps.map((step) => ({ ...step, id: v4() }));
+			};
 
 			// ── recurring events ─────────────────────────────────
 			const recurringEvents = [
@@ -53,7 +93,7 @@ export class GuildEventManager {
 					// channelId intentionally omitted — falls back to
 					// guildConfig.announcementsChannelId at fire time
 					guildId,
-					prepSteps: config.prepSteps.map((step) => ({ ...step, id: v4() })),
+					prepSteps: resolvePrepSteps(config),
 					active: true,
 				});
 			}
@@ -79,7 +119,7 @@ export class GuildEventManager {
 					reminderOffsets: [...BOT_CONSTANTS.DEFAULT_REMINDER_OFFSETS],
 					// channelId intentionally omitted — see note above
 					guildId,
-					prepSteps: config.prepSteps.map((step) => ({ ...step, id: v4() })),
+					prepSteps: resolvePrepSteps(config),
 					active: true,
 				});
 			}

@@ -18,7 +18,7 @@ export const data = new SlashCommandBuilder()
 	.addRoleOption((option) =>
 		option
 			.setName("member-role")
-			.setDescription("The role assigned to verified warriors — this role is pinged on every event reminder")
+			.setDescription("The role assigned to verified Mortals — this role is pinged on every event reminder")
 			.setRequired(true)
 	);
 

@@ -13,6 +13,7 @@ import { arrivalEmbed, errorEmbed } from "@utils/embedBuilder.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
+import { registerChannelDeleteWatcher } from "@features/setup/ChannelDeleteWatcher.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
@@ -167,11 +168,23 @@ clientReady(client);
 		registerActivityListeners(client);
 		startApiServer(client);
 
+		// ── realtime homebase self heal ───────────────────────────
+		// Registered BEFORE the ensureHomebase boot sweep below so the
+		// gateway listener is live the moment the bot is ready. Pairs
+		// with the boot sweep: realtime handles single channel deletions
+		// as they happen; boot sweep catches anything that was deleted
+		// while the bot was offline. See ChannelDeleteWatcher.ts for the
+		// cooldown + ownership probe contract.
+		registerChannelDeleteWatcher(client);
+
 		// ── homebase self heal on wake up ──────────────────────────
 		// What: every guild the bot is cached in gets an ensureHomebase pass.
-		//       Missing or foreign homebases (category gone, or stored
-		//       schedule message authored by a different bot) are rebuilt in
-		//       place. Intact bot owned homebases are no ops.
+		//       That method checks category presence + ownership, scans each
+		//       of the six child channels, and rebuilds any that were deleted
+		//       while the bot was offline. Missing single channels get a per
+		//       channel audit notice posted to the inner sanctum; a fully
+		//       missing category triggers a reconstruction plus a "castle
+		//       rebuilt" embed in the new inner sanctum.
 		// Who:  ensureHomebase lives on GuildSetupManager and centralizes the
 		//       detect + rebuild logic so the runtime self heal in
 		//       ScheduleBoard.postOrEdit and this boot time sweep follow the
@@ -180,11 +193,10 @@ clientReady(client);
 		//       activity / api server are up so anything ensureHomebase posts
 		//       into the new schedule channel can be refreshed immediately by
 		//       refreshAllSchedules below.
-		// Where: DM on first time builds only. Rebuilds (stale config cleared)
-		//        skip the DM because the owner was already introduced at the
-		//        original join — re DMing them after a token rotation or env
-		//        swap would be noise.
-		// How:  ensureHomebase returns { action: "built" | "rebuilt" | "skipped" }.
+		// Where: the arrival DM only fires on "built" (first time construct).
+		//        "rebuilt" and "repaired" are self narrating inside the inner
+		//        sanctum, so re DMing the owner would be noise.
+		// How:  ensureHomebase returns { action, repairedChannels }.
 		//       "built" is the only branch that warrants the arrival DM, and
 		//       even then we respect the INTRO_DM_SENT log so re running a
 		//       build in edge cases (DB wipe but owner already greeted) does
@@ -204,8 +216,30 @@ clientReady(client);
 						await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
 					}
 				}
-				// "rebuilt" and "skipped" paths are intentionally silent: the
-				// owner already got their arrival DM on the original join.
+				// "rebuilt", "repaired", and "skipped" paths are handled
+				// entirely inside ensureHomebase (which posts the castle /
+				// per channel notices into the inner sanctum for the first
+				// two). nothing else to do here.
+
+				// ── intro embed refresh ───────────────────────────────
+				// What: after ensureHomebase has confirmed (or rebuilt) the
+				//       homebase for this guild, sweep the six stored intro
+				//       messages and edit them in place so copy changes in
+				//       embed-content.ts land on the next boot without
+				//       forcing an admin to rebuild.
+				// When: only after ensureHomebase finishes so we never edit
+				//       a channel that was just deleted. A fresh "built"
+				//       already wrote the latest copy so this call is a no
+				//       op for that branch, but running it uniformly keeps
+				//       the code path simple and the logs symmetric.
+				// Where: failures here must not cancel the rest of the boot
+				//        loop — swallow with a log so one guild cannot stall
+				//        the others.
+				try {
+					await GuildSetupManager.refreshIntroEmbeds(client, guild);
+				} catch (refreshError) {
+					console.error(LOG_MESSAGES.main.autoSetupFailedSkipping(guild.id), refreshError);
+				}
 			} catch (error) {
 				console.error(LOG_MESSAGES.main.autoSetupFailedSkipping(guild.id), error);
 			}

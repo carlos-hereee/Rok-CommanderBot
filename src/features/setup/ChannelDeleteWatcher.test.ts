@@ -1,0 +1,363 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { TextChannel, CategoryChannel, ChannelType, Events } from "discord.js";
+import type { Client, Guild } from "discord.js";
+
+// Mock the guild config store before importing the unit under test. Same
+// pattern the GuildSetupManager suite uses — the Mongoose model chain tries
+// to open a real DB connection at import time otherwise.
+vi.mock("@db/stores/guildConfigStore.js", () => ({
+	guildConfigStore: {
+		findByGuildId: vi.fn(),
+		update: vi.fn(),
+	},
+}));
+
+import { registerChannelDeleteWatcher, __resetRepairCooldownsForTests } from "./ChannelDeleteWatcher.js";
+import { GuildSetupManager } from "./GuildSetupManager.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
+import { embedContent } from "@base/constants/embed-content.js";
+
+const guildConfigMock = guildConfigStore as unknown as {
+	findByGuildId: ReturnType<typeof vi.fn>;
+	update: ReturnType<typeof vi.fn>;
+};
+
+// ── fixtures ──────────────────────────────────────────────────────────
+
+function makeStoredConfig(overrides: Partial<Record<string, unknown>> = {}) {
+	return {
+		guildId: "guild-1",
+		categoryId: "cat-1",
+		introChannelId: "ch-intro",
+		commandsChannelId: "ch-commands",
+		leaderboardChannelId: "ch-leaderboard",
+		scheduleChannelId: "ch-schedule",
+		announcementsChannelId: "ch-announcements",
+		adminChannelId: "ch-admin",
+		scheduleMessageId: "msg-schedule",
+		adminRoleId: null,
+		memberRoleId: null,
+		setupComplete: true,
+		...overrides,
+	};
+}
+
+// Capture the handler registered via client.on(Events.ChannelDelete, ...)
+// so tests can invoke it directly with fabricated channel objects instead
+// of wrestling with a full discord.js EventEmitter.
+interface CapturedClient {
+	client: Client;
+	handler: ((channel: unknown) => Promise<void>) | null;
+}
+
+function makeClientCapturing(options: {
+	selfId?: string;
+	// map of channel id → returned value (or Error to simulate a fetch throw)
+	channelFetchMap?: Record<string, unknown>;
+}): CapturedClient {
+	const map = options.channelFetchMap ?? {};
+	const captured: CapturedClient = {
+		client: {} as Client,
+		handler: null,
+	};
+	captured.client = {
+		user: { id: options.selfId ?? "bot-1" },
+		channels: {
+			fetch: vi.fn(async (id: string) => {
+				if (id in map) {
+					const v = map[id];
+					if (v instanceof Error) throw v;
+					return v;
+				}
+				return null;
+			}),
+		},
+		on: vi.fn((event: string, handler: (channel: unknown) => Promise<void>) => {
+			if (event === Events.ChannelDelete) captured.handler = handler;
+		}),
+	} as unknown as Client;
+	return captured;
+}
+
+function makeGuild(options: {
+	categoryFetchMap?: Record<string, unknown>;
+	createHandler?: (opts: unknown) => Promise<unknown>;
+}): Guild {
+	const map = options.categoryFetchMap ?? {};
+	const create =
+		options.createHandler ??
+		vi.fn(async (opts: { name: string }) => {
+			const created = Object.create(TextChannel.prototype) as TextChannel & { send: ReturnType<typeof vi.fn> };
+			Object.assign(created, {
+				id: `new-${opts.name}`,
+				send: vi.fn().mockResolvedValue({ id: `intro-${opts.name}` }),
+			});
+			return created;
+		});
+	return {
+		id: "guild-1",
+		ownerId: "owner-1",
+		roles: { everyone: { id: "everyone" } },
+		channels: {
+			fetch: vi.fn(async (id: string) => {
+				if (id in map) {
+					const v = map[id];
+					if (v instanceof Error) throw v;
+					return v;
+				}
+				return null;
+			}),
+			create,
+		},
+	} as unknown as Guild;
+}
+
+// Fabricate a deleted channel object. The watcher narrows via
+// `"guild" in channel` and checks `channel.id === stored.categoryId` etc.
+function makeDeletedChannel(id: string, guild: Guild, name = "deleted"): unknown {
+	return { id, name, guild, type: ChannelType.GuildText };
+}
+
+// Intact category fixture. The watcher narrows via
+// `category.type !== ChannelType.GuildCategory` so we set the type.
+function makeCategory(): CategoryChannel {
+	const cat = Object.create(CategoryChannel.prototype) as CategoryChannel;
+	Object.assign(cat, { id: "cat-1", type: ChannelType.GuildCategory });
+	return cat;
+}
+
+// Schedule message fixture used by the ownership probe. The probe fetches
+// the stored scheduleChannelId as a TextChannel and then calls
+// channel.messages.fetch(scheduleMessageId). Returning a message with our
+// bot's author id makes the probe report "owned".
+function makeScheduleChannel(authorId: string): TextChannel {
+	const ch = Object.create(TextChannel.prototype) as TextChannel;
+	Object.assign(ch, {
+		id: "ch-schedule",
+		messages: {
+			fetch: vi.fn(async () => ({
+				id: "msg-schedule",
+				author: { id: authorId },
+			})),
+		},
+	});
+	return ch;
+}
+
+// Admin channel fixture for the repair notice post step.
+function makeAdminChannel(id = "ch-admin"): TextChannel & { send: ReturnType<typeof vi.fn> } {
+	const ch = Object.create(TextChannel.prototype) as TextChannel & { send: ReturnType<typeof vi.fn> };
+	Object.assign(ch, {
+		id,
+		send: vi.fn().mockResolvedValue({ id: "notice-msg" }),
+	});
+	return ch;
+}
+
+describe("ChannelDeleteWatcher", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		__resetRepairCooldownsForTests();
+	});
+
+	it("ignores channel deletes for guilds with no GuildConfig", async () => {
+		guildConfigMock.findByGuildId.mockResolvedValue(null);
+		const captured = makeClientCapturing({});
+		registerChannelDeleteWatcher(captured.client);
+
+		const guild = makeGuild({});
+		const deleted = makeDeletedChannel("random-channel", guild);
+		await captured.handler!(deleted);
+
+		// no repair, no update. silent bail is correct — the guild never
+		// completed a homebase build so there is nothing for us to heal.
+		expect(guildConfigMock.update).not.toHaveBeenCalled();
+	});
+
+	it("ignores channel deletes for ids that are not on the GuildConfig", async () => {
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
+		const captured = makeClientCapturing({});
+		registerChannelDeleteWatcher(captured.client);
+
+		const guild = makeGuild({});
+		const deleted = makeDeletedChannel("some-unrelated-channel", guild);
+		await captured.handler!(deleted);
+
+		// no repair. channel wasn't one of ours.
+		expect(guildConfigMock.update).not.toHaveBeenCalled();
+	});
+
+	it("ignores category deletes and defers to the boot sweep", async () => {
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
+		const captured = makeClientCapturing({});
+		registerChannelDeleteWatcher(captured.client);
+
+		const guild = makeGuild({});
+		// the deleted channel IS the stored category. realtime path must
+		// NOT try to rebuild the whole homebase — that is the boot sweep's
+		// job and racing it would fight the admin who is tearing down.
+		const deleted = makeDeletedChannel("cat-1", guild, "BY DIVINE DECREE");
+		await captured.handler!(deleted);
+
+		expect(guildConfigMock.update).not.toHaveBeenCalled();
+	});
+
+	it("repairs a deleted homebase channel and posts a notice in the inner sanctum", async () => {
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
+		guildConfigMock.update.mockResolvedValue(undefined);
+
+		const adminChannel = makeAdminChannel("ch-admin");
+		const scheduleChannel = makeScheduleChannel("bot-1");
+		const captured = makeClientCapturing({
+			selfId: "bot-1",
+			channelFetchMap: {
+				"ch-admin": adminChannel,
+				"ch-schedule": scheduleChannel,
+			},
+		});
+		registerChannelDeleteWatcher(captured.client);
+
+		const category = makeCategory();
+		const guild = makeGuild({ categoryFetchMap: { "cat-1": category } });
+
+		// announcements channel was deleted. watcher should rebuild it
+		// under the intact category and post one notice in the inner sanctum.
+		const deleted = makeDeletedChannel("ch-announcements", guild, "📢announcements");
+		await captured.handler!(deleted);
+
+		// config update carried the new announcements channel id AND the
+		// refreshed introMessageIds map. the new map keeps the other five
+		// slots null (this test's stored config has none) and sets the
+		// announcements slot to the freshly posted intro message id.
+		expect(guildConfigMock.update).toHaveBeenCalledWith("guild-1", {
+			announcementsChannelId: expect.stringContaining("new-"),
+			introMessageIds: expect.objectContaining({
+				announcementsChannelId: expect.stringContaining("intro-"),
+			}),
+		});
+		// one repair notice landed in the inner sanctum.
+		expect(adminChannel.send).toHaveBeenCalledOnce();
+		const sent = adminChannel.send.mock.calls[0][0] as { embeds: Array<{ data: { title: string } }> };
+		expect(sent.embeds[0].data.title).toBe(embedContent.channelContent.channelRepairNotice.title);
+	});
+
+	it("throttles a second repair of the same channel within the 60s cooldown", async () => {
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
+		guildConfigMock.update.mockResolvedValue(undefined);
+
+		const adminChannel = makeAdminChannel("ch-admin");
+		const scheduleChannel = makeScheduleChannel("bot-1");
+		const captured = makeClientCapturing({
+			selfId: "bot-1",
+			channelFetchMap: {
+				"ch-admin": adminChannel,
+				"ch-schedule": scheduleChannel,
+			},
+		});
+		registerChannelDeleteWatcher(captured.client);
+
+		const category = makeCategory();
+		const guild = makeGuild({ categoryFetchMap: { "cat-1": category } });
+
+		// first delete: repair fires and records the cooldown for
+		// `guild-1:announcementsChannelId`.
+		await captured.handler!(makeDeletedChannel("ch-announcements", guild));
+		expect(guildConfigMock.update).toHaveBeenCalledOnce();
+
+		// second delete within 60s: cooldown gate blocks. the cooldown is
+		// keyed by guildId + configField so repeated deletes against the
+		// same logical slot are throttled regardless of whether the new
+		// channel id differs from the old one.
+		await captured.handler!(makeDeletedChannel("ch-announcements", guild));
+
+		// still only one update — the second repair was blocked.
+		expect(guildConfigMock.update).toHaveBeenCalledOnce();
+	});
+
+	it("refuses to repair when the homebase is not owned by this bot", async () => {
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
+
+		// ownership probe returns false because the schedule message author
+		// is a different bot.
+		const scheduleChannel = makeScheduleChannel("other-bot");
+		const captured = makeClientCapturing({
+			selfId: "bot-1",
+			channelFetchMap: { "ch-schedule": scheduleChannel },
+		});
+		registerChannelDeleteWatcher(captured.client);
+
+		const category = makeCategory();
+		const guild = makeGuild({ categoryFetchMap: { "cat-1": category } });
+		await captured.handler!(makeDeletedChannel("ch-announcements", guild));
+
+		// no update, no repair. posting into a foreign bot's homebase would
+		// be a correctness violation of the ownership invariant.
+		expect(guildConfigMock.update).not.toHaveBeenCalled();
+	});
+
+	it("bails out when the parent category is also gone (boot sweep will handle it)", async () => {
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
+		const captured = makeClientCapturing({ selfId: "bot-1" });
+		registerChannelDeleteWatcher(captured.client);
+
+		// guild.channels.fetch("cat-1") returns null — category is gone.
+		const guild = makeGuild({ categoryFetchMap: { "cat-1": null } });
+		await captured.handler!(makeDeletedChannel("ch-announcements", guild));
+
+		// no rebuild — realtime defers full category restoration to the
+		// next ensureHomebase sweep.
+		expect(guildConfigMock.update).not.toHaveBeenCalled();
+	});
+
+	it("does not crash the listener when the repair primitive throws", async () => {
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
+
+		const scheduleChannel = makeScheduleChannel("bot-1");
+		const captured = makeClientCapturing({
+			selfId: "bot-1",
+			channelFetchMap: { "ch-schedule": scheduleChannel },
+		});
+		registerChannelDeleteWatcher(captured.client);
+
+		const category = makeCategory();
+		// inject a failing create so repairOneChannel throws. the listener
+		// must catch the error and log without propagating out to the
+		// gateway connection.
+		const guild = makeGuild({
+			categoryFetchMap: { "cat-1": category },
+			createHandler: vi.fn(async () => {
+				throw new Error("simulated Discord 500");
+			}),
+		});
+
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		await expect(captured.handler!(makeDeletedChannel("ch-announcements", guild))).resolves.toBeUndefined();
+		expect(errorSpy).toHaveBeenCalled();
+		errorSpy.mockRestore();
+	});
+});
+
+describe("GuildSetupManager.CHANNEL_SPECS", () => {
+	// cheap structural guard — if someone adds a new homebase channel and
+	// forgets to list it in CHANNEL_SPECS, the watcher will silently ignore
+	// deletes on the new channel. tests below flag the regression.
+	it("has one entry per homebase field", () => {
+		const expectedFields = [
+			"introChannelId",
+			"commandsChannelId",
+			"leaderboardChannelId",
+			"scheduleChannelId",
+			"announcementsChannelId",
+			"adminChannelId",
+		];
+		const actualFields = GuildSetupManager.CHANNEL_SPECS.map((s) => s.configField);
+		expect(actualFields.sort()).toEqual(expectedFields.sort());
+	});
+
+	it("marks only the admin channel as kind 'admin'", () => {
+		const adminEntries = GuildSetupManager.CHANNEL_SPECS.filter((s) => s.kind === "admin");
+		expect(adminEntries).toHaveLength(1);
+		expect(adminEntries[0].configField).toBe("adminChannelId");
+	});
+});

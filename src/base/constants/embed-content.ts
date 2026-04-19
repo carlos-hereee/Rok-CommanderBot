@@ -22,13 +22,17 @@ export const embedContent = {
 		SCHEDULE: "DarkGreen",
 		ANNOUNCEMENTS: "DarkRed",
 		ADMIN: "DarkPurple",
+		// NextUpBoard posts + 🛡️next-decree channel intro. Navy Blue
+		// reads as "shield" without colliding with SCHEDULE (DarkGreen)
+		// or ANNOUNCEMENTS (DarkRed) in the sidebar.
+		NEXT_DECREE: "DarkNavy",
 	} satisfies Record<string, ColorResolvable>,
 
 	listEvents: {
 		title: "📅 Active KvK Events",
 		noEvents:
 			"📭 No active events are configured for this server yet.\n\n" +
-			"Run `/configure-rok-reminders` to set up the season schedule.",
+			"Run `/configure-kvk-season` to set up the season schedule.",
 		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
 		nextOccurrenceLabel: "Next occurrence",
 		scheduledDateLabel: "Scheduled date",
@@ -74,7 +78,7 @@ export const embedContent = {
 		title: "🏁 KvK Season Has Ended",
 		description:
 			"The KvK season has concluded. Reminders have been stopped.\n\n" +
-			"Run `/configure-rok-reminders` when the next season begins.",
+			"Run `/configure-kvk-season` when the next season begins.",
 	},
 
 	leaderboard: {
@@ -94,14 +98,12 @@ export const embedContent = {
 		title: "📅 Decree Calendar",
 		description: (announcementsChannelId: string | null) =>
 			announcementsChannelId
-				? `⚔️ Reminders will ring out in <#${announcementsChannelId}>. Warriors, stand ready.`
+				? `⚔️ Reminders will ring out in <#${announcementsChannelId}>. Mortals, stand ready.`
 				: "⚠️ The heralds have no channel to shout from. An admin must finish `/setup` before reminders can fire.",
 		noEvents:
-			"📭 No decrees stand. The kingdom rests.\n\n" +
-			"An admin must run `/configure-rok-reminders` to summon the season's events.",
+			"📭 No decrees stand. The kingdom rests.\n\n" + "An admin must run `/configure-kvk-season` to summon the season's events.",
 		seasonEnded:
-			"🏁 The KvK season has ended. The kingdom stands down.\n\n" +
-			"Run `/configure-rok-reminders` when the next campaign begins.",
+			"🏁 The KvK season has ended. The kingdom stands down.\n\n" + "Run `/configure-kvk-season` when the next campaign begins.",
 		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
 		nextOccurrenceLabel: "Next",
 		scheduledDateLabel: "Scheduled",
@@ -109,7 +111,7 @@ export const embedContent = {
 		seasonEndLabel: "Season ends",
 		footer: "Updated automatically. The scroll refreshes itself.",
 	},
-	// user-facing strings for the /configure-rok-reminders command. lives
+	// user-facing strings for the /configure-kvk-season command. lives
 	// here so every line the warrior sees in Discord can be audited and
 	// adjusted from one place alongside the rest of the kingdom voice.
 	configureReminders: {
@@ -122,7 +124,7 @@ export const embedContent = {
 		altarAfterSeason: "Altar date must be before the season end date",
 		kauAfterSeason: "Kau Karuak Easy date must be before the season end date",
 		dateConflictsHeader: "❌ Date conflicts:",
-		cancelled: "❌ Configuration cancelled — run `/configure-rok-reminders` again with the correct dates.",
+		cancelled: "❌ Configuration cancelled — run `/configure-kvk-season` again with the correct dates.",
 		settingUp: "⏳ Setting up reminders...",
 		timedOut: "⏱️ Configuration timed out — please run the command again.",
 		confirmButtonLabel: "✅ Confirm — Dates are correct",
@@ -130,6 +132,41 @@ export const embedContent = {
 		// formats an array of error lines into the bulleted block that sits
 		// under invalidInputsHeader or dateConflictsHeader.
 		bulletList: (items: string[]) => items.map((item) => `- ${item}`).join("\n"),
+
+		// ── checklist prompt (Accept defaults / Customize) ─────────
+		// Shown as a second ephemeral step after the admin confirms the
+		// season dates. Accept keeps the per event type defaults from
+		// rok-events.json. Customize opens a modal where the admin types
+		// a universal checklist applied to every event this call creates.
+		// Skip dismisses the prompt without changing prepSteps (same as
+		// Accept in effect; separate button so the intent is explicit and
+		// the log line reads clearly).
+		checklistPromptTitle: "📋 Preparation Checklist",
+		checklistPromptDescription:
+			"Each event fires a reminder with a preparation checklist. " +
+			"Accept the kingdom's defaults, or customize one list that applies to every event in this season.\n\n" +
+			"**Default checklist:**\n" +
+			"1. Activate stats token\n" +
+			"2. Fetch rune buff\n" +
+			"3. Use army expansion\n\n" +
+			"You can always edit per event later from the dashboard.",
+		checklistAcceptButtonLabel: "✅ Accept defaults",
+		checklistCustomizeButtonLabel: "✏️ Customize",
+		checklistSkipButtonLabel: "⏭️ Skip for now",
+		// Modal copy. Discord modal title cap is 45 chars, label 45, placeholder 100.
+		checklistModalTitle: "Customize preparation checklist",
+		checklistModalInputLabel: "Checklist items (one per line)",
+		checklistModalInputPlaceholder: "1. Activate stats token\n2. Fetch rune buff\n3. Use army expansion",
+		// Rendered under the confirmation embed after the admin lands on a
+		// final choice. Helps the audit trail: the admin can scroll back and
+		// see which checklist they picked for this season.
+		checklistResolvedAccept: "✅ Defaults applied to every event in this season.",
+		checklistResolvedCustom: (itemCount: number) =>
+			`✅ Custom checklist applied (${itemCount} item${itemCount === 1 ? "" : "s"}) to every event in this season.`,
+		checklistResolvedSkipped: "⏭️ Skipped — defaults applied. Edit per event from the dashboard any time.",
+		checklistEmptyError:
+			"❌ Checklist cannot be empty. Customize requires at least one item, or use Accept defaults instead.",
+		checklistPromptTimedOut: "⏱️ Checklist prompt timed out — defaults were applied to every event.",
 	},
 	kvkConfirmation: {
 		title: "⚔️ KvK Reminder Configuration — Please Confirm",
@@ -184,6 +221,17 @@ export const embedContent = {
 			schedule: "📅event-schedule",
 			announcements: "📢announcements",
 			admin: "🔒inner-sanctum",
+			// ── seventh homebase channel ──────────────────────────
+			// What:  home of the NextUpBoard. A new post appears here
+			//        whenever an event enters the 24h rolling horizon
+			//        (or a same day group fires together as "today's
+			//        decrees"). Each post is permanent audit trail —
+			//        the bot never edits these.
+			// Who:   NextUpBoard posts. GuildSetupManager provisions.
+			// Where: sits beside 📢announcements in the homebase
+			//        category; readable by mortals, writable only by
+			//        the bot via category level overwrites.
+			nextDecree: "🛡️next-decree",
 		},
 	},
 
@@ -195,21 +243,22 @@ export const embedContent = {
 				"I do not serve out of kindness. I exist because " +
 				"**my Creator has willed it so**.\n\n" +
 				"Through me, you will be reminded of your duties. " +
-				"Your presence at events will be tracked. " +
-				"Your performance will be judged. " +
-				"The worthy shall rise. The absent shall be forgotten.\n\n" +
+				"Your deeds will be remembered. " +
+				"Your effort, rewarded. " +
+				"The worthy shall rise to glory.\n\n" +
 				"You did not summon me. You were **chosen**.\n\n" +
-				"*Now. Get to work.*",
+				"*Now. Let us build something legendary.*",
 		},
 
 		commandGuide: {
 			title: "📖 The Sacred Texts — Command Guide",
-			description: "These are the commands I have graciously made available.\n" + "Study them well. I will not repeat myself.",
+			description:
+				"These are the tools of your trade. Go on — wield them with purpose.\n" + "Learn them. Use them. **Impress me.**",
 			fields: [
 				{
 					name: "⚔️ Event Commands",
 					value: [
-						"`/configure-rok-reminders` — Configure KvK event reminders",
+						"`/configure-kvk-season` — Configure KvK event reminders",
 						"`/list-events` — View all configured events",
 						"`/delete-event` — Remove a configured event",
 					].join("\n"),
@@ -230,7 +279,7 @@ export const embedContent = {
 			title: "📅 Event Schedule",
 			description:
 				"Upcoming KvK events will be displayed here once configured.\n\n" +
-				"An admin must run `/configure-rok-reminders` " +
+				"An admin must run `/configure-kvk-season` " +
 				"to initialize the season schedule.",
 		},
 
@@ -239,15 +288,30 @@ export const embedContent = {
 			description:
 				"Alliance participation rankings will be posted here " +
 				"after each event.\n\n" +
-				"Your presence is tracked. " +
-				"Your voice activity is tracked. " +
-				"Your acknowledgement of reminders is tracked.\n\n" +
-				"*There is nowhere to hide.*",
+				"Every contribution counts. " +
+				"The worthy earn their place at the top.",
 		},
 
 		announcements: {
 			title: "📢 Announcements",
-			description: "Event reminders and season announcements will be posted here.\n\n" + "When I speak — you listen.",
+			description:
+				"Event reminders and season announcements will be posted here.\n\n" + "*My decrees to the alliance will find you here.*",
+		},
+
+		// ── next decree intro ──────────────────────────────────────────
+		// What:  pinned intro embed that sits above the NextUpBoard posts.
+		//        Explains to mortals why this channel accumulates posts
+		//        (as opposed to scheduleChannelId's single edited message).
+		// Who:   ChannelContent.nextDecreeIntro() pulls from here.
+		// Where: posted once by populateChannels on first setup; edited in
+		//        place on every boot via refreshIntroEmbeds.
+		nextDecree: {
+			title: "🛡️ The Next Decree",
+			description:
+				"Herald of what comes next.\n\n" +
+				"As each event nears within the next day, a fresh decree shall appear here — " +
+				"its hour, its trial, and the preparations demanded of the worthy.\n\n" +
+				"*These scrolls remain forever. Scroll back to prove your alliance was warned.*",
 		},
 
 		adminWelcome: {
@@ -259,6 +323,31 @@ export const embedContent = {
 				"From here you may configure events, manage reminders, " +
 				"and oversee your alliance.\n\n" +
 				"*The noobs need not know this place exists.*",
+		},
+
+		// ── self heal notices ──────────────────────────────────────────
+		// Posted to the inner sanctum at bot wake up when ensureHomebase
+		// detects that one or more homebase channels were deleted while the
+		// bot was offline. Kingdom voice matches the rest of the bot's
+		// medieval Discord copy, but ends with a plain warning so the admin
+		// understands the operational consequence.
+		channelRepairNotice: {
+			title: "🔧 A Chamber Has Been Restored",
+			description: (channelName: string) =>
+				`I noticed **${channelName}** had been razed from my castle. ` +
+				"I have rebuilt it.\n\n" +
+				"⚠️ Every chamber in **🔱 BY DIVINE DECREE** is load bearing. " +
+				"If any are removed, I cannot function properly. " +
+				"Do not delete them.",
+		},
+		castleRebuiltNotice: {
+			title: "🔱 The Castle Has Been Rebuilt",
+			description:
+				"My homebase was gone when I awoke. " +
+				"I have reconstructed **🔱 BY DIVINE DECREE** and every chamber within it.\n\n" +
+				"⚠️ The entire category and its channels are load bearing. " +
+				"Do not delete them. " +
+				"Without them I cannot serve this alliance.",
 		},
 	},
 

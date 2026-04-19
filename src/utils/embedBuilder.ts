@@ -15,9 +15,7 @@ export function listEventsEmbed(fields: IListEventField[], announcementsChannelI
 	// the destination channel is the same for every event in the guild, so it
 	// renders once in the embed description instead of being repeated per row.
 	// an unset value (guild has not finished /setup) is treated as a soft warning.
-	const description = announcementsChannelId
-		? c.postedToHeader(announcementsChannelId)
-		: c.postedToHeaderUnset;
+	const description = announcementsChannelId ? c.postedToHeader(announcementsChannelId) : c.postedToHeaderUnset;
 	const embed = base().setTitle(c.title).setDescription(description).setColor(embedContent.COLORS.SCHEDULE);
 
 	for (const field of fields) {
@@ -66,7 +64,7 @@ export function reminderEmbed(event: IGameEvent, occurrence: Date, offsetMinutes
 // dispatched from the admin dashboard as a drill.
 // renders the same checklist + time fields as reminderEmbed so admins can
 // verify prep step formatting end to end, but prefixes the title with [TEST]
-// so warriors instantly know it is not a real alert.
+// so Mortals instantly know it is not a real alert.
 export function testReminderEmbed(event: IGameEvent, nextOccurrence: Date): EmbedBuilder {
 	const c = embedContent.testReminder;
 	return base()
@@ -132,7 +130,7 @@ export function scheduleBoardEmbed(
 		const occurrenceLabel = field.type === "recurring" ? c.nextOccurrenceLabel : c.scheduledDateLabel;
 
 		if (field.nextOccurrenceTs !== null) {
-			// both relative ("in 2 hours") and full date, so warriors in any
+			// both relative ("in 2 hours") and full date, so Mortals in any
 			// timezone see a correct local time.
 			lines.push(`**${occurrenceLabel}:** <t:${field.nextOccurrenceTs}:R> · <t:${field.nextOccurrenceTs}:f>`);
 		} else {

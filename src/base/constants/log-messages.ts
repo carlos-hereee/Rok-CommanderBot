@@ -80,6 +80,108 @@ export const LOG_MESSAGES = {
 		// or "unknown" for non DiscordAPIError throws.
 		homebaseOwnershipProbeFailed: (guildId: string, code: number | string) =>
 			`[setup] ownership probe failed for guild ${guildId} (code ${code}). treating homebase as not owned.`,
+		// emitted from repairMissingChannels when a single channel was deleted
+		// while the bot was offline and had to be reconstructed.
+		channelRepaired: (channelName: string, guildId: string) =>
+			`[setup] rebuilt missing channel ${channelName} for guild ${guildId}.`,
+		// single channel rebuild threw. autoSetup is NOT triggered in this
+		// path — only the failing channel is skipped so the other repairs can
+		// still land. next wake up will retry.
+		channelRepairFailed: (channelName: string, guildId: string) =>
+			`[setup] failed to rebuild channel ${channelName} for guild ${guildId}:`,
+		// posting the inner sanctum audit notice threw (channel gone, missing
+		// perms, Discord outage). repair already succeeded; this is the tail
+		// end "hey admin, fyi" step that failed.
+		repairNoticePostFailed: (guildId: string) =>
+			`[setup] failed to post repair notice to inner sanctum for guild ${guildId}:`,
+		// full category rebuild succeeded and we tried to post the "castle
+		// rebuilt" announcement in the new inner sanctum. logged separately
+		// from the single channel notice path so the operator can tell them
+		// apart in production logs.
+		castleRebuiltNoticePostFailed: (guildId: string) =>
+			`[setup] failed to post castle rebuilt notice for guild ${guildId}:`,
+		// MongoDB duplicate key (error code 11000) on the GuildConfig insert.
+		// Almost always indicates a shared cluster between dev and prod: a
+		// foreign row for this guildId already occupies the slot, and the
+		// unique index on guildId refuses the insert. Bot built the Discord
+		// side but cannot persist its config until the operator splits the
+		// clusters. Loud on purpose so the smell is impossible to miss.
+		guildConfigDuplicateKey: (guildId: string) =>
+			`[setup] refusing to overwrite existing GuildConfig for guild ${guildId} — duplicate key (code 11000). ` +
+			`This usually means dev and prod bots share a MongoDB cluster. Split the clusters before running further setup.`,
+		// Emitted when ensureHomebase begins its sweep for a guild. Visible
+		// marker at boot so the operator can tell the self heal pass actually
+		// ran (vs. being masked by an early return or crash).
+		ensureHomebaseStart: (guildId: string) => `[setup] ensureHomebase sweep starting for guild ${guildId}`,
+		// Emitted when ensureHomebase finishes, including the action taken
+		// so the operator can correlate with any Discord side posts.
+		ensureHomebaseDone: (guildId: string, action: string) =>
+			`[setup] ensureHomebase sweep complete for guild ${guildId} — action: ${action}`,
+		// ── realtime ChannelDelete self heal ───────────────────────────
+		// Emitted by ChannelDeleteWatcher. Kept under the setup namespace
+		// because the self heal logic lives in GuildSetupManager and the
+		// operator reads these alongside the boot sweep entries.
+		realtimeRepairStarted: (channelName: string, guildId: string) =>
+			`[setup] realtime repair starting for channel ${channelName} in guild ${guildId}`,
+		// Fired when a second ChannelDelete event for the same channel
+		// lands within the 60s cooldown window. Signals either a thrash
+		// attack or an admin repeatedly tearing down the bot. Either way
+		// we bail so the system does not fight the admin.
+		realtimeRepairCooldownHit: (channelName: string, guildId: string) =>
+			`[setup] realtime repair skipped for channel ${channelName} in guild ${guildId} — cooldown active`,
+		// Fired when the deleted channel's parent category is also gone.
+		// Realtime path intentionally does nothing here; boot sweep owns
+		// full category rebuilds.
+		realtimeRepairCategoryGone: (guildId: string) =>
+			`[setup] realtime repair skipped for guild ${guildId} — parent category is gone. Deferring to next ensureHomebase pass.`,
+		// Fired when the deleted channel belongs to a homebase this bot
+		// does not own. We refuse to post into a foreign bot's category.
+		realtimeRepairForeignHomebase: (guildId: string) =>
+			`[setup] realtime repair skipped for guild ${guildId} — homebase is not owned by this bot.`,
+		// Successful end of a realtime repair. Pairs with
+		// realtimeRepairStarted so the operator can see the full lifecycle.
+		realtimeRepairCompleted: (channelName: string, guildId: string) =>
+			`[setup] realtime repair completed for channel ${channelName} in guild ${guildId}`,
+		// Fired when the realtime repair threw after the cooldown gate. the
+		// listener swallows the error (it must never crash the gateway
+		// connection) but the operator needs a signal.
+		realtimeRepairFailed: (channelName: string, guildId: string) =>
+			`[setup] realtime repair failed for channel ${channelName} in guild ${guildId}:`,
+		// ── intro embed refresh (boot) ─────────────────────────────────
+		// What: GuildSetupManager.refreshIntroEmbeds sweeps the six stored
+		//       intro messages per guild on boot and edits them in place to
+		//       reflect the current embed-content.ts copy. Ships new wording
+		//       without forcing admins to nuke and rebuild the homebase.
+		// Why separate namespace from ensureHomebase? the refresh runs after
+		//       the sweep and can fail independently of channel integrity —
+		//       an edit-in-place failure still leaves the old intro showing,
+		//       which is harmless, so we log warn (not error).
+		introRefreshStarted: (guildId: string) => `[setup] intro embed refresh starting for guild ${guildId}`,
+		// Fired when a stored intro message id resolves but the Discord
+		// message has since been deleted. We respond by reposting a fresh
+		// intro and persisting the new id so the next boot edits in place.
+		introRefreshReposting: (channelName: string, guildId: string) =>
+			`[setup] stored intro message for ${channelName} in guild ${guildId} is gone — reposting a fresh intro.`,
+		// Channel id was missing from the config. should not happen after
+		// a successful build but keeps the refresh loop defensive across
+		// migrations and partial repairs.
+		introRefreshChannelMissing: (channelName: string, guildId: string) =>
+			`[setup] intro refresh skipped for ${channelName} in guild ${guildId} — channel not found.`,
+		// Channel resolved but is not a TextChannel (e.g. forum, voice).
+		// Legacy migration safety: if a future spec changes channel type we
+		// do not want this loop to crash.
+		introRefreshChannelWrongType: (channelName: string, guildId: string) =>
+			`[setup] intro refresh skipped for ${channelName} in guild ${guildId} — channel is not a TextChannel.`,
+		// Edit call failed. Most common causes: rate limit, transient
+		// Discord outage, or bot lost Manage Messages on the channel. The
+		// old intro stays visible so this is a visibility issue, not a
+		// correctness one.
+		introRefreshEditFailed: (channelName: string, guildId: string) =>
+			`[setup] intro refresh edit failed for ${channelName} in guild ${guildId}:`,
+		// Pair with introRefreshStarted so the operator can confirm the
+		// sweep completed for each guild.
+		introRefreshDone: (guildId: string, edited: number, reposted: number) =>
+			`[setup] intro embed refresh complete for guild ${guildId} — edited: ${edited}, reposted: ${reposted}`,
 	},
 
 	// ── guild event manager ────────────────────────────────────────────

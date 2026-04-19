@@ -45,12 +45,11 @@ export async function refreshSchedule(client: Client, guildId: string): Promise<
 
 		const events = await eventStore.findByGuildId(guildId);
 		const now = new Date();
-		const seasonEnded =
-			events.length > 0 && events.every((e) => new Date(e.seasonEnd).getTime() <= now.getTime());
+		const seasonEnded = events.length > 0 && events.every((e) => new Date(e.seasonEnd).getTime() <= now.getTime());
 
 		const fields: IScheduleField[] = events
 			.map((event) => toField(event as IGameEvent))
-			// chronological sort so warriors see the soonest event first.
+			// chronological sort so Mortals see the soonest event first.
 			// events with no upcoming occurrence (null ts) sink to the bottom.
 			.sort((a, b) => {
 				if (a.nextOccurrenceTs === null && b.nextOccurrenceTs === null) return 0;
@@ -196,30 +195,32 @@ async function postOrEdit(
 }
 
 // ── rebuildHomebase ────────────────────────────────────────────────────
-// What: recovery from the "GuildConfig in my DB points to another bot's
-//       homebase" state. wipes this bot's GuildConfig for the guild and
-//       runs autoSetup to build fresh channels this bot owns.
+// What: recovery from the "GuildConfig in my DB points to a homebase that
+//       is no longer ours" state. Runs autoSetup with force:true so a fresh
+//       category and channels owned by THIS bot are built. Critically does
+//       NOT call deleteByGuildId — in the shared MongoDB cluster scenario
+//       (dev and prod bots pointed at the same collection) that delete
+//       would nuke the other bot's row. Foreign rows are never touched.
 // Who:  called from postOrEdit when the stored schedule message is authored
 //       by a different bot, and from any other caller that detects the
 //       same invariant violation in the future.
 // When: rare. only fires when DB data is stale against reality (rotated
-//       bot account, cross-environment seeding, manual DB edits).
+//       bot account, cross-environment seeding, manual DB edits, or two
+//       bots sharing a Mongo collection).
 // Where: leaves the OLD category/channels in Discord untouched — they
 //        belong to the other bot and we have no right to delete them.
 //        the new category picks up the "(dev)" suffix automatically via
 //        GuildSetupManager.resolveCategoryName when NODE_ENV=development.
-// How:   1. delete this bot's GuildConfig row (autoSetup's guard reads
-//           existing?.categoryId, so clearing the record makes it proceed)
-//        2. await autoSetup(guild, { guildId, ownerId })
-//        3. swallow any autoSetup error and log; next refresh retries.
+// How:   autoSetup(force:true) bypasses the early-return guard on existing
+//        config. If the row in our DB is ours (just stale), autoSetup
+//        updates it in place with the new channel ids. If the row is
+//        foreign (shared cluster), autoSetup will hit the duplicate-key
+//        guard on its insert path and bail loudly without overwriting.
+//        Either branch keeps prod state safe.
 async function rebuildHomebase(guild: TextChannel["guild"], guildId: string): Promise<void> {
 	try {
 		console.warn(LOG_MESSAGES.schedule.rebuildingHomebase(guildId));
-		await guildConfigStore.deleteByGuildId(guildId);
-		await GuildSetupManager.autoSetup(guild, {
-			guildId,
-			ownerId: guild.ownerId,
-		});
+		await GuildSetupManager.autoSetup(guild, { guildId, ownerId: guild.ownerId }, { force: true });
 	} catch (error) {
 		console.error(LOG_MESSAGES.schedule.rebuildHomebaseFailed(guildId), error);
 	}

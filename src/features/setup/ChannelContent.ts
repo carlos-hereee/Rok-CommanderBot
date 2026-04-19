@@ -29,7 +29,31 @@ export const ChannelContent = {
 		return infoEmbed(cc.announcements.title, cc.announcements.description, embedContent.COLORS.ANNOUNCEMENTS);
 	},
 
+	// Pinned intro above the NextUpBoard posts. Tells mortals that this
+	// channel grows over time on purpose (each upcoming event creates a
+	// permanent post) so they stop asking why it is not being "cleaned up".
+	nextDecreeIntro(): EmbedBuilder {
+		return infoEmbed(cc.nextDecree.title, cc.nextDecree.description, embedContent.COLORS.NEXT_DECREE);
+	},
+
 	adminWelcome(ownerId: string, adminRoleId: string): EmbedBuilder {
 		return infoEmbed(cc.adminWelcome.title, cc.adminWelcome.description(ownerId, adminRoleId), embedContent.COLORS.ADMIN);
+	},
+
+	// ── self heal notices ─────────────────────────────────────
+	// posted to the inner sanctum from GuildSetupManager.ensureHomebase when
+	// a wake up scan finds missing pieces of the homebase. per channel
+	// notices fire for single channel restores; the castle rebuilt notice
+	// fires once after a full category reconstruction. both use the ADMIN
+	// color so they visually match the rest of the inner sanctum surface.
+	channelRepairNotice(channelName: string): EmbedBuilder {
+		return infoEmbed(
+			cc.channelRepairNotice.title,
+			cc.channelRepairNotice.description(channelName),
+			embedContent.COLORS.ADMIN
+		);
+	},
+	castleRebuiltNotice(): EmbedBuilder {
+		return infoEmbed(cc.castleRebuiltNotice.title, cc.castleRebuiltNotice.description, embedContent.COLORS.ADMIN);
 	},
 };

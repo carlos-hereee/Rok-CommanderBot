@@ -73,7 +73,7 @@ src/
 │   ├── utility/
 │   │   └── ping.ts               ← /ping
 │   ├── events/
-│   │   ├── configure-rok-reminders.ts  ← /configure-rok-reminders (admin)
+│   │   ├── configure-rok-reminders.ts  ← /configure-kvk-season (admin)
 │   │   ├── list-events.ts              ← /list-events (admin)
 │   │   └── delete-event.ts             ← /delete-event (admin)
 │   └── admin/
@@ -122,7 +122,7 @@ src/
 
 | What                  | Convention                | Example                      |
 | --------------------- | ------------------------- | ---------------------------- |
-| Slash command files   | `kebab-case.ts`           | `configure-rok-reminders.ts` |
+| Slash command files   | `kebab-case.ts`           | `configure-kvk-season.ts`    |
 | Classes               | `PascalCase.ts`           | `GuildSetupManager.ts`       |
 | Helpers / utils       | `camelCase.ts`            | `occurrenceCalculator.ts`    |
 | Type files            | `name.types.ts`           | `reminder.types.ts`          |
@@ -146,7 +146,7 @@ src/
 
 | Command                    | Description                                           |
 | -------------------------- | ----------------------------------------------------- |
-| `/configure-rok-reminders` | Configure reminders for all KvK events for the season |
+| `/configure-kvk-season`    | Configure reminders for all KvK events for the season |
 | `/list-events`             | View all configured events for the current season     |
 | `/delete-event`            | Remove a configured event                             |
 | `/leaderboard`             | View participation rankings — public or ephemeral     |
@@ -190,7 +190,7 @@ Owner runs /setup @AdminRole
 ### ② Admin configures the season
 
 ```
-Admin runs /configure-rok-reminders
+Admin runs /configure-kvk-season
       │
       ▼
 Inputs: days remaining, ruins date, altar date, kau karuak easy date
