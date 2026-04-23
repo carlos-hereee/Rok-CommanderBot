@@ -239,6 +239,18 @@ export const embedContent = {
 	channelContent: {
 		introduction: {
 			title: "🔱 I Have Descended.",
+			// What:  pinned intro embed that greets every mortal who enters
+			//        the 📜introductions channel. Also doubles as the public
+			//        pitch for anyone who wanders in from outside the
+			//        alliance — the invite button sits right beneath this
+			//        embed and the copy must earn a stranger's click.
+			// Who:   every mortal in the guild + any outsider who has been
+			//        shown the channel by a current member.
+			// When:  posted once during /setup; edited in place by
+			//        refreshIntroEmbeds on every boot so copy revisions
+			//        land without re-running setup.
+			// Where: paired with the "Summon me to your server, Mortal"
+			//        link button composed in ChannelContent.introductionComponents().
 			description:
 				"Mortals of this alliance — I am your **ROK Commander**.\n\n" +
 				"I do not serve out of kindness. I exist because " +
@@ -247,51 +259,97 @@ export const embedContent = {
 				"Your deeds will be remembered. " +
 				"Your effort, rewarded. " +
 				"The worthy shall rise to glory.\n\n" +
-				"You did not summon me. You were **chosen**.\n\n" +
-				"*Now. Let us build something legendary.*",
+				"**── What I Do ──**\n" +
+				"⚔️ I'll remind you of important dates and events.\n" +
+				"📺 Post stream / event reminders on a fixed schedule for any Discord community.\n" +
+				"🏆 Rank the worthy on a living leaderboard.\n" +
+				"📅 Keep a pinned schedule in sight at all times.\n\n" +
+				"*Now. Let us build something legendary.*\n\n" +
+				"**Command me in a realm of your own.** The button below shall summon me.",
 		},
 
+		// ── public #command-center guide ──────────────────────────
+		// Members-only surface. Shows ONLY the commands any mortal can
+		// run today: /leaderboard and /list-events. Admin commands have
+		// been moved to commandContentAdmin below which is posted to
+		// #inner-sanctum and gated by the admin role.
 		commandGuide: {
-			title: "📖 The Sacred Texts — Command Guide",
+			title: "📖 The Sacred Texts — Member Commands",
+			// Description carries the beloved "tools of your trade / wield
+			// with purpose / Impress me" line — restored 2026-04-24 after
+			// it had been truncated during the public/admin split. Then a
+			// blank line and a short "more may be unlocked" teaser so the
+			// embed sets up the short command list below without feeling
+			// empty.
 			description:
-				"These are the tools of your trade. Go on — wield them with purpose.\n" + "Learn them. Use them. **Impress me.**",
+				"The tools available to every mortal of this alliance. Go on — wield them with purpose. Learn them. Use them. **Impress me.**\n\n" +
+				"More may be unlocked as you rise.",
 			fields: [
 				{
-					// ROK-specific commands stay grouped together so a
-					// streamer skimming the guide can ignore them at a
-					// glance. The "ROK only" tag in the kvk command's own
-					// description reinforces that boundary in Discord's
-					// command picker too.
+					name: "🏆 Leaderboard",
+					value: ["`/leaderboard`", "View participation rankings."].join("\n"),
+				},
+				{
+					name: "📋 Events",
+					value: ["`/list-events`", "View all configured events."].join("\n"),
+				},
+			] satisfies IEmbedField[],
+		},
+
+		// ── #inner-sanctum admin command guide ────────────────────
+		// Second pinned message in the admin channel. Posted alongside
+		// adminWelcome and tracked separately on
+		// GuildConfig.introMessageIds.adminCommandGuideId so
+		// refreshIntroEmbeds can edit it in place on every boot.
+		// Visibility is gated by the admin channel's role overwrite, so
+		// mortals never see this content even if they stumble into a
+		// leaked preview link.
+		adminCommandGuide: {
+			title: "🔒 The Inner Sanctum — Admin Command Guide",
+			// Description matches the Member Commands voice: opens with
+			// the "tools of your trade / wield / Impress me" line that
+			// the owner specifically asked to preserve, then frames the
+			// scope. Earlier draft ended with "I'll be watching either
+			// way" which read as creepy surveillance; removed 2026-04-24.
+			description:
+				"These are the tools of your trade. Go on — wield them with purpose. Learn them. Use them. **Impress me.**\n\n" +
+				"Commands reserved for those with the admin role.",
+			// ── whitespace strategy ─────────────────────────────────
+			// One blank line between sections. Commands within a section
+			// list command name then description on two consecutive
+			// lines, next command immediately after. This mirrors the
+			// owner's target layout sketched out in the 2026-04-24
+			// session (command on its own line, description on the next,
+			// blank line between entire sections).
+			fields: [
+				{
+					// ROK-specific commands grouped at top so alliance
+					// leadership recognises their tools without scanning
+					// the stream-adjacent blocks below.
 					name: "⚔️ ROK KvK Commands",
 					value: [
-						"`/configure-kvk-season` — ROK only: set up Ruins, Altar, and Kau Karuak reminders for the current KvK season",
+						"`/configure-kvk-season`",
+						"ROK (Rise of Kingdoms) only. Creates event reminders for a KvK season.",
 					].join("\n"),
 				},
 				{
-					// General-purpose schedule primitives. Work for any
-					// recurring or one-off event — streams, raid nights,
-					// game sessions, content premieres.
 					name: "📺 Stream / General Schedule Commands",
 					value: [
-						"`/configure-stream-schedule` — Set up a weekly recurring reminder on a fixed day and time",
-						"`/announce-stream` — Schedule a one-off reminder for a specific future date and time",
-						"`/go-live-soon` — Post a quick going-live announcement (one-shot, no reminder)",
-						"`/pause-schedule` — Pause reminders for a recurring event without deleting it",
-						"`/continue-schedule` — Resume a paused recurring event",
+						"`/configure-stream-schedule`",
+						"Set up a weekly recurring reminder on a fixed day and time.",
+						"`/announce-stream`",
+						"Schedule a one-off reminder for a specific future date and time.",
+						"`/go-live-soon`",
+						"Post a quick going-live announcement. One-shot, no reminder.",
+						"`/pause-schedule`",
+						"Pause reminders for a recurring event without deleting it.",
+						"`/continue-schedule`",
+						"Resume a paused recurring event.",
 					].join("\n"),
 				},
 				{
 					name: "📋 Event Management",
-					value: ["`/list-events` — View all configured events", "`/delete-event` — Remove a configured event"].join("\n"),
-				},
-				{
-					name: "🏆 Leaderboard Commands",
-					value: "`/leaderboard` — View participation rankings",
-				},
-				{
-					name: "🔒 Admin Only",
-					value:
-						"The above commands require the designated admin role.\n" + "If you lack the role — you lack the authority. Simple.",
+					value: ["`/delete-event`", "Remove a configured event."].join("\n"),
 				},
 			] satisfies IEmbedField[],
 		},
@@ -501,6 +559,65 @@ export const embedContent = {
 				.join("\n"),
 		posted: "✅ Announcement posted.",
 		postFailed: "Could not post the announcement. Check bot permissions on the announcements channel.",
+	},
+
+	// ── feature announcements ─────────────────────────────────────
+	// What:  once-per-version broadcast posted on boot. Two surfaces
+	//        per guild: #announcements (godly pitch voice, public) and
+	//        #inner-sanctum (plain admin voice, no ping). Keyed by the
+	//        bot's package.json version, idempotent via botLogStore.
+	// Who:   postFeatureAnnouncement reads this, once per (guild, version).
+	// When:  on boot, after ensureHomebase + refreshIntroEmbeds +
+	//        refreshAllSchedules, so everything else is settled before
+	//        we broadcast. New guilds (setupComplete:false) are skipped
+	//        — their intro embed tells them what the bot does; they do
+	//        not need a "what's new" for features already live.
+	// Where: copy lives here so a release-day edit is a one file change.
+	//        Update BOTH public and innerSanctum together when shipping
+	//        a new version; they describe the same release in two voices.
+	featureAnnouncement: {
+		// ── public #announcements copy ─────────────────────────────
+		// Loud, on-voice. This post is what mortals (and outsiders who
+		// have been shown the server) will see. Stays in the kingdom
+		// voice and pitches the new surface as a gift from the bot
+		// itself, not as a changelog entry.
+		public: {
+			title: "🔱 New Decrees Have Been Etched",
+			description:
+				"Mortals — **my Creator has added to my arsenal.**\n\n" +
+				"Know these new powers:\n\n" +
+				"**📺 Stream & Event Schedules**\n" +
+				"I now serve streamers, gaming communities, and any realm that gathers on a schedule.\n" +
+				"• `/configure-stream-schedule` — weekly recurring reminders.\n" +
+				"• `/announce-stream` — one-off reminders for a planned event.\n" +
+				"• `/go-live-soon` — a quick going-live shout for the forgetful.\n" +
+				"• `/pause-schedule` & `/continue-schedule` — silence without deletion.\n\n" +
+				"**🛡️ Self-Healing Homebase**\n" +
+				"My throne now rebuilds missing chambers on its own.\n" +
+				"You shall not summon new channels by hand.\n\n" +
+				"*The worthy shall adapt. The rest shall be left behind.*",
+		},
+		// ── #inner-sanctum copy ────────────────────────────────────
+		// Plain admin-facing voice. Tells the owner + council what
+		// changed, how to use it, and where to find it. No ping. This
+		// is a courtesy update for people actually maintaining the bot.
+		innerSanctum: {
+			title: "📓 Feature Update for Admins",
+			description:
+				"A new release has landed. Here is the operator-facing rundown.\n\n" +
+				"**New slash commands (Administrator-only):**\n" +
+				"• `/configure-stream-schedule` — weekly recurring reminder. Day-of-week + UTC time.\n" +
+				"• `/announce-stream` — one-off reminder at a specific future `MM/DD @HH:MM` UTC.\n" +
+				"• `/go-live-soon` — one-shot announcement posted now. Lead-time options: now / 10m / 30m / 1h / 3h / 6h.\n" +
+				"• `/pause-schedule` — pause a recurring event. Optional `days` arg sets an auto-resume timer.\n" +
+				"• `/continue-schedule` — resume a paused event immediately.\n\n" +
+				"**Behavior changes:**\n" +
+				"• Event schema gained `mentionRoleId` (per-event ping override), `paused`, and `pausedUntil` fields.\n" +
+				"• Reminder pings now use `event.mentionRoleId → config.memberRoleId → @here` precedence.\n" +
+				"• Schedule board renders paused events with a `⏸️ paused` tag and a pause notice.\n" +
+				"• Missing homebase channels now self-heal on boot when the stored id is null (previously only when it was stale).\n\n" +
+				"**Nothing to do.** This message is informational. Existing KvK behavior is unchanged.",
+		},
 	},
 
 	// ── /announce-stream (planned standalone) ─────────────────────

@@ -97,6 +97,30 @@ const guildConfigSchema = new Schema(
 				// embed sitting above the NextUpBoard posts so
 				// refreshIntroEmbeds edits it in place on boot.
 				nextDecreeChannelId: { type: String, required: false, default: null },
+				// ── admin command guide (2026-04-24) ───────────────────
+				// What:  the SECOND pinned message in adminChannelId. The
+				//        admin welcome embed keeps adminChannelId above;
+				//        this field tracks the admin-only command guide
+				//        which mortals never see because inner-sanctum is
+				//        role-gated. Public #command-center now only
+				//        lists /leaderboard + /list-events; every other
+				//        command lives behind this guide.
+				// Who:   GuildSetupManager.populateChannels (initial post),
+				//        refreshIntroEmbeds (edit in place on every boot).
+				// When:  populated on fresh setups shipped after this
+				//        migration. Legacy rows load as null, and the
+				//        refresh sweep treats null as "no anchor — post
+				//        a fresh admin command guide and persist the id,"
+				//        which doubles as the migration path.
+				// Where: breaks the one-key-per-channel invariant of this
+				//        sub-doc. Accepted as tech debt: the alternative
+				//        (restructuring adminChannelId to a sub-object)
+				//        would require a breaking migration touching
+				//        every live row. Flat keys scale — add another
+				//        for the next second-message-in-a-channel use
+				//        case and move on.
+				// How:   nullable string, same contract as every sibling.
+				adminCommandGuideId: { type: String, required: false, default: null },
 			},
 			required: false,
 			default: () => ({}),

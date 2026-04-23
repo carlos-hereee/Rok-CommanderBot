@@ -1,6 +1,7 @@
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
+import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 
 const cc = embedContent.channelContent;
 
@@ -9,9 +10,55 @@ export const ChannelContent = {
 		return infoEmbed(cc.introduction.title, cc.introduction.description, embedContent.COLORS.INTRODUCTION);
 	},
 
+	// ── introduction invite button row ──────────────────────────────
+	// What:  link button row that sits beneath the introduction embed.
+	//        Opens Discord's OAuth consent screen for inviting ROK
+	//        Commander into another server. Link buttons do NOT require
+	//        an interaction handler — Discord opens the URL directly.
+	// Who:   outsiders who wander into the introductions channel and want
+	//        to run the bot in their own guild. Existing mortals will
+	//        mostly ignore the button; it is aimed at growth, not at
+	//        current members.
+	// When:  posted alongside the introduction embed on /setup, and re
+	//        attached during refreshIntroEmbeds on every boot so copy /
+	//        permission revisions land without a manual rebuild.
+	// Where: paired with ChannelContent.introduction() in
+	//        GuildSetupManager.populateChannels. The edit path in
+	//        refreshIntroEmbeds must pass this row alongside embeds or
+	//        the button gets silently dropped on boot (Discord clears
+	//        components on edit unless explicitly preserved).
+	// How:   single ButtonBuilder, ButtonStyle.Link, URL pulled from
+	//        BOT_CONSTANTS so the client id + permissions are authored
+	//        in one place and audited together with the permissions
+	//        breakdown comment. Label is in the godly voice — the button
+	//        is essentially a CTA written by the bot itself.
+	introductionComponents(): ActionRowBuilder<ButtonBuilder> {
+		return new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder()
+				.setLabel("Summon me to your server, Mortal")
+				.setStyle(ButtonStyle.Link)
+				.setURL(BOT_CONSTANTS.INVITE_URL)
+				.setEmoji("🔱")
+		);
+	},
+
 	commandGuide(): EmbedBuilder {
 		return infoEmbed(cc.commandGuide.title, cc.commandGuide.description, embedContent.COLORS.COMMANDS).addFields(
 			...cc.commandGuide.fields
+		);
+	},
+
+	// ── admin command guide ──────────────────────────────────────
+	// Posted as a SECOND pinned message inside #inner-sanctum, in
+	// addition to adminWelcome. Tracked on
+	// GuildConfig.introMessageIds.adminCommandGuideId so
+	// refreshIntroEmbeds edits it in place on boot when copy or the
+	// command list evolves. ADMIN color matches the rest of the inner
+	// sanctum surface so visual identity stays consistent with the
+	// welcome embed above it.
+	adminCommandGuide(): EmbedBuilder {
+		return infoEmbed(cc.adminCommandGuide.title, cc.adminCommandGuide.description, embedContent.COLORS.ADMIN).addFields(
+			...cc.adminCommandGuide.fields
 		);
 	},
 	adminPending(): EmbedBuilder {

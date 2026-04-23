@@ -17,6 +17,7 @@ import { registerChannelDeleteWatcher } from "@features/setup/ChannelDeleteWatch
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
+import { postFeatureAnnouncements } from "@features/announcements/postFeatureAnnouncement.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 // paths
@@ -258,6 +259,21 @@ clientReady(client);
 		// How:  iterates client.guilds.cache sequentially (alphabetical by
 		//       guild id) so errors on one guild cannot stall the rest.
 		await refreshAllSchedules(client);
+
+		// ── feature announcement sweep ─────────────────────────────
+		// What: once-per-version broadcast to every setup-complete guild.
+		//       Public post lands in #announcements, admin post in
+		//       #inner-sanctum. Idempotent via botLogStore — most boots
+		//       are no-ops, only the first boot after a deploy posts.
+		// Who:  postFeatureAnnouncements in features/announcements/.
+		//       Reads package.json version synchronously at module load.
+		// When: runs LAST in the boot sequence so ensureHomebase +
+		//       refreshIntroEmbeds + refreshAllSchedules have finished
+		//       and channel ids in GuildConfig are freshest.
+		// Where: fire-and-forget? NO — we await it, but internally each
+		//        guild is isolated so one failure cannot stall others.
+		//        Errors are logged and swallowed inside the helper.
+		await postFeatureAnnouncements(client);
 
 		console.log(LOG_MESSAGES.main.readyBanner(client.user?.tag ?? "unknown"));
 	});

@@ -96,6 +96,13 @@ export const LOG_MESSAGES = {
 		// still land. next wake up will retry.
 		channelRepairFailed: (channelName: string, guildId: string) =>
 			`[setup] failed to rebuild channel ${channelName} for guild ${guildId}:`,
+		// repair adopted an existing same-name channel instead of creating
+		// a duplicate. Fires when a previous deploy created the channel in
+		// Discord but never persisted the id to GuildConfig (eg. seventh
+		// channel migration race). Warn-level so it shows up in logs but
+		// does not read as a failure.
+		channelAdopted: (channelName: string, guildId: string) =>
+			`[setup] adopted existing ${channelName} under category for guild ${guildId} (id was null, channel present)`,
 		// posting the inner sanctum audit notice threw (channel gone, missing
 		// perms, Discord outage). repair already succeeded; this is the tail
 		// end "hey admin, fyi" step that failed.

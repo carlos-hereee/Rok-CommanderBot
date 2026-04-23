@@ -1,4 +1,18 @@
-import { Guild, PermissionFlagsBits, ChannelType, CategoryChannel, GuildChannel, Client, TextChannel, DiscordAPIError } from "discord.js";
+import {
+	Guild,
+	PermissionFlagsBits,
+	ChannelType,
+	CategoryChannel,
+	GuildChannel,
+	Client,
+	TextChannel,
+	DiscordAPIError,
+	ActionRowBuilder,
+	ButtonBuilder,
+	EmbedBuilder,
+	Embed,
+	Message,
+} from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { ISetupConfig, IAdminRoleConfig, ICreatedChannels, IChannelObjects, IEnsureHomebaseResult } from "./setup.types.js";
 import { ChannelContent } from "./ChannelContent.js";
@@ -295,7 +309,7 @@ export class GuildSetupManager {
 		field: (typeof GuildSetupManager.CHANNEL_FIELDS)[number],
 		guild: Guild,
 		adminRoleId: string | null
-	): import("discord.js").EmbedBuilder {
+	): EmbedBuilder {
 		switch (field) {
 			case "introChannelId":
 				return ChannelContent.introduction();
@@ -318,6 +332,84 @@ export class GuildSetupManager {
 				// channel — mortals read, bot writes.
 				return ChannelContent.nextDecreeIntro();
 		}
+	}
+
+	// ── resolveIntroComponents ────────────────────────────────────
+	// What:  returns the action row(s) that should accompany a given
+	//        channel's intro embed, or null if the channel has no
+	//        component surface (the common case). Only the introductions
+	//        channel currently has a component row (the "Summon me to
+	//        your server, Mortal" invite button).
+	// Who:   populateChannels on first build (via the send() call for
+	//        the intro channel) and refreshIntroEmbeds on every boot
+	//        (both the edit-in-place and repost paths must pass
+	//        components or Discord silently drops them).
+	// When:  called per spec during the intro sweep.
+	// Where: parallels resolveIntroEmbed so a future channel that grows
+	//        a component row (eg. an invite button for a central
+	//        announcement channel) can be added with a single new case.
+	// How:   switch on the spec. Returning null means "do not touch
+	//        components"; returning an array means "replace components
+	//        with this array."
+	private static resolveIntroComponents(
+		field: (typeof GuildSetupManager.CHANNEL_FIELDS)[number]
+	): ActionRowBuilder<ButtonBuilder>[] | null {
+		switch (field) {
+			case "introChannelId":
+				return [ChannelContent.introductionComponents()];
+			default:
+				return null;
+		}
+	}
+
+	// ── embed equivalence check ──────────────────────────────────
+	// What: returns true when a freshly generated intro embed has the
+	//       same user-visible content as the embed attached to an
+	//       already posted message. Used by refreshIntroEmbeds to skip
+	//       the "post a new copy" path when nothing has actually
+	//       changed — without this guard the owner's "never edit,
+	//       never delete" policy would cause a fresh post on every boot
+	//       whether the copy changed or not, drowning every channel in
+	//       duplicate intros.
+	// Who:  refreshIntroEmbeds; not exported because the comparison
+	//       rules are specific to the intro sweep. Other call sites
+	//       that need embed diffing should author their own helpers
+	//       tuned to their own content shape.
+	// When: once per spec per boot.
+	// Where: title + description + fields are the user-visible surface.
+	//        Footer text and color are derived from constants that do
+	//        not change per boot, so skipping them keeps the check
+	//        cheap and stable against non-copy drift (eg. timestamps
+	//        embed builders may stamp for their own reasons).
+	// How:  extract the comparable fields from both sides and JSON
+	//       stringify. Arrays of fields are compared by stringification
+	//       so field order matters — which is correct: a reorder is a
+	//       user-visible change worth posting a new copy for.
+	private static embedsAreEquivalent(
+		fresh: EmbedBuilder,
+		stored: Embed | undefined
+	): boolean {
+		if (!stored) return false;
+		const a = fresh.data;
+		const aFields = Array.isArray(a.fields) ? a.fields : [];
+		const bFields = Array.isArray(stored.fields) ? stored.fields : [];
+
+		if ((a.title ?? null) !== (stored.title ?? null)) return false;
+		if ((a.description ?? null) !== (stored.description ?? null)) return false;
+		if (aFields.length !== bFields.length) return false;
+
+		// Field-by-field compare. Name + value are the only fields that
+		// affect what the mortal reads; inline is rarely set on our
+		// intros but we compare anyway in case a future intro uses it.
+		for (let i = 0; i < aFields.length; i++) {
+			const af = aFields[i];
+			const bf = bFields[i];
+			if (!af || !bf) return false;
+			if (af.name !== bf.name) return false;
+			if (af.value !== bf.value) return false;
+			if ((af.inline ?? false) !== (bf.inline ?? false)) return false;
+		}
+		return true;
 	}
 
 	// ── single channel repair primitive ───────────────────────
@@ -347,26 +439,117 @@ export class GuildSetupManager {
 		spec: (typeof GuildSetupManager.CHANNEL_SPECS)[number],
 		stored: Record<string, unknown> & { adminRoleId?: string | null }
 	): Promise<{ newChannel: TextChannel; stored: typeof stored }> {
-		const newChannel = await GuildSetupManager.buildSingleChannel(guild, category, spec.displayName, spec.kind, stored.adminRoleId ?? null);
+		// ── adopt-before-build guard ───────────────────────────────
+		// What:  before creating a brand new channel, scan the category
+		//        for an existing text channel whose name matches this
+		//        spec's displayName. If one exists, adopt it: persist
+		//        its id onto GuildConfig and reuse the existing channel
+		//        as-is.
+		// Why:   the "stored id is null" branch in repairMissingChannels
+		//        would otherwise rebuild a channel whose name already
+		//        exists under the category, producing a duplicate. This
+		//        happens on any guild where a previous deploy created
+		//        the channel in Discord but failed to persist the id
+		//        before the process exited (eg. the seventh-channel
+		//        migration race seen on guild 910668785856413707 where
+		//        two `🛡️next-decree` channels ended up side by side
+		//        after yesterday's null-id rebuild fix landed).
+		// Who:   repairOneChannel; this is the single choke point for
+		//        both the boot sweep and the realtime delete watcher.
+		// When:  runs every repair, but the expensive create is only
+		//        skipped on match. The category's .children cache is
+		//        already populated — no extra network round trip.
+		// Where: the emoji-prefixed displayName (🛡️next-decree,
+		//        📜introductions, etc) makes accidental collisions with
+		//        admin-created channels effectively impossible; no
+		//        reasonable admin types the leading emoji by hand.
+		// How:   find by case-sensitive name match + TextChannel
+		//        instance check. Fall through to buildSingleChannel only
+		//        when no existing channel qualifies.
+		const existingByName = category.children.cache.find(
+			(child): child is TextChannel => child instanceof TextChannel && child.name === spec.displayName
+		);
+		const newChannel = existingByName
+			? existingByName
+			: await GuildSetupManager.buildSingleChannel(guild, category, spec.displayName, spec.kind, stored.adminRoleId ?? null);
+		if (existingByName) {
+			console.warn(LOG_MESSAGES.setup.channelAdopted(spec.displayName, guild.id));
+		}
 
-		// repost intro. failures here are non fatal — the channel exists and
-		// the bot is functional; the intro is cosmetic. Capture the new
-		// message id so we can persist it on introMessageIds[configField];
-		// without this the next boot's refreshIntroEmbeds has no anchor and
-		// would repost a second intro, accumulating clutter over time.
+		// ── intro message resolution ────────────────────────────────
+		// Two paths, merged:
+		//   A. Fresh build (!existingByName): post an intro embed,
+		//      capture the new message id. This is the historical
+		//      behavior — a newly created channel has no intro yet.
+		//   B. Adopted existing channel: scan the most recent messages
+		//      for a bot-authored embed that matches the spec's intro.
+		//      If found, reuse its id — DO NOT post a duplicate. If not
+		//      found (eg. the existing channel was emptied by an admin),
+		//      fall through to the same post-a-fresh-intro path as A so
+		//      the adopted channel still ends up with the pinned intro.
+		//
+		// Why the scan only looks at the latest ~20 messages: a stray
+		// intro embed further back in history is rare (bot is the only
+		// author in its own homebase channels) and the scan is cheap.
+		// If the adopted channel has 500 messages from a prior setup
+		// cycle, we accept that a very old intro won't be adopted — the
+		// fresh one we post beneath it is correct, and the historical
+		// one is just harmless scrollback. Most guilds hitting this
+		// branch have NO messages (the channel was just created but
+		// never had its id persisted).
 		let introMessageId: string | null = null;
+		const introEmbed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null);
+		const introComponents = GuildSetupManager.resolveIntroComponents(spec.configField);
+
 		try {
-			const introMessage = await newChannel.send({
-				embeds: [GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null)],
-			});
-			introMessageId = introMessage.id;
-			// schedule channel's intro doubles as the pinned board anchor —
-			// repin on repair to preserve that invariant.
-			if (spec.configField === "scheduleChannelId") {
-				try {
-					await introMessage.pin();
-				} catch (pinError) {
-					console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+			if (existingByName) {
+				// Scan for an existing bot-authored intro embed with a
+				// matching title. Embed titles are stable identifiers
+				// for each intro (nextDecreeIntro → "🛡️ The Next Decree",
+				// etc.) so title comparison is the cheapest way to
+				// recognize our own prior post without storing a hash.
+				const selfId = guild.client.user?.id;
+				const targetTitle = introEmbed.data.title ?? null;
+
+				const recent = await newChannel.messages.fetch({ limit: 20 }).catch(() => null);
+				const existingIntro = recent?.find((msg) => {
+					if (!selfId || msg.author.id !== selfId) return false;
+					if (msg.embeds.length === 0) return false;
+					const firstTitle = msg.embeds[0]?.title ?? null;
+					return firstTitle !== null && firstTitle === targetTitle;
+				});
+
+				if (existingIntro) {
+					// Adopt the existing intro. Also run an in-place
+					// edit so any copy changes in embed-content.ts since
+					// the prior post land immediately (same contract as
+					// refreshIntroEmbeds but scoped to this one message).
+					introMessageId = existingIntro.id;
+					try {
+						await existingIntro.edit({ embeds: [introEmbed], components: introComponents ?? [] });
+					} catch (editError) {
+						// edit failure is non fatal — the old embed stands.
+						console.warn(LOG_MESSAGES.setup.channelRepairFailed(spec.displayName, guild.id), editError);
+					}
+				}
+			}
+
+			if (!introMessageId) {
+				// Fresh post path: either a brand new channel (path A
+				// above) or an adopted channel with no matching intro.
+				const introMessage = await newChannel.send({
+					embeds: [introEmbed],
+					components: introComponents ?? [],
+				});
+				introMessageId = introMessage.id;
+				// schedule channel's intro doubles as the pinned board
+				// anchor — repin on repair to preserve that invariant.
+				if (spec.configField === "scheduleChannelId") {
+					try {
+						await introMessage.pin();
+					} catch (pinError) {
+						console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+					}
 				}
 			}
 		} catch (error) {
@@ -426,13 +609,36 @@ export class GuildSetupManager {
 		const repaired: string[] = [];
 		for (const spec of GuildSetupManager.CHANNEL_SPECS) {
 			const storedId = stored[spec.configField] as string | null | undefined;
-			if (!storedId) continue;
 
-			// resolve the channel. null (cache miss) and fetch throws both
-			// mean rebuild. misconfigured-but-present channels are out of
-			// scope for boot time self heal.
-			const existing = await guild.channels.fetch(storedId).catch(() => null);
-			if (existing) continue;
+			// What:  decide whether this spec needs a rebuild. Three states:
+			//        ① stored id present AND channel exists → skip (happy
+			//           path, most guilds most of the time);
+			//        ② stored id present AND channel missing → rebuild the
+			//           channel, persist the new id;
+			//        ③ stored id null/undefined → rebuild the channel. This
+			//           is the "legacy guild predating a new channel spec"
+			//           case. Example: the nextDecreeChannelId field was
+			//           added after some guilds had already run /setup, so
+			//           those rows load with a null stored id and the
+			//           channel has never existed in Discord. Before this
+			//           branch, the sweep skipped them forever; the channel
+			//           would only appear if the owner nuked and re-ran
+			//           /setup from scratch, which is a terrible migration
+			//           story. Treat null as "also missing, rebuild too."
+			// Where: repairOneChannel is already idempotent — it builds the
+			//        channel, posts the intro, persists the new id. The only
+			//        extra concern is existing:null below: when storedId is
+			//        null we have nothing to fetch, so skip the fetch and go
+			//        straight to the rebuild path.
+			if (storedId) {
+				// resolve the channel. null (cache miss) and fetch throws both
+				// mean rebuild. misconfigured-but-present channels are out of
+				// scope for boot time self heal.
+				const existing = await guild.channels.fetch(storedId).catch(() => null);
+				if (existing) continue;
+			}
+			// fallthrough: either storedId was falsy, or the channel was
+			// missing despite a stored id. Either way, build it.
 
 			try {
 				const result = await GuildSetupManager.repairOneChannel(guild, category, spec, stored);
@@ -835,6 +1041,11 @@ export class GuildSetupManager {
 			announcementsChannelId: string;
 			adminChannelId: string;
 			nextDecreeChannelId: string;
+			// Sibling to adminChannelId — both live in the same admin
+			// channel. See GuildConfig.introMessageIds.adminCommandGuideId
+			// for the rationale on breaking the one-key-per-channel
+			// invariant.
+			adminCommandGuideId: string;
 		};
 	}> {
 		const {
@@ -847,8 +1058,31 @@ export class GuildSetupManager {
 			nextDecreeChannel,
 		} = discordChannels;
 
-		const [introMsg, commandsMsg, leaderboardMsg, scheduleMessage, announcementsMsg, adminMsg, nextDecreeMsg] = await Promise.all([
-			introChannel.send({ embeds: [ChannelContent.introduction()] }),
+		const [
+			introMsg,
+			commandsMsg,
+			leaderboardMsg,
+			scheduleMessage,
+			announcementsMsg,
+			adminMsg,
+			nextDecreeMsg,
+			// ── second tracked message in adminChannel ───────────
+			// The admin command guide lives in #inner-sanctum as a
+			// sibling to adminWelcome. Sent in the same Promise.all so
+			// posting happens in one batch and ordering is deterministic.
+			// Persisted separately on introMessageIds.adminCommandGuideId
+			// because the one-message-per-channel invariant does not
+			// hold for this channel anymore.
+			adminCommandGuideMsg,
+		] = await Promise.all([
+			// intro channel carries both the introduction embed AND the
+			// "Summon me to your server, Mortal" link button. Components
+			// travel alongside embeds on send; refreshIntroEmbeds must
+			// also pass components on edit or Discord will drop the row.
+			introChannel.send({
+				embeds: [ChannelContent.introduction()],
+				components: [ChannelContent.introductionComponents()],
+			}),
 			commandsChannel.send({ embeds: [ChannelContent.commandGuide()] }),
 			leaderboardChannel.send({ embeds: [ChannelContent.leaderboardIntro()] }),
 			scheduleChannel.send({ embeds: [ChannelContent.scheduleIntro()] }),
@@ -859,6 +1093,10 @@ export class GuildSetupManager {
 			// is persisted on introMessageIds.nextDecreeChannelId so
 			// refreshIntroEmbeds edits it in place on every boot.
 			nextDecreeChannel.send({ embeds: [ChannelContent.nextDecreeIntro()] }),
+			// Admin command guide, sibling of adminWelcome in the same
+			// admin channel. Pinning handled below alongside the
+			// schedule + next-decree pins.
+			adminChannel.send({ embeds: [ChannelContent.adminCommandGuide()] }),
 		]);
 
 		try {
@@ -878,6 +1116,27 @@ export class GuildSetupManager {
 			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.nextDecreeChannel.guildId), error);
 		}
 
+		// Pin the public command center guide so mortals can always
+		// scroll up to it even if the channel accumulates other content
+		// in the future. Today #command-center is read-only for mortals
+		// so in practice nothing pushes the guide down, but the pin
+		// future-proofs it.
+		try {
+			await commandsMsg.pin();
+		} catch (error) {
+			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.commandsChannel.guildId), error);
+		}
+
+		// Pin the admin command guide for the same reason as the public
+		// one — the inner sanctum accumulates self-heal notices,
+		// feature announcements, and ad-hoc admin chatter, so the pin
+		// keeps the guide scannable as the primary reference.
+		try {
+			await adminCommandGuideMsg.pin();
+		} catch (error) {
+			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.adminChannel.guildId), error);
+		}
+
 		return {
 			scheduleMessageId: scheduleMessage.id,
 			// mirrors the GuildConfig.introMessageIds shape so autoSetup can
@@ -891,6 +1150,7 @@ export class GuildSetupManager {
 				announcementsChannelId: announcementsMsg.id,
 				adminChannelId: adminMsg.id,
 				nextDecreeChannelId: nextDecreeMsg.id,
+				adminCommandGuideId: adminCommandGuideMsg.id,
 			},
 		};
 	}
@@ -945,18 +1205,29 @@ export class GuildSetupManager {
 		// mutate a local copy of introMessageIds as we go so reposts that
 		// need a persist can be batched at the end. keeps DB writes to one
 		// per guild in the common case.
+		// Cast is necessary because the shared Partial<Record<CHANNEL_FIELDS,...>>
+		// type on `stored.introMessageIds` does not include the flat
+		// non-channel keys we have added (adminCommandGuideId). Accessing
+		// it through `Record<string, string | null | undefined>` gives us
+		// a runtime-safe read without widening the declared type.
+		const storedIntroIds = (stored.introMessageIds ?? {}) as Record<string, string | null | undefined>;
 		const nextIntroIds: Record<string, string | null> = {
-			introChannelId: stored.introMessageIds?.introChannelId ?? null,
-			commandsChannelId: stored.introMessageIds?.commandsChannelId ?? null,
-			leaderboardChannelId: stored.introMessageIds?.leaderboardChannelId ?? null,
-			scheduleChannelId: stored.introMessageIds?.scheduleChannelId ?? null,
-			announcementsChannelId: stored.introMessageIds?.announcementsChannelId ?? null,
-			adminChannelId: stored.introMessageIds?.adminChannelId ?? null,
+			introChannelId: storedIntroIds.introChannelId ?? null,
+			commandsChannelId: storedIntroIds.commandsChannelId ?? null,
+			leaderboardChannelId: storedIntroIds.leaderboardChannelId ?? null,
+			scheduleChannelId: storedIntroIds.scheduleChannelId ?? null,
+			announcementsChannelId: storedIntroIds.announcementsChannelId ?? null,
+			adminChannelId: storedIntroIds.adminChannelId ?? null,
 			// legacy rows predating the seventh channel have this as null.
 			// refreshIntroEmbeds then treats it like any other missing
 			// anchor — reposts a fresh intro the first time the channel
 			// is present and persists the new id.
-			nextDecreeChannelId: stored.introMessageIds?.nextDecreeChannelId ?? null,
+			nextDecreeChannelId: storedIntroIds.nextDecreeChannelId ?? null,
+			// Flat key (not a channel id) for the second tracked message
+			// in #inner-sanctum. Legacy rows built before the split load
+			// as null; the post-loop handler below treats null as "no
+			// anchor → post a fresh admin command guide and persist it."
+			adminCommandGuideId: storedIntroIds.adminCommandGuideId ?? null,
 		};
 		let needsPersist = false;
 
@@ -975,53 +1246,278 @@ export class GuildSetupManager {
 			}
 
 			const embed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null);
+			// Components (eg. the introductions channel's invite button)
+			// must be passed explicitly on send — omitting them would
+			// silently strip the invite button on every repost.
+			// resolveIntroComponents returns null for the channels that
+			// have no component surface; we pass `[]` in that case so
+			// the send call is explicit about "no components."
+			const componentRows = GuildSetupManager.resolveIntroComponents(spec.configField);
 			const storedMessageId = nextIntroIds[spec.configField];
 
-			// ── path A: we have a stored anchor → try edit in place ──
+			// ── schedule channel exception: edit-in-place ──────────
+			// The pinned schedule board is the one place the owner
+			// granted permission to keep editing (see 2026-04-24
+			// "never edit, never delete" policy). ScheduleBoard.ts
+			// owns the actual board content; refreshIntroEmbeds only
+			// needs to make sure the intro/anchor message is pinned.
+			// For schedule we do NOT apply the diff+post flow below.
+			if (spec.configField === "scheduleChannelId") {
+				if (storedMessageId) {
+					try {
+						const message = await channel.messages.fetch(storedMessageId);
+						await message.edit({ embeds: [embed], components: componentRows ?? [] });
+						if (!message.pinned) {
+							try {
+								await message.pin();
+							} catch (pinError) {
+								console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+							}
+						}
+						edited += 1;
+					} catch (error) {
+						// Anchor missing or corrupted — let the schedule
+						// board's own postOrEdit flow handle it on its
+						// next refresh. We do NOT post a new intro here
+						// because that would compete with ScheduleBoard's
+						// own recovery path.
+						const code = error instanceof DiscordAPIError ? error.code : null;
+						if (code === 10008 || code === 10003) {
+							console.warn(LOG_MESSAGES.setup.introRefreshReposting(spec.displayName, guild.id));
+						} else {
+							console.warn(LOG_MESSAGES.setup.introRefreshEditFailed(spec.displayName, guild.id), error);
+						}
+					}
+				}
+				continue;
+			}
+
+			// ── post-on-change policy for every OTHER spec ─────────
+			// Owner's rule (2026-04-24): never edit, never delete
+			// messages in intro channels. When copy changes, post a
+			// NEW message below the old one, unpin the old, pin the
+			// new. The old message remains in channel history so the
+			// audit trail is preserved. Diff check prevents noise on
+			// boots where nothing actually changed.
+			//
+			// Schedule channel is the only exception (handled above).
+
+			// Which channels should have their intro pinned at all?
+			// These are the channels where the intro is a permanent
+			// reference a mortal or admin might scroll back to.
+			const shouldBePinned =
+				spec.configField === "commandsChannelId" ||
+				spec.configField === "nextDecreeChannelId";
+
+			// Try to fetch the stored message. If present, compare its
+			// embed to the fresh one; if equivalent, we are done for
+			// this spec.
+			let storedMessage: Message | null = null;
 			if (storedMessageId) {
-				try {
-					const message = await channel.messages.fetch(storedMessageId);
-					await message.edit({ embeds: [embed] });
-					edited += 1;
+				storedMessage = await channel.messages.fetch(storedMessageId).catch(() => null);
+				if (storedMessage && GuildSetupManager.embedsAreEquivalent(embed, storedMessage.embeds[0])) {
+					// No change — backfill pin if the invariant says
+					// this channel should be pinned but the stored
+					// message somehow lost its pin.
+					if (shouldBePinned && !storedMessage.pinned) {
+						try {
+							await storedMessage.pin();
+						} catch (pinError) {
+							console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+						}
+					}
 					continue;
-				} catch (error) {
-					// 10008 Unknown Message or 10003 Unknown Channel → the
-					// anchor is gone. fall through to the repost path.
-					// 50005 (author mismatch) is a corruption signal; log and
-					// skip so ensureHomebase can sort it on the next pass.
-					const code = error instanceof DiscordAPIError ? error.code : null;
-					if (code === 50005) {
-						console.warn(LOG_MESSAGES.setup.introRefreshEditFailed(spec.displayName, guild.id), error);
-						continue;
-					}
-					if (code !== 10008 && code !== 10003) {
-						// transient failure (rate limit / outage / perms).
-						// skip this channel so the rest still refresh.
-						console.warn(LOG_MESSAGES.setup.introRefreshEditFailed(spec.displayName, guild.id), error);
-						continue;
-					}
-					// fall through to the repost path below.
-					console.warn(LOG_MESSAGES.setup.introRefreshReposting(spec.displayName, guild.id));
 				}
 			}
 
-			// ── path B: no anchor or anchor gone → repost + persist ──
+			// Copy differs (or stored message is gone). Before posting
+			// a brand new message, scan the last 20 bot-authored
+			// messages in this channel for one whose embed already
+			// matches the fresh copy. If found, adopt it — someone
+			// (this bot on an earlier boot, a racing tick, etc.) has
+			// already posted the current copy and we should not
+			// duplicate it. This is the answer to question 4 in the
+			// 2026-04-24 policy thread.
+			const selfId = guild.client.user?.id;
+			const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+			const existingMatch = recent?.find((msg) => {
+				if (!selfId || msg.author.id !== selfId) return false;
+				if (msg.embeds.length === 0) return false;
+				return GuildSetupManager.embedsAreEquivalent(embed, msg.embeds[0]);
+			});
+
+			if (existingMatch) {
+				// Adopt the existing matching message. Persist its id,
+				// ensure it is pinned when the spec calls for it, and
+				// unpin the previously tracked message if it was pinned
+				// and is no longer the canonical one.
+				if (shouldBePinned && !existingMatch.pinned) {
+					try {
+						await existingMatch.pin();
+					} catch (pinError) {
+						console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+					}
+				}
+				if (storedMessage && storedMessage.id !== existingMatch.id && storedMessage.pinned) {
+					try {
+						await storedMessage.unpin();
+					} catch (unpinError) {
+						console.warn(LOG_MESSAGES.setup.introRefreshEditFailed(spec.displayName, guild.id), unpinError);
+					}
+				}
+				nextIntroIds[spec.configField] = existingMatch.id;
+				needsPersist = true;
+				edited += 1;
+				continue;
+			}
+
+			// Genuinely new content. Post a fresh message, unpin the
+			// old (if pinned), pin the new, persist. If the post
+			// fails, log and bail — we do NOT fall back to editing
+			// because the owner's policy forbids it. Next boot will
+			// retry cleanly.
 			try {
-				const message = await channel.send({ embeds: [embed] });
-				// schedule channel gets the same repin treatment as the
-				// initial build so the board anchor stays pinned.
-				if (spec.configField === "scheduleChannelId") {
+				const message = await channel.send({ embeds: [embed], components: componentRows ?? [] });
+				if (shouldBePinned) {
 					try {
 						await message.pin();
 					} catch (pinError) {
 						console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
 					}
 				}
+				// Unpin the previous anchor (if one existed AND it was
+				// pinned) so only the newest canonical message wears
+				// the pin. We do NOT delete the old message — it stays
+				// in channel history per the "nothing hidden" policy.
+				if (storedMessage && storedMessage.pinned) {
+					try {
+						await storedMessage.unpin();
+					} catch (unpinError) {
+						console.warn(LOG_MESSAGES.setup.introRefreshEditFailed(spec.displayName, guild.id), unpinError);
+					}
+				}
 				nextIntroIds[spec.configField] = message.id;
 				needsPersist = true;
 				reposted += 1;
 			} catch (error) {
+				// Post failure is the one place we MUST skip and retry
+				// next boot. Do not delete anything, do not fall back
+				// to editing. The old message stays in place, still
+				// pinned, still tracked.
 				console.warn(LOG_MESSAGES.setup.introRefreshEditFailed(spec.displayName, guild.id), error);
+			}
+		}
+
+		// ── admin command guide (second tracked message in admin channel) ──
+		// What:  #inner-sanctum hosts TWO tracked messages — the welcome
+		//        embed (handled in the spec loop above under
+		//        adminChannelId) and the command guide (handled here).
+		//        Tracking for the second message lives on
+		//        introMessageIds.adminCommandGuideId because the spec
+		//        loop is keyed by channel id field, not by tracked
+		//        message. Rather than refactor CHANNEL_SPECS into a
+		//        message-centric shape, we run the post-on-change flow
+		//        inline for this one extra message.
+		// Who:   every setup-complete guild on every boot.
+		// When:  after the main spec loop so the admin channel exists
+		//        and its overwrites are fresh.
+		// Where: follows the same "never edit, never delete" policy as
+		//        the spec loop above. When copy changes, post new, pin
+		//        new, unpin old, leave the old message in channel
+		//        history.
+		// How:   reuse the same nextIntroIds object so the batched
+		//        guildConfigStore.update below captures both the
+		//        channel-keyed ids AND the admin command guide id in
+		//        one write.
+		const adminChannelId = stored.adminChannelId as string | null | undefined;
+		if (adminChannelId) {
+			const adminChannel = await client.channels.fetch(adminChannelId).catch(() => null);
+			if (adminChannel instanceof TextChannel) {
+				const adminGuideEmbed = ChannelContent.adminCommandGuide();
+				const storedAdminGuideId = nextIntroIds.adminCommandGuideId;
+
+				// Fetch the stored message (if any) so we can diff against
+				// it and, if a new copy needs to be posted, unpin the old
+				// one in the same pass.
+				let storedGuideMessage: Message | null = null;
+				if (storedAdminGuideId) {
+					storedGuideMessage = await adminChannel.messages
+						.fetch(storedAdminGuideId)
+						.catch(() => null);
+				}
+
+				// Short circuit: stored message exists AND its embed
+				// matches the fresh one. Backfill pin if needed, move on.
+				if (storedGuideMessage && GuildSetupManager.embedsAreEquivalent(adminGuideEmbed, storedGuideMessage.embeds[0])) {
+					if (!storedGuideMessage.pinned) {
+						try {
+							await storedGuideMessage.pin();
+						} catch (pinError) {
+							console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+						}
+					}
+				} else {
+					// Copy differs OR no stored anchor. Before posting,
+					// scan the channel for a bot-authored message that
+					// ALREADY matches the fresh embed — this is the
+					// idempotency guard that prevents a second post when
+					// something already landed the current copy this
+					// boot cycle.
+					const selfId = guild.client.user?.id;
+					const recent = await adminChannel.messages.fetch({ limit: 20 }).catch(() => null);
+					const existingMatch = recent?.find((msg) => {
+						if (!selfId || msg.author.id !== selfId) return false;
+						if (msg.embeds.length === 0) return false;
+						return GuildSetupManager.embedsAreEquivalent(adminGuideEmbed, msg.embeds[0]);
+					});
+
+					if (existingMatch) {
+						if (!existingMatch.pinned) {
+							try {
+								await existingMatch.pin();
+							} catch (pinError) {
+								console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+							}
+						}
+						if (storedGuideMessage && storedGuideMessage.id !== existingMatch.id && storedGuideMessage.pinned) {
+							try {
+								await storedGuideMessage.unpin();
+							} catch (unpinError) {
+								console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("admin command guide", guild.id), unpinError);
+							}
+						}
+						nextIntroIds.adminCommandGuideId = existingMatch.id;
+						needsPersist = true;
+						edited += 1;
+					} else {
+						// Genuinely new content. Post fresh, pin new,
+						// unpin old. Never delete; the old guide stays
+						// in channel history as an audit trail of past
+						// command surface.
+						try {
+							const message = await adminChannel.send({ embeds: [adminGuideEmbed] });
+							try {
+								await message.pin();
+							} catch (pinError) {
+								console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+							}
+							if (storedGuideMessage && storedGuideMessage.pinned) {
+								try {
+									await storedGuideMessage.unpin();
+								} catch (unpinError) {
+									console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("admin command guide", guild.id), unpinError);
+								}
+							}
+							nextIntroIds.adminCommandGuideId = message.id;
+							needsPersist = true;
+							reposted += 1;
+						} catch (error) {
+							// Post failed — log and retry next boot.
+							// Old message + pin stay intact.
+							console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("admin command guide", guild.id), error);
+						}
+					}
+				}
 			}
 		}
 

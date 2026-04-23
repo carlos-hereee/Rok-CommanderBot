@@ -1,12 +1,16 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, MessageFlags } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { activityStore } from "@db/stores/activityStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { leaderboardEmbed } from "@utils/embedBuilder.js";
 
+// /leaderboard intentionally does NOT setDefaultMemberPermissions. As of
+// the 2026-04-24 public/admin command guide split it is a member command —
+// mortals viewing their own ranking is the whole point of a leaderboard
+// and the command only ever READS activity data. The admin-gate check in
+// main.ts's ADMIN_COMMANDS was also dropped for the same reason.
 export const data = new SlashCommandBuilder()
 	.setName("leaderboard")
-	.setDescription("Show the participation leaderboard for a ROK event")
-	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+	.setDescription("Show the participation leaderboard for an event")
 	.addStringOption((option) => option.setName("event-id").setDescription("The event ID to show rankings for").setRequired(true))
 	.addBooleanOption((option) =>
 		option.setName("public").setDescription("Post publicly in channel? Default: only you can see it").setRequired(false)

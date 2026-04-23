@@ -7,7 +7,7 @@ import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js
 
 export const data = new SlashCommandBuilder()
 	.setName("list-events")
-	.setDescription("List all active KvK events configured for this server");
+	.setDescription("List all active events configured for this server");
 
 export async function execute(interaction: ChatInputCommandInteraction) {
 	const events = await eventStore.findByGuildId(interaction.guildId!);
