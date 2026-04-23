@@ -43,6 +43,32 @@ const guildConfigSchema = new Schema(
 		// that one message in place so the channel never accumulates clutter.
 		scheduleMessageId: { type: String, required: false, default: null },
 
+		// ── KvK season end ─────────────────────────────────────────────
+		// What:  the configured end date of the guild's current KvK season.
+		//        Single canonical date per guild. Events created with
+		//        announcementType "kvk" inherit this value at the events
+		//        route, so admins never type the same date twice.
+		// Who:   written by GuildEventManager.configureKvKSeason when the
+		//        owner runs /configure-kvk-season. Read by the events route
+		//        when a new event opts into KvK mode, and by the dashboard
+		//        health endpoint so the EventCreatePage can disable the
+		//        KvK toggle when no season is configured yet.
+		// When:  written once per season at /configure-kvk-season time.
+		//        Cleared (back to null) when ReminderScheduler.announceSeasonEnd
+		//        flips the last KvK event inactive — but ONLY if no other
+		//        active KvK events still reference a future date. For v1
+		//        we leave the cleanup to the next /configure-kvk-season run
+		//        which overwrites the field; this avoids a multi guild race
+		//        where season end rolls over while events are still firing.
+		// Where: nullable so legacy guilds (any guild that has not run
+		//        /configure-kvk-season since this field was added) load
+		//        cleanly. The dashboard treats null as "no active season"
+		//        and disables the KvK toggle on the event create form.
+		// How:   stored as a Date object so the date math at the events
+		//        route is symmetric with how IKvKSeasonInput already passes
+		//        it around in GuildEventManager.
+		kvkSeasonEnd: { type: Date, required: false, default: null },
+
 		// ── intro message ids ──────────────────────────────────────────
 		// What:  per channel id of the bot's intro embed message. Populated
 		//        when populateChannels (or repairOneChannel) posts an intro,

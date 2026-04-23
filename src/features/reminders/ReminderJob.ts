@@ -27,18 +27,25 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 	// ② build the embed
 	const embed = reminderEmbed(event, occurrence, offsetMinutes);
 
-	// ③ compose the mention. we ping the configured member role so only
-	// Mortals opted into the alliance see the notification. if the guild
-	// has not yet assigned a member role (legacy configs from before /setup
-	// required it), fall back to @here so the reminder is not silent.
-	const mention = config.memberRoleId ? `<@&${config.memberRoleId}>` : "@here";
+	// ③ compose the mention. precedence is event override → guild member
+	// role → @here. The per-event override (event.mentionRoleId) lets a
+	// streamer schedule ping a "stream notifications" role while a sibling
+	// ROK KvK event in the same guild still pings the alliance member role.
+	// Falling back to memberRoleId preserves legacy behavior for every
+	// event created before mentionRoleId existed (the field loads as null).
+	// Final @here fallback only kicks in for legacy guild configs that
+	// predate /setup requiring a member role.
+	const roleId = event.mentionRoleId ?? config.memberRoleId;
+	const mention = roleId ? `<@&${roleId}>` : "@here";
 
 	// ④ post the message. allowedMentions is set explicitly so a malformed
-	// event description cannot accidentally ping @everyone.
+	// event description cannot accidentally ping @everyone. Mirrors the
+	// roleId resolution above so the role we name in `content` is the same
+	// role we whitelist in allowedMentions.
 	const message = await channel.send({
 		content: mention,
 		embeds: [embed],
-		allowedMentions: config.memberRoleId ? { roles: [config.memberRoleId] } : { parse: ["everyone"] },
+		allowedMentions: roleId ? { roles: [roleId] } : { parse: ["everyone"] },
 	});
 
 	// ⑤ add the acknowledgement reaction

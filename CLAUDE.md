@@ -87,7 +87,16 @@ Recovery: if the stored message was deleted by an admin, the next refresh repost
 - `TestReminderJob.ts` uses `Object.create(TextChannel.prototype)` inside tests to fake a TextChannel. If discord.js tightens its class internals this will need a `vi.mock("discord.js", ...)` swap.
 - The `_moduleAliases` block in `package.json` is runtime alias mapping for compiled JS. tsc-alias already rewrites aliases at build time, so the runtime mapping is likely redundant now. Low priority cleanup.
 
+## Dashboard signing contract
+
+Inbound requests from the nexious-server plugin proxy carry HMAC-SHA256 signatures in `x-timestamp` and `x-signature` headers, verified by `src/api/middleware/verifySignature.ts`. The canonical string format and rollout sequence are documented in the sibling company-uno repo at `rok-commander-signing-rollout.md`. Keep the bot's `canonicalizeQuery` in lockstep with the server's copy or every proxied request will 401.
+
+Env vars:
+- `DASHBOARD_API_KEY` — legacy shared secret for `x-api-key`
+- `DASHBOARD_SIGNING_SECRET` — HMAC secret for verifying signatures. When unset, the middleware transparently falls back to plain api key auth so the rollout can land one side at a time.
+
 ## Session continuity checklist
 1. Read this file.
 2. Read the testing strategy in the sibling `company-uno` repo at `rok-commander-testing-strategy.md` if test work is on the table.
 3. Remember that the dashboard lives in `company-uno/nexious-client/src/features/plugin-modules/` and has its own CLAUDE.md at the company-uno root.
+4. If touching API auth, read `company-uno/rok-commander-signing-rollout.md` first. The canonical string format must match the server byte for byte.

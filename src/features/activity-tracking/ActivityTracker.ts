@@ -47,11 +47,33 @@ export function registerActivityListeners(client: Client): void {
 				// is the critical invariant from the dashboard spec section 7.9.
 				if (log.offsetMinutes === BOT_CONSTANTS.REMINDER_LOG_OFFSETS.TEST) return;
 
+				// ── display name resolution ────────────────────────────
+				// What:  prefer the per guild nickname over the global Discord
+				//        username so the leaderboard reads as warriors know each
+				//        other in this kingdom (e.g. "Lord Silent" not the
+				//        opaque legacy handle "silent6804").
+				// Who:   every leaderboard / players list rendered by the
+				//        dashboard. activityStore.upsert writes this string into
+				//        PlayerActivity.username and the players API returns it
+				//        verbatim.
+				// When:  resolved at write time on every activity event so the
+				//        cached display name follows nickname renames within a
+				//        single occurrence. Older records keep the username
+				//        they had at the time of the activity (acceptable —
+				//        they reflect what was true that day).
+				// Where: the message guild gives us a GuildMember to read the
+				//        nickname from. Fallback to globalName (the new Discord
+				//        display name) and finally the legacy username so we
+				//        never write an empty string.
+				const guild = fullReaction.message.guild;
+				const member = guild ? await guild.members.fetch(fullUser.id).catch(() => null) : null;
+				const displayName = member?.displayName ?? fullUser.globalName ?? fullUser.username;
+
 				await activityStore.upsert({
 					eventId: log.eventId,
 					eventOccurrence: log.eventOccurrence,
 					userId: fullUser.id,
-					username: fullUser.username,
+					username: displayName,
 					data: {
 						acknowledgedReminder: true,
 						acknowledgedAt: new Date(),
@@ -75,7 +97,12 @@ export function registerActivityListeners(client: Client): void {
 			if (!member || member.user.bot) return;
 
 			const userId = member.id;
-			const username = member.user.username;
+			// member.displayName is the canonical "what to call this person in this
+			// guild" string in discord.js v14: it returns nickname when set, then
+			// globalName, then legacy username. Same precedence we use in the
+			// reaction listener so both code paths write the same string into
+			// PlayerActivity.username.
+			const username = member.displayName ?? member.user.globalName ?? member.user.username;
 
 			const joined = !oldState.channelId && newState.channelId;
 			const left = oldState.channelId && !newState.channelId;
@@ -152,7 +179,11 @@ export function registerActivityListeners(client: Client): void {
 			if (!activeEvent) return;
 
 			const userId = newPresence.member.id;
-			const username = newPresence.member.user.username;
+			// Same per guild displayName precedence as the voice and reaction
+			// listeners — keep the three write paths in sync so a leaderboard
+			// row never flips between nickname and raw username depending on
+			// which event happened to write last.
+			const username = newPresence.member.displayName ?? newPresence.member.user.globalName ?? newPresence.member.user.username;
 
 			await activityStore.upsert({
 				eventId: activeEvent.eventId,

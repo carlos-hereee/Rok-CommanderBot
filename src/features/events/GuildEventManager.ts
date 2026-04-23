@@ -49,6 +49,32 @@ export class GuildEventManager {
 			const config = await guildConfigStore.findByGuildId(guildId);
 			const announcementsChannelId = config?.announcementsChannelId ?? "";
 
+			// ── persist the canonical KvK season end ──────────────────
+			// What:  write input.seasonEnd to GuildConfig.kvkSeasonEnd so the
+			//        dashboard can derive it when an admin opts new events into
+			//        KvK mode. Single source of truth per guild.
+			// Who:   read by the events route (POST /api/events) when
+			//        announcementType is "kvk", and by the health endpoint that
+			//        the EventCreatePage hits to enable / disable the KvK
+			//        toggle.
+			// When:  every /configure-kvk-season invocation overwrites this so
+			//        rerunning the slash command rolls the season forward in a
+			//        single transaction with the new event rows below.
+			// Where: GuildConfig is created during /setup (autoSetup), so the
+			//        update path here always finds an existing row. If config
+			//        is missing we still proceed with event creation — the
+			//        rest of the slash command was already tolerant of that
+			//        edge — but log it so the field gap is visible.
+			// How:   fire and forget at this point would race with the dashboard
+			//        reading the value moments later. Awaiting the update keeps
+			//        the slash command response and the cached value in lock
+			//        step.
+			if (config) {
+				await guildConfigStore.update(guildId, { kvkSeasonEnd: input.seasonEnd });
+			} else {
+				console.warn(LOG_MESSAGES.guildEvent.configureKvkNoConfig(guildId));
+			}
+
 			// ── checklist resolution ──────────────────────────────
 			// What:  pick the prepSteps list applied to every event created in
 			//        this call. Admin chose "Customize" → use their typed list.

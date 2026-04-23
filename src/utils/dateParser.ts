@@ -20,6 +20,31 @@ export function parseEventDateTime(input: string, year = new Date().getUTCFullYe
 	return date;
 }
 
+// parses "MM/DD @HH:MM" → Date
+// used by streamer commands that need minute precision (the legacy
+// parseEventDateTime above only takes hour precision because ROK events
+// only ever start on the hour). Same MM/DD/year/UTC anchoring so the two
+// helpers behave identically aside from the minute granularity.
+export function parseEventDateTimeMinutes(input: string, year = new Date().getUTCFullYear()): Date | null {
+	// expected format: MM/DD@HH:MM (the @ may have surrounding spaces)
+	const match = input.trim().match(/^(\d{1,2})\/(\d{1,2})\s*@\s*(\d{1,2}):(\d{2})$/);
+	if (!match) return null;
+
+	const [, mm, dd, hh, mi] = match.map(Number);
+
+	if (mm < 1 || mm > 12) return null;
+	if (dd < 1 || dd > 31) return null;
+	if (hh < 0 || hh > 23) return null;
+	if (mi < 0 || mi > 59) return null;
+
+	const pad = (n: number) => String(n).padStart(2, "0");
+	const date = new Date(`${year}-${pad(mm)}-${pad(dd)}T${pad(hh)}:${pad(mi)}:00Z`);
+
+	if (date.getUTCMonth() + 1 !== mm) return null;
+
+	return date;
+}
+
 // parses "MM/DD" → Date at 00:00 UTC
 // used for Kau Karuak which always starts at midnight
 export function parseEventDate(input: string, year = new Date().getUTCFullYear()): Date | null {

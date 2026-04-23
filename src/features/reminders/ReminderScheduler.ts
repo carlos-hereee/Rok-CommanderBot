@@ -34,8 +34,49 @@ export function startScheduler(client: Client): void {
 			for (const event of events) {
 				const now = new Date();
 
+				// ── auto-resume from paused ──────────────────────────────
+				// Run BEFORE the paused skip check so a pause whose timer
+				// just expired resumes on this same tick instead of waiting
+				// one more cycle (a 60s delay is fine, but it would also
+				// silently delay the very first reminder if the next
+				// occurrence is also overdue — the cleaner contract is
+				// "auto-resume always wins on the tick it fires"). Both
+				// fields are cleared so the event behaves as if pause never
+				// happened: ReminderScheduler can fire, ScheduleBoard drops
+				// the paused tag on its next refresh.
+				if (event.paused && event.pausedUntil && now.getTime() >= new Date(event.pausedUntil).getTime()) {
+					await eventStore.update(event.eventId, { paused: false, pausedUntil: null });
+					event.paused = false;
+					event.pausedUntil = null;
+					// fall through into the rest of the loop
+				}
+
+				// ── paused ───────────────────────────────────────────────
+				// Streamers (and anyone else) can pause an event from the
+				// dashboard or via /pause-schedule. Paused events stay in
+				// the DB, still render on the schedule board (with a
+				// "paused" tag rendered by ScheduleBoard), still appear in
+				// /event-list — they simply skip the fire decision until
+				// /continue-schedule flips paused back to false.
+				//
+				// Why this lives BEFORE the seasonEnd check: a paused
+				// event whose seasonEnd happens to pass while it is paused
+				// should NOT auto archive. The streamer paused on purpose;
+				// archiving behind their back would silently destroy the
+				// schedule they configured. Skipping the whole loop body
+				// keeps both the season-end branch and the fire branch
+				// inert until they explicitly resume.
+				if (event.paused) continue;
+
 				// ── season ended ─────────────────────────────────────────
-				if (now > new Date(event.seasonEnd)) {
+				// Skip the season-end branch entirely for events without a
+				// seasonEnd (regular announcements, announcementType
+				// "regular"). Without this guard, new Date(null) becomes
+				// 1970-01-01 and every regular event would get archived
+				// and "season ended" announced on the very next tick. The
+				// happy path (legacy KvK events with a real Date) is
+				// unchanged.
+				if (event.seasonEnd && now > new Date(event.seasonEnd)) {
 					await eventStore.update(event.eventId, { active: false });
 					await announceSeasonEnd(client, event);
 					continue;
@@ -105,6 +146,17 @@ async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<voi
 
 		const channel = await client.channels.fetch(targetChannelId).catch(() => null);
 		if (!channel || !(channel instanceof TextChannel)) return;
+
+		// belt and suspenders: the caller already gates on event.seasonEnd
+		// being truthy, so this assertion narrows the type for the two
+		// new Date() calls below without a non-null bang. If we ever
+		// reach here with a null value it is a programmer error upstream
+		// and a thrown error is more useful than a silently corrupt
+		// reminder log row keyed off the unix epoch.
+		if (!event.seasonEnd) {
+			console.error(LOG_MESSAGES.scheduler.seasonEndCalledWithoutDate(event.guildId, event.eventId));
+			return;
+		}
 
 		// check if we already announced for this event
 		// prevents announcing multiple times if cron ticks again

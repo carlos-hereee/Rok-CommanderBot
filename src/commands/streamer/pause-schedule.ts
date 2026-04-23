@@ -1,0 +1,121 @@
+import {
+	SlashCommandBuilder,
+	ChatInputCommandInteraction,
+	AutocompleteInteraction,
+	PermissionFlagsBits,
+	MessageFlags,
+} from "discord.js";
+import { eventStore } from "@db/stores/eventStore.js";
+import { embedContent } from "@base/constants/embed-content.js";
+import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
+import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
+import { LOG_MESSAGES } from "@base/constants/log-messages.js";
+
+// ── /pause-schedule ───────────────────────────────────────────────────
+// What:  flips event.paused to true, optionally with a pausedUntil date.
+//        The schedule keeps existing in the DB (and on the schedule
+//        board, with a paused tag) but ReminderScheduler skips its fire
+//        decision until paused is cleared.
+// Who:   streamers and KvK admins both — anyone who needs to silence a
+//        recurring event without losing the configuration.
+// When:  on demand. The optional days arg lets the streamer say "pause
+//        for two weeks" and the scheduler will auto-resume; omitting it
+//        means "paused indefinitely, I'll come back and run /continue".
+// Where: writes the Event document via eventStore.update, then kicks a
+//        schedule board refresh so the paused tag appears immediately.
+// How:   ① autocomplete on `name` lists active events; ② days arg gates
+//        on a sane range (1–90); ③ idempotent — if already paused we
+//        update the pausedUntil but report "already paused" rather than
+//        re-pausing silently.
+
+const c = embedContent.pauseSchedule;
+
+export const data = new SlashCommandBuilder()
+	.setName("pause-schedule")
+	.setDescription("Pause reminders for a recurring event without deleting it")
+	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+	.addStringOption((option) =>
+		option.setName("name").setDescription("Which schedule to pause").setRequired(true).setAutocomplete(true)
+	)
+	.addIntegerOption((option) =>
+		option
+			.setName("days")
+			.setDescription("Auto-resume after this many days (omit for indefinite pause)")
+			.setRequired(false)
+			.setMinValue(1)
+			.setMaxValue(90)
+	);
+
+export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+	if (!interaction.guildId) {
+		await interaction.respond([]);
+		return;
+	}
+	// Show only ACTIVE events. A soft-deleted event cannot be paused —
+	// pausing it would do nothing because the scheduler ignores
+	// active:false events anyway. Listing them would just confuse the
+	// streamer ("why does pausing not show on the board?").
+	const events = await eventStore.findByGuildId(interaction.guildId);
+	await interaction.respond(events.slice(0, 25).map((e) => ({ name: e.name, value: e.eventId })));
+}
+
+export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+	const guildId = interaction.guildId;
+	if (!guildId) {
+		await interaction.reply({ embeds: [errorEmbed("Run this in a server, not a DM.")], flags: MessageFlags.Ephemeral });
+		return;
+	}
+
+	const eventId = interaction.options.getString("name", true);
+	const days = interaction.options.getInteger("days", false);
+
+	const event = await eventStore.findById(eventId);
+	// 404 with the same wording for "missing" and "wrong guild" — never
+	// confirm that an event exists in another guild. Same invariant the
+	// HTTP routes uphold.
+	if (!event || event.guildId !== guildId) {
+		await interaction.reply({ embeds: [errorEmbed(c.notFound)], flags: MessageFlags.Ephemeral });
+		return;
+	}
+
+	// Idempotency. If they re-pause an already paused event we surface
+	// the "already paused" message rather than silently re-writing — the
+	// streamer probably forgot they paused it last week.
+	if (event.paused) {
+		await interaction.reply({ embeds: [errorEmbed(c.alreadyPaused(event.name))], flags: MessageFlags.Ephemeral });
+		return;
+	}
+
+	// Compute pausedUntil from the optional days arg. Anchored to "now"
+	// (UTC, server clock) so the streamer running the command at noon
+	// Friday with `days:7` gets a noon-Friday-next-week resume. The
+	// scheduler does the auto-flip on the next cron tick at or after
+	// pausedUntil — no per-event setTimeout needed.
+	let pausedUntil: Date | null = null;
+	if (days !== null) {
+		pausedUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+	}
+
+	try {
+		await eventStore.update(event.eventId, { paused: true, pausedUntil });
+
+		const successText = pausedUntil
+			? c.pausedUntil(event.name, Math.floor(pausedUntil.getTime() / 1000))
+			: c.paused(event.name);
+
+		await interaction.reply({
+			embeds: [infoEmbed("⏸️ Schedule paused", successText, embedContent.COLORS.SCHEDULE)],
+			flags: MessageFlags.Ephemeral,
+		});
+
+		// Fire-and-forget board refresh so the paused tag renders right
+		// away. Failure here is logged, not surfaced — the DB write is
+		// the source of truth and the next refresh tick will catch up.
+		refreshSchedule(interaction.client, guildId).catch((err) =>
+			console.error(LOG_MESSAGES.schedule.refreshAfterRouteFailed("/pause-schedule"), err)
+		);
+	} catch (err) {
+		console.error("[pause-schedule] update failed", err);
+		await interaction.reply({ embeds: [errorEmbed(c.failed)], flags: MessageFlags.Ephemeral });
+	}
+}

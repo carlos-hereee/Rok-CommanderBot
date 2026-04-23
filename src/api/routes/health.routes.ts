@@ -1,0 +1,73 @@
+import { Router, Request, Response } from "express";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
+import { requireGuildId } from "../middleware/requireGuildId.js";
+
+// ── Guild-aware health ──────────────────────────────────────────────────────
+// What:  GET /api/health/guild?guildId=... returns whether THIS bot knows the
+//        given guild and has completed setup. This is the endpoint behind the
+//        dashboard's "Test Connection" button. The plain liveness endpoints
+//        (/health and /api/health) live in server.ts and answer "is the
+//        process alive" without consulting Mongo or guild scope.
+// Who:   PluginContext.checkHealth on the dashboard, called from
+//        PluginSettings's Test Connection button AND at EventCreatePage
+//        mount so the page can disable the KvK toggle when no season is
+//        configured. Hitting this endpoint with a bogus guildId (e.g.
+//        999999999999999999) was previously returning success because the
+//        old /api/health handler ignored the guildId param entirely.
+// When:  on every owner-initiated Test Connection click and on
+//        EventCreatePage mount.
+// Where: mounted AFTER verifySignature so it inherits the dashboard signing
+//        contract. The plain /health and /api/health remain pre-signature
+//        for Railway/Render watchdogs that have no signing key.
+// How:   look up GuildConfig by guildId.
+//          - missing config        → 404 + { ok: false, reason: "guild_not_found" }
+//          - present but unfinished → 200 + { ok: false, reason: "guild_setup_incomplete" }
+//          - present and finished  → 200 + { ok: true, kvkSeasonEnd }
+//        404 (not 403) on miss is deliberate: the bot follows the same
+//        existence-non-leakage rule as the rest of the API (CLAUDE.md
+//        invariant #2). A signature-verified caller that just typoed a
+//        digit gets the same 404 a probing attacker would.
+//
+//        kvkSeasonEnd is only included on the success path. The dashboard
+//        reads it to decide whether the KvK announcement toggle should be
+//        enabled on EventCreatePage. null means "no active season — run
+//        /configure-kvk-season first" and the dashboard greys out the
+//        toggle with a hint pointing at the slash command.
+export const healthRouter = Router();
+
+healthRouter.get("/guild", async (req: Request, res: Response) => {
+	const guildId = requireGuildId(req, res);
+	if (guildId === null) return;
+
+	try {
+		const config = await guildConfigStore.findByGuildId(guildId);
+		if (!config) {
+			res.status(404).json({ ok: false, reason: "guild_not_found" });
+			return;
+		}
+		if (!config.setupComplete) {
+			// 200 (not 4xx) because the guild IS known to this bot — the
+			// caller's input was valid. This is informational status, not
+			// failure: the dashboard can render "bot is in your server but
+			// /setup has not been run yet" with a CTA to finish setup.
+			res.status(200).json({ ok: false, reason: "guild_setup_incomplete" });
+			return;
+		}
+		// Surface the canonical KvK season end alongside the ok flag so the
+		// dashboard can derive UI state (toggle enabled / disabled, hint
+		// copy) without a second round trip. ISO string keeps the wire
+		// format JSON friendly. null when no season has been configured
+		// yet — the dashboard treats that as "KvK toggle off, point user
+		// at /configure-kvk-season".
+		res.status(200).json({
+			ok: true,
+			kvkSeasonEnd: config.kvkSeasonEnd ? new Date(config.kvkSeasonEnd).toISOString() : null,
+		});
+	} catch (error) {
+		// Don't leak Mongo errors to the dashboard. A real outage shows up
+		// as ok:false and the user is told to try again — same UX as a
+		// transient network hiccup.
+		console.error("[health/guild] lookup failed:", error);
+		res.status(500).json({ ok: false, reason: "internal_error" });
+	}
+});

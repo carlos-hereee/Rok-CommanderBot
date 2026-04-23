@@ -32,7 +32,8 @@ export const embedContent = {
 		title: "📅 Active KvK Events",
 		noEvents:
 			"📭 No active events are configured for this server yet.\n\n" +
-			"Run `/configure-kvk-season` to set up the season schedule.",
+			"Streamers: run `/configure-stream-schedule` for weekly streams or `/announce-stream` for one-offs.\n" +
+			"ROK alliances: run `/configure-kvk-season` to set up the season schedule.",
 		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
 		nextOccurrenceLabel: "Next occurrence",
 		scheduledDateLabel: "Scheduled date",
@@ -256,12 +257,32 @@ export const embedContent = {
 				"These are the tools of your trade. Go on — wield them with purpose.\n" + "Learn them. Use them. **Impress me.**",
 			fields: [
 				{
-					name: "⚔️ Event Commands",
+					// ROK-specific commands stay grouped together so a
+					// streamer skimming the guide can ignore them at a
+					// glance. The "ROK only" tag in the kvk command's own
+					// description reinforces that boundary in Discord's
+					// command picker too.
+					name: "⚔️ ROK KvK Commands",
 					value: [
-						"`/configure-kvk-season` — Configure KvK event reminders",
-						"`/list-events` — View all configured events",
-						"`/delete-event` — Remove a configured event",
+						"`/configure-kvk-season` — ROK only: set up Ruins, Altar, and Kau Karuak reminders for the current KvK season",
 					].join("\n"),
+				},
+				{
+					// General-purpose schedule primitives. Work for any
+					// recurring or one-off event — streams, raid nights,
+					// game sessions, content premieres.
+					name: "📺 Stream / General Schedule Commands",
+					value: [
+						"`/configure-stream-schedule` — Set up a weekly recurring reminder on a fixed day and time",
+						"`/announce-stream` — Schedule a one-off reminder for a specific future date and time",
+						"`/go-live-soon` — Post a quick going-live announcement (one-shot, no reminder)",
+						"`/pause-schedule` — Pause reminders for a recurring event without deleting it",
+						"`/continue-schedule` — Resume a paused recurring event",
+					].join("\n"),
+				},
+				{
+					name: "📋 Event Management",
+					value: ["`/list-events` — View all configured events", "`/delete-event` — Remove a configured event"].join("\n"),
 				},
 				{
 					name: "🏆 Leaderboard Commands",
@@ -405,5 +426,110 @@ export const embedContent = {
 		},
 		setupRequired:
 			"⚠️ **My throne has not been constructed.**\n\n" + "An admin must run `/setup` before any commands can be used.",
+	},
+
+	// ── streamer / general schedule copy ──────────────────────────
+	// Copy lives on this same constants file (same audit point as the
+	// kingdom voice) but speaks plainly. Streamers want a working
+	// schedule, not a roleplay. Voice still leans casual gamer — Discord
+	// communities skew that way and the streamer who first asked for the
+	// bot is in that audience.
+	streamSchedule: {
+		setupRequired: "Run `/setup` first so the bot has an announcements channel to post in.",
+		invalidTime: "Time invalid. Use 24h `HH:MM` like `19:30` or `09:00`.",
+		invalidDay: "Day invalid. Pick one of: monday, tuesday, wednesday, thursday, friday, saturday, sunday.",
+		alreadyExists: (name: string) =>
+			`A schedule named **${name}** already exists. Pause it with \`/pause-schedule\` or pick a different name.`,
+		// Confirmation embed that previews the schedule before persisting.
+		// Times use Discord <t:UNIX:t> so each viewer sees their local time.
+		confirm: {
+			title: "📺 Confirm stream schedule",
+			description: (name: string, dayLabel: string, nextOccurrenceUnix: number) =>
+				[
+					`**${name}** — every **${dayLabel}**.`,
+					`Next stream: <t:${nextOccurrenceUnix}:F> (<t:${nextOccurrenceUnix}:R>)`,
+					"",
+					"Reminders fire at the offsets configured for this guild (default: 30 and 15 minutes before).",
+				].join("\n"),
+			// Three line summary of who gets pinged and where.
+			audienceLine: (mentionRoleId: string | null, channelId: string) =>
+				mentionRoleId
+					? `Pinging <@&${mentionRoleId}> in <#${channelId}>.`
+					: `Pinging the guild member role in <#${channelId}>.`,
+			// Optional auto-pause cap. Shown only when the streamer set a duration.
+			autoPauseLine: (untilUnix: number) => `Auto-pauses on <t:${untilUnix}:F> (<t:${untilUnix}:R>) unless extended.`,
+			confirmButtonLabel: "✅ Save schedule",
+			cancelButtonLabel: "✖️ Cancel",
+		},
+		cancelled: "Cancelled. Nothing was saved.",
+		timedOut: "Timed out. Run the command again when ready.",
+		saved: (name: string) => `✅ **${name}** is live. The bot will post reminders before every stream.`,
+		saveFailed: "Could not save the schedule. Try again — if it keeps failing, ping the bot owner.",
+	},
+
+	// ── pause / continue ──────────────────────────────────────────
+	pauseSchedule: {
+		notFound: "No schedule by that name. Use `/event-list` to see what is configured.",
+		alreadyPaused: (name: string) => `**${name}** is already paused.`,
+		paused: (name: string) => `⏸️ **${name}** paused. Resume with \`/continue-schedule name:${name}\`.`,
+		pausedUntil: (name: string, untilUnix: number) =>
+			`⏸️ **${name}** paused until <t:${untilUnix}:F> (<t:${untilUnix}:R>). It will resume automatically.`,
+		invalidDuration: "Duration invalid. Use a positive number of days, max 90.",
+		alreadyActive: (name: string) => `**${name}** is already active.`,
+		resumed: (name: string) => `▶️ **${name}** resumed. Reminders will fire on the next scheduled time.`,
+		failed: "Could not update the schedule. Try again.",
+	},
+
+	// ── /go-live-soon (panic button) ──────────────────────────────
+	// Drops a one-off announcement for a stream starting in the next few
+	// hours. NOT a recurring event — this is a single now-ish nudge, the
+	// kind a streamer fires from the green room when life happened and
+	// they did not pre-announce.
+	goLiveSoon: {
+		setupRequired: "Run `/setup` first so the bot has an announcements channel to post in.",
+		invalidLeadTime: "Pick a lead time from the list (now / 10m / 30m / 1h / 3h / 6h).",
+		// Renders inline in the announcement body. Streamer-typed `note`
+		// is appended verbatim under this header (Discord will sanitize
+		// the markdown but the bot still does not allowedMentions @everyone).
+		announcementTitle: "📺 Going live soon",
+		announcementBody: (leadLabel: string, startUnix: number, note: string | null) =>
+			[
+				`Stream starts **${leadLabel}** — <t:${startUnix}:t> (<t:${startUnix}:R>).`,
+				note ? `\n${note}` : "",
+			]
+				.filter(Boolean)
+				.join("\n"),
+		posted: "✅ Announcement posted.",
+		postFailed: "Could not post the announcement. Check bot permissions on the announcements channel.",
+	},
+
+	// ── /announce-stream (planned standalone) ─────────────────────
+	// Different from /go-live-soon: this is for a planned one-off stream
+	// happening hours or days from now. Same primitive (one-time event),
+	// stricter input (explicit date+time, optional title and description).
+	announceStream: {
+		setupRequired: "Run `/setup` first so the bot has an announcements channel to post in.",
+		invalidDateTime: "Date/time invalid. Use `MM/DD @HH:MM` like `04/26 @19:30`.",
+		dateInPast: "That time is already in the past. Pick a future date and time.",
+		confirm: {
+			title: "📺 Confirm planned stream",
+			description: (title: string, startUnix: number) =>
+				[
+					`**${title}**`,
+					`Starts: <t:${startUnix}:F> (<t:${startUnix}:R>)`,
+					"",
+					"Reminders fire at the offsets configured for this guild (default: 30 and 15 minutes before).",
+				].join("\n"),
+			audienceLine: (mentionRoleId: string | null, channelId: string) =>
+				mentionRoleId
+					? `Pinging <@&${mentionRoleId}> in <#${channelId}>.`
+					: `Pinging the guild member role in <#${channelId}>.`,
+			confirmButtonLabel: "✅ Schedule it",
+			cancelButtonLabel: "✖️ Cancel",
+		},
+		cancelled: "Cancelled. Nothing was saved.",
+		timedOut: "Timed out. Run the command again when ready.",
+		saved: (title: string) => `✅ **${title}** scheduled. The bot will post reminders before it starts.`,
+		saveFailed: "Could not schedule the stream. Try again.",
 	},
 };

@@ -59,6 +59,13 @@ export const LOG_MESSAGES = {
 		tickError: "Scheduler error:",
 		seasonEndNoChannel: (guildId: string) => `[season-end] no channel available for guild ${guildId}`,
 		seasonEndFailed: "Failed to announce season end:",
+		// Defensive: announceSeasonEnd should never be reached for an event
+		// without a seasonEnd Date — the cron tick already gates on that.
+		// If this fires, the scheduler called the announce path with a
+		// regular event, which would have written reminder log rows keyed
+		// off the unix epoch. Investigate the upstream caller.
+		seasonEndCalledWithoutDate: (guildId: string, eventId: string) =>
+			`[season-end] guard fired: event ${eventId} in guild ${guildId} has no seasonEnd; skipping announce`,
 	},
 
 	// ── setup ──────────────────────────────────────────────────────────
@@ -187,6 +194,12 @@ export const LOG_MESSAGES = {
 	// ── guild event manager ────────────────────────────────────────────
 	guildEvent: {
 		configureKvkFailed: "Failed to configure KvK season:",
+		// Logged when /configure-kvk-season runs against a guild with no
+		// GuildConfig row — events still get created but kvkSeasonEnd cannot
+		// be persisted, so the dashboard's KvK toggle will read as
+		// "no active season" until /setup populates the config.
+		configureKvkNoConfig: (guildId: string) =>
+			`[guild-event] no GuildConfig found for guild ${guildId} — kvkSeasonEnd not persisted; run /setup first`,
 	},
 
 	// ── main / entry point ─────────────────────────────────────────────

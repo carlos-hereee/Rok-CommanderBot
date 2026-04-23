@@ -81,13 +81,17 @@ export async function fireTestReminder(client: Client, event: IGameEvent): Promi
 	// so it cannot be accidentally removed by a caller.
 	const embed = testReminderEmbed(event, nextOccurrence);
 
-	// ④ post the message. the real ReminderJob pings <@&memberRoleId>; for the
-	// test fire we render the same mention text so the preview is faithful,
-	// but set allowedMentions: { parse: [] } so nobody actually receives a
-	// notification. this matches the spec invariant: the test fire must never
-	// ping the whole channel or the alliance every time the admin clicks the
-	// button.
-	const mentionPreview = config.memberRoleId ? `<@&${config.memberRoleId}>` : "@here";
+	// ④ post the message. the real ReminderJob pings the per-event mention
+	// override first, then the guild member role, then @here. We mirror that
+	// precedence here so the test fire preview shows exactly which role the
+	// real fire would have pinged — a streamer testing /configure-stream-schedule
+	// needs to see the stream-notifications role in the preview, not the
+	// alliance member role. allowedMentions stays { parse: [] } so the role
+	// renders as a styled mention without anyone actually being notified.
+	// This matches the spec invariant: the test fire must never ping the whole
+	// channel or any role every time the admin clicks the button.
+	const previewRoleId = event.mentionRoleId ?? config.memberRoleId;
+	const mentionPreview = previewRoleId ? `<@&${previewRoleId}>` : "@here";
 	let message;
 	try {
 		message = await channel.send({

@@ -45,7 +45,14 @@ export async function refreshSchedule(client: Client, guildId: string): Promise<
 
 		const events = await eventStore.findByGuildId(guildId);
 		const now = new Date();
-		const seasonEnded = events.length > 0 && events.every((e) => new Date(e.seasonEnd).getTime() <= now.getTime());
+		// Season ended state only applies to KvK events. Regular announcements
+		// (seasonEnd null/undefined) are filtered out of the calculation
+		// entirely because they have no season scope. Truthy check covers
+		// both null and the undefined Mongoose returns when the field was
+		// never set on a document. If a guild has only regular events the
+		// schedule never enters the "season ended" rendering.
+		const kvkEvents = events.filter((e) => Boolean(e.seasonEnd));
+		const seasonEnded = kvkEvents.length > 0 && kvkEvents.every((e) => new Date(e.seasonEnd as Date).getTime() <= now.getTime());
 
 		const fields: IScheduleField[] = events
 			.map((event) => toField(event as IGameEvent))
@@ -88,12 +95,23 @@ function toField(event: IGameEvent): IScheduleField {
 	// season_ in the embed.
 	const nextOccurrenceTs = next ? Math.floor(next.getTime() / 1000) : null;
 
+	// Regular announcements have no seasonEnd, so we omit the timestamp
+	// (null) and the embed builder hides the "Season ends" line for that
+	// row. KvK events keep the historical behavior — a unix timestamp
+	// rendered as a Discord <t:…:D> date in the embed.
+	const seasonEndTs = event.seasonEnd ? Math.floor(new Date(event.seasonEnd).getTime() / 1000) : null;
+
 	return {
 		name: event.name,
 		type: event.type,
 		nextOccurrenceTs,
 		intervalHours: event.type === "recurring" ? event.intervalHours : null,
-		seasonEndTs: Math.floor(new Date(event.seasonEnd).getTime() / 1000),
+		seasonEndTs,
+		// Forward the live paused flag straight to the embed builder.
+		// Truthy paused renders the row with a "paused" tag and a pause
+		// notice line; falsy/absent leaves the row visually identical to
+		// the legacy KvK rendering.
+		paused: event.paused,
 	};
 }
 

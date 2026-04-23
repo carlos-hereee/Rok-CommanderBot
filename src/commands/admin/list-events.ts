@@ -39,12 +39,17 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			nextOccurrenceTs = Math.floor((next ?? new Date(event.firstOccurrence)).getTime() / 1000);
 		}
 
+		// Regular announcements have no seasonEnd. Send null through to the
+		// embed so it hides the "Season ends" line for that row instead of
+		// rendering an Invalid Date string from a null Date.
+		const seasonEndTs = event.seasonEnd ? Math.floor(new Date(event.seasonEnd).getTime() / 1000) : null;
+
 		return {
 			name: event.name,
 			type: event.type as "recurring" | "one-time",
 			nextOccurrenceTs,
 			intervalHours: event.type === "recurring" ? event.intervalHours : null,
-			seasonEndTs: Math.floor(new Date(event.seasonEnd).getTime() / 1000),
+			seasonEndTs,
 		};
 	});
 

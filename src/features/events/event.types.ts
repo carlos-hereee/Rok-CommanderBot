@@ -7,7 +7,21 @@ export interface IGameEvent {
 	type: "recurring" | "one-time";
 	intervalHours: number;
 	firstOccurrence: Date;
-	seasonEnd: Date;
+	// nullable AND optional: KvK events have a season anchor (inherited
+	// from GuildConfig.kvkSeasonEnd at create time), regular announcements
+	// leave it null and never auto archive. ReminderScheduler and
+	// ScheduleBoard guard with truthy checks before reading it.
+	//
+	// The `?` (optional property) is required, not just `| undefined`.
+	// Mongoose's inferred document type marks the field as truly optional
+	// when the schema sets `required: false`, and TypeScript distinguishes
+	// `T | undefined` (required prop, may be undefined) from `T?` (prop
+	// may be absent). Without `?` here every Mongoose-typed event flowing
+	// into a function that takes IGameEvent fails with TS2345
+	// ("property is optional in source but required in target"). Treat
+	// undefined the same as null at every read site — there is no
+	// semantic difference between "field absent" and "field explicitly null".
+	seasonEnd?: Date | null;
 	reminderOffsets: readonly number[]; // ← was number[]
 	// NOTE: there is no per-event channel field. reminders always post to the
 	// guild's announcements channel, resolved at fire time from GuildConfig.
@@ -16,6 +30,25 @@ export interface IGameEvent {
 	guildId: string;
 	prepSteps: readonly IPrepStep[]; // ← was IPrepStep[]
 	active: boolean;
+	// Optional per-event override of the role mentioned when this fires.
+	// Same `?` reasoning as seasonEnd above: Mongoose's inferred document
+	// type marks `required: false` fields as truly optional (T?), so the
+	// interface must use `?` not `| undefined` or call sites that read a
+	// freshly fetched document fail with TS2345. ReminderJob and
+	// TestReminderJob both treat undefined and null identically and fall
+	// back to GuildConfig.memberRoleId.
+	mentionRoleId?: string | null;
+	// Pause flag — when true, ReminderScheduler skips this event on every
+	// cron tick. Defaulted in the schema, so this is non-optional in the
+	// interface: every event has an explicit boolean, and call sites can
+	// gate cleanly without a truthy check.
+	paused: boolean;
+	// Optional auto-resume timestamp paired with paused:true. Same `?`
+	// reasoning as seasonEnd / mentionRoleId — Mongoose marks
+	// `required:false` fields as truly optional in the inferred document
+	// type. Null means "paused indefinitely". ReminderScheduler clears
+	// both paused and pausedUntil when this date passes.
+	pausedUntil?: Date | null;
 	createdAt?: Date;
 	updatedAt?: Date;
 }

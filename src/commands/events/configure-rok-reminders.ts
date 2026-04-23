@@ -21,7 +21,7 @@ const { configureReminders } = embedContent;
 
 export const data = new SlashCommandBuilder()
 	.setName("configure-kvk-season")
-	.setDescription("Configure reminders for all ROK KvK events")
+	.setDescription("ROK only — set up Ruins, Altar, and Kau Karuak reminders for the current KvK season")
 	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
 	// ── season ───────────────────────────────────────────────

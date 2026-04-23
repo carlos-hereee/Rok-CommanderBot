@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { Client } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { fireTestReminder } from "@features/reminders/TestReminderJob.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { requireGuildId } from "../middleware/requireGuildId.js";
@@ -84,6 +85,46 @@ export function createEventsRouter(client: Client): Router {
 			// shape does not get a confusing silent success. the single source
 			// of truth for where a reminder posts is guildConfig.announcementsChannelId.
 			delete body.channelId;
+
+			// ── announcement type → seasonEnd derivation ──────────────
+			// What:  the dashboard form picks "kvk" or "regular" up front.
+			//        kvk inherits seasonEnd from GuildConfig.kvkSeasonEnd
+			//        (single source of truth per guild). regular has no
+			//        season scope and stores null.
+			// Who:   EventCreatePage on the dashboard sends announcementType.
+			//        Legacy clients that omit the field fall through to the
+			//        backward-compatible path: if body.seasonEnd is present
+			//        we honor it as before (covers the slash command's
+			//        in-process create call too).
+			// When:  every POST /api/events. Pure validation step before
+			//        eventStore.create touches Mongo.
+			// Where: announcementType never lands in the document — it is
+			//        the form's choice, the persisted value is seasonEnd
+			//        (Date or null). Stripped after derivation so mongoose
+			//        strict mode does not drop it as a silent no-op.
+			// How:   ① if announcementType is "kvk" we look up the guild's
+			//        kvkSeasonEnd; missing → 400 with a hint pointing to
+			//        /configure-kvk-season. ② "regular" forces seasonEnd
+			//        to null even if the body sent a stale date. ③ unset
+			//        keeps body.seasonEnd as the caller passed it (legacy
+			//        and slash command paths both supply it directly).
+			const announcementType = body.announcementType as "kvk" | "regular" | undefined;
+			if (announcementType === "kvk") {
+				const config = await guildConfigStore.findByGuildId(guildId);
+				const seasonEnd = config?.kvkSeasonEnd ?? null;
+				if (!seasonEnd) {
+					res.status(400).json({
+						error: "No active KvK season",
+						detail: "Run /configure-kvk-season in Discord before creating KvK events.",
+					});
+					return;
+				}
+				body.seasonEnd = seasonEnd;
+			} else if (announcementType === "regular") {
+				body.seasonEnd = null;
+			}
+			delete body.announcementType;
+
 			const event = await eventStore.create(body);
 			res.status(201).json({ data: event });
 			kickScheduleRefresh(client, guildId, "POST /api/events");
@@ -151,9 +192,40 @@ export function createEventsRouter(client: Client): Router {
 			// a different guild. returning 404 (not 403) for the wrong-guild
 			// case is deliberate: do not leak the existence of events belonging
 			// to other guilds.
+			//
+			// Diagnostic logging: the public response stays a generic 404 (no
+			// existence leak), but we log the discriminating reason server-side
+			// so the next time a user reports "test reminder 404s on this
+			// event" we can read the bot console and see whether the doc is
+			// missing entirely or whether the requesting guildId does not match
+			// the doc's guildId. The wrong-guild branch is the most likely
+			// real-world cause: it fires when an admin's pluginConfig.guildId
+			// on companyuno was changed after events were created under the
+			// previous guildId, and the dashboard's stale cached event list
+			// still references those orphaned eventIds.
 			const event = await eventStore.findById(req.params.eventId);
-			if (!event || event.guildId !== guildId) {
-				res.status(404).json({ error: "Event not found" });
+			if (!event) {
+				console.warn(
+					`[test-reminder] 404 reason=missing eventId=${req.params.eventId} guildId=${guildId}`
+				);
+				res.status(404).json({
+					error: "Event not found",
+					detail: "This event no longer exists. Refresh the page to load the current list.",
+				});
+				return;
+			}
+			if (event.guildId !== guildId) {
+				console.warn(
+					`[test-reminder] 404 reason=guild-mismatch eventId=${req.params.eventId} requestedGuildId=${guildId} eventGuildId=${event.guildId} eventActive=${event.active}`
+				);
+				// Public detail intentionally vague — never confirm or deny that the
+				// event exists in another guild. The hint nudges the owner toward
+				// the most common cause (stale dashboard list after a guildId swap)
+				// without leaking whether the guild check actually fired.
+				res.status(404).json({
+					error: "Event not found",
+					detail: "This event no longer exists. Refresh the page to load the current list.",
+				});
 				return;
 			}
 

@@ -7,7 +7,10 @@ interface IListEventField {
 	type: "recurring" | "one-time";
 	nextOccurrenceTs: number; // unix seconds
 	intervalHours: number | null; // null for one-time
-	seasonEndTs: number; // unix seconds
+	// unix seconds. null for regular announcements that opted out of the
+	// KvK season scope (announcementType "regular"). The list embed hides
+	// the "Season ends" line for those rows entirely.
+	seasonEndTs: number | null;
 }
 
 export function listEventsEmbed(fields: IListEventField[], announcementsChannelId: string | null = null): EmbedBuilder {
@@ -26,7 +29,12 @@ export function listEventsEmbed(fields: IListEventField[], announcementsChannelI
 		if (field.type === "recurring" && field.intervalHours !== null) {
 			lines.push(c.intervalLabel(field.intervalHours));
 		}
-		lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
+		// Regular announcements skip the "Season ends" line. See IScheduleField
+		// notes — same reasoning, the embed must not render "Invalid Date"
+		// when the field is null.
+		if (field.seasonEndTs !== null) {
+			lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
+		}
 
 		embed.addFields({ name: c.fieldName(field.name, field.type), value: lines.join("\n"), inline: false });
 	}
@@ -104,7 +112,15 @@ export interface IScheduleField {
 	// (one-time event already in the past, but still active).
 	nextOccurrenceTs: number | null;
 	intervalHours: number | null;
-	seasonEndTs: number;
+	// unix seconds. null for regular announcements that opted out of the
+	// KvK season scope (announcementType "regular"). The schedule embed
+	// hides the "Season ends" line for those rows entirely.
+	seasonEndTs: number | null;
+	// when true, the row renders with a "paused" tag in the field name and a
+	// short "Reminders paused" line in the body. Caller (ScheduleBoard.toField)
+	// reads event.paused directly so the board reflects the live DB state on
+	// every refresh tick.
+	paused?: boolean;
 }
 
 export function scheduleBoardEmbed(
@@ -129,6 +145,16 @@ export function scheduleBoardEmbed(
 		const lines: string[] = [];
 		const occurrenceLabel = field.type === "recurring" ? c.nextOccurrenceLabel : c.scheduledDateLabel;
 
+		// Paused rows lead with the pause notice so the eye lands on it
+		// before the timestamps. The next-occurrence math still runs
+		// (occurrences are pure schedule arithmetic) but readers should
+		// treat them as "would have fired" not "will fire". When paused
+		// is false/absent (the historical default for KvK + legacy events)
+		// this line is omitted entirely so the existing layout is unchanged.
+		if (field.paused) {
+			lines.push("⏸️ _Reminders paused — resume with `/continue-schedule`_");
+		}
+
 		if (field.nextOccurrenceTs !== null) {
 			// both relative ("in 2 hours") and full date, so Mortals in any
 			// timezone see a correct local time.
@@ -141,9 +167,19 @@ export function scheduleBoardEmbed(
 			lines.push(c.intervalLabel(field.intervalHours));
 		}
 
-		lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
+		// Hide the "Season ends" line for regular announcements that have
+		// no season anchor. Without the guard, null becomes "<t:null:D>" —
+		// Discord renders that as a literal "Invalid Date" string in the
+		// embed which looks like a bug to admins reading the schedule.
+		if (field.seasonEndTs !== null) {
+			lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
+		}
 
-		embed.addFields({ name: c.fieldName(field.name, field.type), value: lines.join("\n"), inline: false });
+		// Field name carries a "[paused]" tag so a glance at the bolded
+		// header is enough to spot which schedules are inert. Active rows
+		// fall through unchanged.
+		const headerName = field.paused ? `${c.fieldName(field.name, field.type)} · ⏸️ paused` : c.fieldName(field.name, field.type);
+		embed.addFields({ name: headerName, value: lines.join("\n"), inline: false });
 	}
 
 	return embed;
