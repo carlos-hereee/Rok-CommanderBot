@@ -84,3 +84,5 @@ scripts/*
 dist/
 
 .claude
+
+/readMePlans

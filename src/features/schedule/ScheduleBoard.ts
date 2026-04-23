@@ -108,10 +108,12 @@ function toField(event: IGameEvent): IScheduleField {
 		intervalHours: event.type === "recurring" ? event.intervalHours : null,
 		seasonEndTs,
 		// Forward the live paused flag straight to the embed builder.
-		// Truthy paused renders the row with a "paused" tag and a pause
-		// notice line; falsy/absent leaves the row visually identical to
-		// the legacy KvK rendering.
-		paused: event.paused,
+		// Coerce the Mongoose-inferred `boolean | null | undefined` down
+		// to a clean boolean so IScheduleField stays narrow — the embed
+		// builder never needs to distinguish "false" from "unset". All
+		// three falsy states map to "not paused", which matches how the
+		// scheduler and /pause-schedule both interpret the field.
+		paused: event.paused === true,
 	};
 }
 

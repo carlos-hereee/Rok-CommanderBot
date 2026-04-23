@@ -39,10 +39,15 @@ export interface IGameEvent {
 	// back to GuildConfig.memberRoleId.
 	mentionRoleId?: string | null;
 	// Pause flag — when true, ReminderScheduler skips this event on every
-	// cron tick. Defaulted in the schema, so this is non-optional in the
-	// interface: every event has an explicit boolean, and call sites can
-	// gate cleanly without a truthy check.
-	paused: boolean;
+	// cron tick. Same `?` + `| null` shape as seasonEnd / mentionRoleId /
+	// pausedUntil: Mongoose infers `required: false, default: false` as
+	// `boolean | null | undefined`, and TypeScript will not assign that
+	// to a plain `boolean`. Treat falsy (false, null, undefined) as "not
+	// paused" at every call site — the schema default writes `false` on
+	// creation, legacy rows load as `undefined`, and /continue-schedule
+	// explicitly writes `false`, so the three states are semantically
+	// identical.
+	paused?: boolean | null;
 	// Optional auto-resume timestamp paired with paused:true. Same `?`
 	// reasoning as seasonEnd / mentionRoleId — Mongoose marks
 	// `required:false` fields as truly optional in the inferred document
