@@ -65,34 +65,58 @@ export const BOT_CONSTANTS = {
 	//        ChannelContent.introductionInviteButton() composes it.
 	// When:  at setup time and on every refreshIntroEmbeds pass (the
 	//        button rides along with the intro embed as a component row).
-	// Where: production client id 639172234321199118. The permissions
-	//        integer 268659792 is the sum of the EXACT bits the bot uses
-	//        (see breakdown below). Deliberately NOT Administrator —
-	//        trust signal: the bot should never ask for more than it
-	//        needs.
-	// How:   permissions integer bits (all verified against
-	//        discord.js PermissionFlagsBits and Discord's permission
-	//        bit table):
-	//          View Channel              1024  (every channel it operates in)
-	//          Manage Channels             16  (autoSetup creates category + 6 child channels)
-	//          Manage Roles         268435456  (write permission_overwrites on the category + admin/leaderboard)
-	//          Send Messages             2048  (every embed)
-	//          Manage Messages           8192  (pin schedule board)
-	//          Embed Links              16384  (every embed)
-	//          Read Message History     65536  (fetch stored schedule + intro message ids)
-	//          Add Reactions               64  (✅ react on real activity tracker fires)
-	//          Mention Everyone        131072  (role pings in reminders, go-live-soon, announce-stream)
-	//        sum: 268659792
-	//        scope=bot is required so the bot actually JOINS as a guild
-	//        member; applications.commands registers slash commands. The
-	//        50013 incident in guild 1489319190132424734 (2026-04-25)
-	//        traced back to an earlier integer that omitted Manage
-	//        Channels and Manage Roles — autoSetup blew up on the very
-	//        first guild.channels.create call and main.ts's catch block
-	//        called guild.leave(). Don't strip bits without a 5Ws check
-	//        of what fails.
+	// Where: production client id 639172234321199118. Permissions integer
+	//        is 8 (Administrator).
+	// Why:   the bot creates a private homebase category with @everyone
+	//        deny ViewChannel on the admin channel and @everyone deny
+	//        SendMessages on public channels, so only the bot/owner write
+	//        the intros, schedule board, reminders, etc. Discord's
+	//        permission enforcement on `POST /guilds/.../channels`
+	//        rejects 50013 when the bot tries to grant itself a
+	//        permission via member overwrite that @everyone denies in
+	//        the same call (the bot would gain the permission only AFTER
+	//        its overwrite is applied, but Discord checks BEFORE). Tried
+	//        and failed in 2026-04-25 production rollout: minimum-bits
+	//        invite URL with bot member overwrites in createChannels.
+	//        Tried again with @everyone deny dropped from category: same
+	//        failure on the public child channels because the same check
+	//        applies there. Switched to Administrator on 2026-04-25 to
+	//        ship; tech-debt item is to refactor channel creation to use
+	//        the bot's integration ROLE overwrite (`guild.members.me
+	//        .roles.botRole`) instead of member overwrite, which sits in
+	//        a different permission tier and may avoid the catch-22.
+	// How:   permissions integer 8 = ADMINISTRATOR. Bypasses every
+	//        channel-level overwrite check, including the granting one.
+	//        Trade-off: the install screen says "Administrator," which
+	//        is a yellow flag for security-aware server admins. Mitigate
+	//        by being transparent in the install docs about exactly what
+	//        permissions the bot uses (the prior bit list is preserved
+	//        below in MIN_PERMISSIONS_DOCS for that purpose).
 	INVITE_CLIENT_ID: "639172234321199118",
-	INVITE_PERMISSIONS: "268659792",
+	INVITE_PERMISSIONS: "8",
 	INVITE_URL:
-		"https://discord.com/oauth2/authorize?client_id=639172234321199118&permissions=268659792&integration_type=0&scope=bot+applications.commands",
+		"https://discord.com/oauth2/authorize?client_id=639172234321199118&permissions=8&integration_type=0&scope=bot+applications.commands",
+	// ── minimum perms documentation ──────────────────────────────
+	// What:  the explicit list of permissions the bot actually uses,
+	//        kept here for install-doc honesty. Even though we ship
+	//        Administrator, server owners can audit this list to see
+	//        what the bot will actually do. This is also the target
+	//        set if/when the integration-role refactor lands and we
+	//        can drop Administrator.
+	// Who:   anyone reading the bot's README or install guide. Not
+	//        consumed by code today.
+	// How:   bit names match discord.js PermissionFlagsBits. Sum is
+	//        268659792 (the integer we'd use without the Discord
+	//        enforcement catch-22).
+	MIN_PERMISSIONS_DOCS: [
+		"View Channel",
+		"Manage Channels",
+		"Manage Roles",
+		"Send Messages",
+		"Manage Messages",
+		"Embed Links",
+		"Read Message History",
+		"Add Reactions",
+		"Mention Everyone",
+	] as const,
 } as const; // ← this is important, explained below
