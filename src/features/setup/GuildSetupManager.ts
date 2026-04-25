@@ -120,24 +120,29 @@ export class GuildSetupManager {
 		// we want to refresh the ids on THAT row, not insert a second one.
 		if (existing?.categoryId && !options.force) return;
 
-		// owner-only category until admin role is assigned in Phase 2.
-		// the name picks up the "(dev)" suffix automatically when running in
-		// NODE_ENV=development so a dev bot can coexist with prod in a shared
-		// guild without fighting over a single home base.
-		// botSelfOverwrite is required: @everyone deny ViewChannel
-		// propagates to the bot via @everyone-role membership; without
-		// the explicit member-level allow, the bot cannot view the
-		// category it just created and the very next guild.channels.create
-		// (the children) returns 50013. See botSelfOverwrite docs above.
+		// What:  build the homebase category. Owner is granted explicit
+		//        view/send/read; @everyone is intentionally NOT denied
+		//        ViewChannel here.
+		// Why:   denying @everyone on the category was a noop for UX
+		//        (Discord shows any category that has at least one visible
+		//        child, and the six public children are visible to
+		//        everyone anyway). It was also actively harmful: it
+		//        clobbered the bot's own ViewChannel inheritance via
+		//        @everyone-role membership and triggered 50013 either
+		//        on child creation (when no bot overwrite was present)
+		//        or on the category create itself (when a bot member
+		//        overwrite tried to escalate ManageRoles/ManageChannels
+		//        in the same call). Privacy is enforced at the child
+		//        channel level — adminOverwrites in createChannels has
+		//        @everyone deny ViewChannel, which is the only place it
+		//        ever actually mattered.
+		// How:   only the owner allow remains. dev suffix logic on the
+		//        category name is unchanged so a dev bot can still
+		//        coexist with prod in a shared guild.
 		const category = await guild.channels.create({
 			name: resolveCategoryName(),
 			type: ChannelType.GuildCategory,
 			permissionOverwrites: [
-				{
-					id: guild.roles.everyone.id,
-					deny: [PermissionFlagsBits.ViewChannel],
-				},
-				GuildSetupManager.botSelfOverwrite(guild),
 				{
 					id: config.ownerId,
 					allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
