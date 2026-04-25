@@ -94,5 +94,5 @@ export const BOT_CONSTANTS = {
 	INVITE_CLIENT_ID: "639172234321199118",
 	INVITE_PERMISSIONS: "268659792",
 	INVITE_URL:
-		"https://discord.com/api/oauth2/authorize?client_id=639172234321199118&permissions=268659792&scope=bot+applications.commands",
+		"https://discord.com/oauth2/authorize?client_id=639172234321199118&permissions=268659792&integration_type=0&scope=bot+applications.commands",
 } as const; // ← this is important, explained below
