@@ -59,30 +59,40 @@ export const BOT_CONSTANTS = {
 	// ── public invite URL ─────────────────────────────────────────
 	// What:  the OAuth2 authorize URL mortals use to invite ROK Commander
 	//        into their own server. Rendered as a link button under the
-	//        introductions intro embed.
+	//        introductions intro embed and shipped to alliance leads who
+	//        want to install the bot manually.
 	// Who:   GuildSetupManager.populateChannels builds the button row;
 	//        ChannelContent.introductionInviteButton() composes it.
 	// When:  at setup time and on every refreshIntroEmbeds pass (the
 	//        button rides along with the intro embed as a component row).
 	// Where: production client id 639172234321199118. The permissions
-	//        integer 17179962528 is the sum of the minimum bits the bot
-	//        actually uses (see INVITE_PERMISSIONS breakdown below).
-	//        Deliberately NOT Administrator — trust signal: the bot
-	//        should never ask for more than it needs.
-	// How:   permissions integer bits:
-	//          View Channels        1024
-	//          Manage Channels        16  (for /setup home-base creation)
-	//          Send Messages        2048
-	//          Embed Links         16384
-	//          Read Message History 65536  (for schedule board fetch)
-	//          Manage Messages       8192  (for pinning the schedule board)
-	//          Add Reactions           64  (for the ✅ activity track ping)
-	//          Mention Everyone 17179869184  (for role pings in reminders)
-	//        sum: 17179962528
-	//        Add scope=bot + applications.commands so slash commands
-	//        register in every new guild automatically.
+	//        integer 268659792 is the sum of the EXACT bits the bot uses
+	//        (see breakdown below). Deliberately NOT Administrator —
+	//        trust signal: the bot should never ask for more than it
+	//        needs.
+	// How:   permissions integer bits (all verified against
+	//        discord.js PermissionFlagsBits and Discord's permission
+	//        bit table):
+	//          View Channel              1024  (every channel it operates in)
+	//          Manage Channels             16  (autoSetup creates category + 6 child channels)
+	//          Manage Roles         268435456  (write permission_overwrites on the category + admin/leaderboard)
+	//          Send Messages             2048  (every embed)
+	//          Manage Messages           8192  (pin schedule board)
+	//          Embed Links              16384  (every embed)
+	//          Read Message History     65536  (fetch stored schedule + intro message ids)
+	//          Add Reactions               64  (✅ react on real activity tracker fires)
+	//          Mention Everyone        131072  (role pings in reminders, go-live-soon, announce-stream)
+	//        sum: 268659792
+	//        scope=bot is required so the bot actually JOINS as a guild
+	//        member; applications.commands registers slash commands. The
+	//        50013 incident in guild 1489319190132424734 (2026-04-25)
+	//        traced back to an earlier integer that omitted Manage
+	//        Channels and Manage Roles — autoSetup blew up on the very
+	//        first guild.channels.create call and main.ts's catch block
+	//        called guild.leave(). Don't strip bits without a 5Ws check
+	//        of what fails.
 	INVITE_CLIENT_ID: "639172234321199118",
-	INVITE_PERMISSIONS: "17179962528",
+	INVITE_PERMISSIONS: "268659792",
 	INVITE_URL:
-		"https://discord.com/api/oauth2/authorize?client_id=639172234321199118&permissions=17179962528&scope=bot+applications.commands",
+		"https://discord.com/api/oauth2/authorize?client_id=639172234321199118&permissions=268659792&scope=bot+applications.commands",
 } as const; // ← this is important, explained below

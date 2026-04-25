@@ -91,9 +91,34 @@ Recovery: if the stored message was deleted by an admin, the next refresh repost
 
 Inbound requests from the nexious-server plugin proxy carry HMAC-SHA256 signatures in `x-timestamp` and `x-signature` headers, verified by `src/api/middleware/verifySignature.ts`. The canonical string format and rollout sequence are documented in the sibling company-uno repo at `rok-commander-signing-rollout.md`. Keep the bot's `canonicalizeQuery` in lockstep with the server's copy or every proxied request will 401.
 
+Outbound requests (Future A: bot → server) reuse the same secret and same canonical format in reverse. `src/utils/serverApi.ts` signs the request, the server's `verifyBotSignature` middleware verifies it. The canonicalization helpers are duplicated across both files — when changing one, change all three (bot inbound, bot outbound, server inbound) and the format-pinning test in `nexious-server/src/__tests__/features/signRequest.test.ts`.
+
 Env vars:
 - `DASHBOARD_API_KEY` — legacy shared secret for `x-api-key`
-- `DASHBOARD_SIGNING_SECRET` — HMAC secret for verifying signatures. When unset, the middleware transparently falls back to plain api key auth so the rollout can land one side at a time.
+- `DASHBOARD_SIGNING_SECRET` — HMAC secret. Used in both directions (verify inbound, sign outbound). When unset, inbound verification transparently falls back to plain api key auth so the rollout can land one side at a time; outbound calls fail with `ServerNotConfiguredError`.
+- `NEXIOUS_BASE_URL` — Heroku URL of the platform server. Required when `USE_REMOTE_EVENTS=true`.
+- `USE_REMOTE_EVENTS` — feature flag. When true, `eventStore` routes reads/writes through `serverApi` instead of local Mongo. Off by default; flip on AFTER the F4 migration script has copied existing events into the platform DB.
+
+## Operational Dependencies (Future A)
+
+When `USE_REMOTE_EVENTS=true` the bot has a HARD dependency on `nexious-server` (Heroku) for every event read and write. Outage behavior:
+
+- **Read path (cron tick, ActivityTracker)**: `remoteEventStore` falls back to its 60-second in-process cache during brief outages. If the outage exceeds the cache TTL the bot returns empty arrays and reminders stop firing. Pre-existing reminder fires already in flight are unaffected.
+- **Write path (slash commands)**: a server outage surfaces to the user as "the platform is unreachable, try again in a moment." No retry loop; the bot does not buffer writes for replay.
+- **Schedule board refreshes**: degrade silently. The hourly safety tick will reconverge once the server is reachable again.
+- **Health metrics**: `ReminderScheduler` emits an hourly `[metrics]` log line with bot→server p50/p95/p99 latency. Watch for warnings about `outbound_p99 > 500ms` or `failure_rate > 1%` — the cron tick has a 60-second budget and a stuck server can blow it.
+
+If the platform server is down, the safest user-visible posture is to communicate the outage. The owner-notice mechanism is implemented in `src/features/observability/outageWatcher.ts` — DMs the platform owner (env `CREATOR_DISCORD_ID`) once after 5 minutes of continuous unreachability, again on recovery. Idempotent across an outage; resets on bot restart.
+
+## Current rollout state
+
+**Code:** Future-A complete. `eventStore` flag-delegates between local Mongo and `remoteEventStore`. Slash commands all use the in-guild variants (`findByIdInGuild`, `updateInGuild`, `deleteInGuild`). The legacy `findById`/`update`/`delete` methods throw under `USE_REMOTE_EVENTS=true` so any missed call site fails loudly.
+
+**Production:** `USE_REMOTE_EVENTS=false` on Railway. Bot reads from local Mongo. Safe rollback path is to leave it off.
+
+**Cutover:** follow `company-uno/cutover-smoke-test.md` for the staged sequence. Run `npm run smoke-test` against staging before each flag flip. The smoke test creates a canary event, exercises pause/PATCH/DELETE, and cleans up after itself.
+
+**Rollback:** flip `USE_REMOTE_EVENTS=false` and redeploy. Bot reverts to local Mongo on next boot. Migrated events in the server DB are not destroyed by rollback.
 
 ## Session continuity checklist
 1. Read this file.

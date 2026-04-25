@@ -59,9 +59,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	}
 
 	const eventId = interaction.options.getString("name", true);
-	const event = await eventStore.findById(eventId);
+	// findByIdInGuild scopes by guildId at the store layer so cross-guild access is
+	// blocked whether we're hitting the local DB or the remote API. The redundant
+	// event.guildId check below is gone — the store guarantees a guild match.
+	const event = await eventStore.findByIdInGuild(eventId, guildId);
 
-	if (!event || event.guildId !== guildId) {
+	if (!event) {
 		await interaction.reply({ embeds: [errorEmbed(c.notFound)], flags: MessageFlags.Ephemeral });
 		return;
 	}
@@ -76,7 +79,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 		// let a future "/pause-schedule" call accidentally re-use a stale
 		// expiry. The scheduler's auto-resume check is also a no-op once
 		// paused is false, but cleaner to drop both.
-		await eventStore.update(event.eventId, { paused: false, pausedUntil: null });
+		await eventStore.updateInGuild(event.eventId, guildId, { paused: false, pausedUntil: null });
 
 		await interaction.reply({
 			embeds: [infoEmbed("▶️ Schedule resumed", c.resumed(event.name), embedContent.COLORS.SCHEDULE)],

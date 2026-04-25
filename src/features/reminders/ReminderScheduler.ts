@@ -10,6 +10,61 @@ import { IGameEvent } from "../events/event.types.js";
 import { seasonEndEmbed } from "@utils/embedBuilder.js";
 import { refreshAllSchedules, refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
+import { getOutboundLatencyStats } from "@utils/serverApi.js";
+import { noteFailure as noteServerFailure, noteSuccess as noteServerSuccess } from "./serverHealthNotifier.js";
+
+// ── F5 observability: fire-rate counters ──
+// What: in-process counters tracking successful and failed reminder fires per hour.
+//   Logged on the hourly tick alongside outbound HTTP latency stats so Railway logs
+//   surface the platform's health at a glance.
+// Who: incremented by the scheduler's per-event branches (one-time + recurring).
+//   Read by logHourlyMetrics() below.
+// When: reset every hour after the log line — a rolling window means a transient
+//   spike doesn't hide behind a wall of healthy historical data.
+// Where: per-process counters; multi-instance deployments would need to ship to
+//   a central metrics store. Single Railway dyno keeps it simple.
+let fireSuccessCount = 0;
+let fireFailureCount = 0;
+
+const recordFireSuccess = (): void => {
+	fireSuccessCount++;
+};
+const recordFireFailure = (): void => {
+	fireFailureCount++;
+};
+
+// ── logHourlyMetrics ──
+// Emits a single structured log line per hour with everything operators need to
+// catch slow drift before it becomes an outage:
+//   - bot→server HTTP latency p50/p95/p99 (cron tick budget is 60s; alert if p99 > 500ms)
+//   - reminder fire success/failure counts and rate
+const logHourlyMetrics = (): void => {
+	const latency = getOutboundLatencyStats();
+	const total = fireSuccessCount + fireFailureCount;
+	const failureRate = total === 0 ? 0 : fireFailureCount / total;
+	console.log(
+		`[metrics] outbound_p50=${latency.p50}ms outbound_p95=${latency.p95}ms outbound_p99=${latency.p99}ms ` +
+			`outbound_samples=${latency.samples} fires_ok=${fireSuccessCount} fires_failed=${fireFailureCount} ` +
+			`failure_rate=${failureRate.toFixed(3)}`
+	);
+	// Alert thresholds. These are warns (not errors) so a single bad hour does not
+	// page anyone, but they ARE louder than info so a log scan catches them. The
+	// roadmap (F5) calls out "alert if failure rate > 1% over a 1-hour window" —
+	// that's the threshold here.
+	if (latency.p99 > 500 && latency.samples >= 10) {
+		console.warn(
+			`[metrics] outbound_p99 ${latency.p99}ms exceeds 500ms threshold — cron tick may overrun its 60s budget`
+		);
+	}
+	if (failureRate > 0.01 && total >= 10) {
+		console.warn(
+			`[metrics] reminder failure rate ${(failureRate * 100).toFixed(1)}% exceeds 1% threshold over the last hour`
+		);
+	}
+	// Reset counters for the next window.
+	fireSuccessCount = 0;
+	fireFailureCount = 0;
+};
 
 export function startScheduler(client: Client): void {
 	// ── hourly schedule board safety tick ──
@@ -24,12 +79,61 @@ export function startScheduler(client: Client): void {
 		} catch (error) {
 			console.error(LOG_MESSAGES.schedule.hourlyRefreshFailed, error);
 		}
+		// Emit hourly metrics line right after the schedule sweep so a single
+		// log timestamp captures both. The metrics function never throws.
+		logHourlyMetrics();
 	});
 
 	cron.schedule(BOT_CONSTANTS.SCHEDULER_CRON, async () => {
 		try {
-			// ① fetch all active events from DB
-			const events = await eventStore.findAll();
+			// ① Fetch all active events for every guild this bot is in.
+			//
+			// Why we iterate guilds instead of calling eventStore.findAll():
+			//   The Future-A remote API (USE_REMOTE_EVENTS=true) requires a guildId
+			//   on every read so the platform server can apply HMAC verification AND
+			//   confirm the guild belongs to an installed app. A global-scan endpoint
+			//   would expose every guild's events in one signed call, which we do not
+			//   want. Iterating client.guilds.cache and calling findByGuildId per
+			//   guild keeps the scope tight in both modes; the local-DB mode is just
+			//   as fast since the index on { guildId, active } is the same shape.
+			//
+			// Cache reuse: remoteEventStore caches list reads for 60s keyed by guildId.
+			// The scheduler runs every minute so we hit the cache exactly when we want
+			// (every other tick), saving the HTTP call on the cold path while still
+			// surfacing fresh data within one tick of any write.
+			const guildIds = Array.from(client.guilds.cache.keys());
+			// Track whether any guild succeeded so we can call noteServerSuccess
+			// at most once per tick — each individual guild call doesn't trigger
+			// the recovery DM, only "tick had at least one success" does.
+			let anySuccess = false;
+			let anyUnreachable = false;
+			const eventsByGuild = await Promise.all(
+				guildIds.map(async (guildId) => {
+					try {
+						const e = await eventStore.findByGuildId(guildId);
+						anySuccess = true;
+						return e;
+					} catch (err) {
+						// One guild's failure should not block the rest. The remote API
+						// will eventually return; the next tick will catch up. Logging
+						// at warn (not error) because brief Heroku blips are routine.
+						console.warn(LOG_MESSAGES.api.errorFindingEvents, { guildId, err });
+						// Notify health tracker — only ServerUnreachableError counts
+						// as a platform outage; other errors (validation, auth) don't.
+						noteServerFailure(client, err);
+						anyUnreachable = true;
+						return [] as IGameEvent[];
+					}
+				})
+			);
+			// Drive the success/failure tracker once per tick instead of once
+			// per guild so a partial outage doesn't toggle state on every guild.
+			if (anySuccess) noteServerSuccess(client);
+			else if (anyUnreachable) {
+				// All guilds failed AND at least one was a server-unreachable error.
+				// noteFailure was already called per-guild; nothing to do here.
+			}
+			const events: IGameEvent[] = eventsByGuild.flat() as IGameEvent[];
 
 			for (const event of events) {
 				const now = new Date();
@@ -45,7 +149,7 @@ export function startScheduler(client: Client): void {
 				// happened: ReminderScheduler can fire, ScheduleBoard drops
 				// the paused tag on its next refresh.
 				if (event.paused && event.pausedUntil && now.getTime() >= new Date(event.pausedUntil).getTime()) {
-					await eventStore.update(event.eventId, { paused: false, pausedUntil: null });
+					await eventStore.updateInGuild(event.eventId, event.guildId, { paused: false, pausedUntil: null });
 					event.paused = false;
 					event.pausedUntil = null;
 					// fall through into the rest of the loop
@@ -77,7 +181,10 @@ export function startScheduler(client: Client): void {
 				// happy path (legacy KvK events with a real Date) is
 				// unchanged.
 				if (event.seasonEnd && now > new Date(event.seasonEnd)) {
-					await eventStore.update(event.eventId, { active: false });
+					// Soft-delete, not a generic update: under remote mode the server's PATCH endpoint
+// does not accept `active` in the field whitelist (the soft-delete is its own DELETE
+// route). deleteInGuild routes to the right endpoint for both modes.
+await eventStore.deleteInGuild(event.eventId, event.guildId);
 					await announceSeasonEnd(client, event);
 					continue;
 				}
@@ -97,12 +204,25 @@ export function startScheduler(client: Client): void {
 						});
 						if (alreadyFired) continue;
 
-						await fireReminder(client, event, event.firstOccurrence, offsetMinutes);
+						// Wrap fire in success/failure metrics. fireReminder swallows its own
+						// Discord errors (channel missing, permission denied), so we only see
+						// throws on truly unexpected failures — but counting both branches
+						// gives operators a real signal in the hourly metric log.
+						try {
+							await fireReminder(client, event, event.firstOccurrence, offsetMinutes);
+							recordFireSuccess();
+						} catch (err) {
+							recordFireFailure();
+							console.error(LOG_MESSAGES.api.errorTestReminder ?? "fireReminder failed", err);
+						}
 
 						// deactivate after the last reminder fires
 						// so it doesn't keep getting checked every tick
 						if (offsetMinutes === Math.min(...event.reminderOffsets)) {
-							await eventStore.update(event.eventId, { active: false });
+							// Soft-delete, not a generic update: under remote mode the server's PATCH endpoint
+// does not accept `active` in the field whitelist (the soft-delete is its own DELETE
+// route). deleteInGuild routes to the right endpoint for both modes.
+await eventStore.deleteInGuild(event.eventId, event.guildId);
 						}
 					}
 				} else {
@@ -123,7 +243,13 @@ export function startScheduler(client: Client): void {
 						});
 						if (alreadyFired) continue;
 
-						await fireReminder(client, event, nextOccurrence, offsetMinutes);
+						try {
+							await fireReminder(client, event, nextOccurrence, offsetMinutes);
+							recordFireSuccess();
+						} catch (err) {
+							recordFireFailure();
+							console.error(LOG_MESSAGES.api.errorTestReminder ?? "fireReminder failed", err);
+						}
 					}
 				}
 			}

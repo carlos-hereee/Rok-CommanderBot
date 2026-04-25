@@ -29,11 +29,18 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
 
 // ── execute ──────────────────────────────────────────────────
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-	const eventId = interaction.options.getString("event", true);
-	const event = await eventStore.findById(eventId);
+	const guildId = interaction.guildId;
+	if (!guildId) {
+		await interaction.reply({ embeds: [errorEmbed("Run this in a server, not a DM.")], flags: MessageFlags.Ephemeral });
+		return;
+	}
 
-	// guard: event not found or doesn't belong to this guild
-	if (!event || event.guildId !== interaction.guildId) {
+	const eventId = interaction.options.getString("event", true);
+	// findByIdInGuild applies the guild scope at the store layer so the redundant
+	// guildId check below has been removed.
+	const event = await eventStore.findByIdInGuild(eventId, guildId);
+
+	if (!event) {
 		await interaction.reply({
 			embeds: [errorEmbed(c.notFound(eventId))],
 			flags: MessageFlags.Ephemeral,
@@ -66,7 +73,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 		}
 
 		// confirmed — soft delete
-		await eventStore.delete(event.eventId);
+		await eventStore.deleteInGuild(event.eventId, guildId);
 		await button.update({
 			embeds: [infoEmbed(c.confirmTitle, c.successDescription(event.name), embedContent.COLORS.SCHEDULE)],
 			components: [],

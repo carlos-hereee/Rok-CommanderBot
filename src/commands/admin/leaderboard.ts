@@ -17,10 +17,18 @@ export const data = new SlashCommandBuilder()
 	);
 
 export async function execute(interaction: ChatInputCommandInteraction) {
+	const guildId = interaction.guildId;
+	if (!guildId) {
+		await interaction.reply({ content: "❌ Run this in a server, not a DM.", ephemeral: true });
+		return;
+	}
+
 	const eventId = interaction.options.getString("event-id", true);
 	const isPublic = interaction.options.getBoolean("public") ?? false;
 
-	const event = await eventStore.findById(eventId);
+	// findByIdInGuild scopes the lookup to this guild — works under both the legacy
+	// local-DB path and the Future-A remote API path.
+	const event = await eventStore.findByIdInGuild(eventId, guildId);
 	if (!event) {
 		await interaction.reply({ content: "❌ Event not found.", ephemeral: true });
 		return;

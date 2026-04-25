@@ -69,11 +69,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	const eventId = interaction.options.getString("name", true);
 	const days = interaction.options.getInteger("days", false);
 
-	const event = await eventStore.findById(eventId);
-	// 404 with the same wording for "missing" and "wrong guild" — never
-	// confirm that an event exists in another guild. Same invariant the
-	// HTTP routes uphold.
-	if (!event || event.guildId !== guildId) {
+	// findByIdInGuild scopes by guildId at the store layer so cross-guild access is
+	// blocked whether we're hitting the local DB or the remote API. The legacy
+	// event.guildId check is now redundant.
+	const event = await eventStore.findByIdInGuild(eventId, guildId);
+	if (!event) {
 		await interaction.reply({ embeds: [errorEmbed(c.notFound)], flags: MessageFlags.Ephemeral });
 		return;
 	}
@@ -97,7 +97,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	}
 
 	try {
-		await eventStore.update(event.eventId, { paused: true, pausedUntil });
+		await eventStore.updateInGuild(event.eventId, guildId, { paused: true, pausedUntil });
 
 		const successText = pausedUntil
 			? c.pausedUntil(event.name, Math.floor(pausedUntil.getTime() / 1000))

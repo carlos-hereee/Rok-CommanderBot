@@ -109,8 +109,13 @@ export function registerActivityListeners(client: Client): void {
 
 			// ── player joined voice ──
 			if (joined) {
-				// check if any event window is currently open
-				const activeEvent = await getActiveEvent();
+				// VoiceState.guild is always populated for guild voice channels — the
+				// only path with no guild is direct DM voice, which doesn't reach this
+				// listener.
+				const guildId = newState.guild?.id ?? oldState.guild?.id ?? "";
+				if (!guildId) return;
+				// check if any event window is currently open in this guild
+				const activeEvent = await getActiveEvent(guildId);
 				if (!activeEvent) return; // no event happening right now — don't track
 
 				// cache session in memory
@@ -174,8 +179,14 @@ export function registerActivityListeners(client: Client): void {
 			const isOnline = newPresence.status !== "offline";
 			if (!wasOffline || !isOnline) return;
 
+			// PresenceUpdate fires with a guild context (presence is per-guild). Pull
+			// guildId off the new presence — without it the per-guild event lookup
+			// can't run.
+			const guildId = newPresence.guild?.id ?? "";
+			if (!guildId) return;
+
 			// check if an event just started (within the first 10 minutes)
-			const activeEvent = await getActiveEvent(10);
+			const activeEvent = await getActiveEvent(guildId, 10);
 			if (!activeEvent) return;
 
 			const userId = newPresence.member.id;
@@ -206,8 +217,13 @@ export function registerActivityListeners(client: Client): void {
 
 // checks if any active event is currently in its window
 // windowMinutes lets presence tracking use a tighter 10min window
-async function getActiveEvent(windowMinutes = 60) {
-	const events = await eventStore.findAll();
+//
+// Refactored from findAll() to findByGuildId(): under USE_REMOTE_EVENTS the global
+// scan is unavailable. Every caller (voice/reaction/presence listeners) has a guild
+// context, so threading guildId in keeps both modes working with the same code.
+async function getActiveEvent(guildId: string, windowMinutes = 60) {
+	if (!guildId) return null;
+	const events = await eventStore.findByGuildId(guildId);
 
 	for (const event of events) {
 		if (!isEventWindowOpen(event, new Date(), windowMinutes)) continue;

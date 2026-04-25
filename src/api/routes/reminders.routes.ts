@@ -19,10 +19,10 @@ remindersRouter.get("/:eventId", async (req: RemindersRequest, res: Response) =>
 	const guildId = requireGuildId(req, res);
 	if (guildId === null) return;
 	try {
-		const event = await eventStore.findById(req.params.eventId);
-		// 404 (not 403) for wrong-guild is deliberate: do not leak the
-		// existence of events belonging to other guilds.
-		if (!event || event.guildId !== guildId) {
+		// findByIdInGuild applies the guild scope at the store layer. The 404 on
+		// cross-guild stays — the store collapses missing and wrong-guild into one null.
+		const event = await eventStore.findByIdInGuild(req.params.eventId, guildId);
+		if (!event) {
 			res.status(404).json({ error: "Event not found" });
 			return;
 		}
