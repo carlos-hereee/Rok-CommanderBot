@@ -51,8 +51,11 @@ export function createEventsRouter(client: Client): Router {
 		const guildId = requireGuildId(req, res);
 		if (guildId === null) return;
 		try {
-			const event = await eventStore.findById(req.params.eventId);
-			if (!event || event.guildId !== guildId) {
+			// findByIdInGuild applies the guild scope at the store layer — same shape
+			// under the local-DB path and the remote-API path. The redundant guildId
+			// check that used to follow has been removed.
+			const event = await eventStore.findByIdInGuild(req.params.eventId, guildId);
+			if (!event) {
 				res.status(404).json({ error: "Event not found" });
 				return;
 			}
@@ -139,8 +142,8 @@ export function createEventsRouter(client: Client): Router {
 		const guildId = requireGuildId(req, res);
 		if (guildId === null) return;
 		try {
-			const existing = await eventStore.findById(req.params.eventId);
-			if (!existing || existing.guildId !== guildId) {
+			const existing = await eventStore.findByIdInGuild(req.params.eventId, guildId);
+			if (!existing) {
 				res.status(404).json({ error: "Event not found" });
 				return;
 			}
@@ -152,7 +155,7 @@ export function createEventsRouter(client: Client): Router {
 				return;
 			}
 			delete body.guildId;
-			const updated = await eventStore.update(req.params.eventId, body);
+			const updated = await eventStore.updateInGuild(req.params.eventId, guildId, body);
 			res.json({ data: updated });
 			kickScheduleRefresh(client, guildId, "PATCH /api/events/:eventId");
 		} catch (error) {
@@ -166,12 +169,12 @@ export function createEventsRouter(client: Client): Router {
 		const guildId = requireGuildId(req, res);
 		if (guildId === null) return;
 		try {
-			const existing = await eventStore.findById(req.params.eventId);
-			if (!existing || existing.guildId !== guildId) {
+			const existing = await eventStore.findByIdInGuild(req.params.eventId, guildId);
+			if (!existing) {
 				res.status(404).json({ error: "Event not found" });
 				return;
 			}
-			await eventStore.delete(req.params.eventId);
+			await eventStore.deleteInGuild(req.params.eventId, guildId);
 			res.json({ message: "Event deactivated" });
 			kickScheduleRefresh(client, guildId, "DELETE /api/events/:eventId");
 		} catch (error) {
@@ -203,25 +206,16 @@ export function createEventsRouter(client: Client): Router {
 			// on companyuno was changed after events were created under the
 			// previous guildId, and the dashboard's stale cached event list
 			// still references those orphaned eventIds.
-			const event = await eventStore.findById(req.params.eventId);
+			// findByIdInGuild collapses "missing" and "wrong-guild" into a single null at
+			// the store layer. We lose the diagnostic split that distinguished them in
+			// the warn log, but production triage almost always lands on the same root
+			// cause anyway (stale dashboard list after a guildId swap), so a single
+			// missing-or-mismatch line is sufficient.
+			const event = await eventStore.findByIdInGuild(req.params.eventId, guildId);
 			if (!event) {
 				console.warn(
-					`[test-reminder] 404 reason=missing eventId=${req.params.eventId} guildId=${guildId}`
+					`[test-reminder] 404 reason=missing-or-guild-mismatch eventId=${req.params.eventId} guildId=${guildId}`
 				);
-				res.status(404).json({
-					error: "Event not found",
-					detail: "This event no longer exists. Refresh the page to load the current list.",
-				});
-				return;
-			}
-			if (event.guildId !== guildId) {
-				console.warn(
-					`[test-reminder] 404 reason=guild-mismatch eventId=${req.params.eventId} requestedGuildId=${guildId} eventGuildId=${event.guildId} eventActive=${event.active}`
-				);
-				// Public detail intentionally vague — never confirm or deny that the
-				// event exists in another guild. The hint nudges the owner toward
-				// the most common cause (stale dashboard list after a guildId swap)
-				// without leaking whether the guild check actually fired.
 				res.status(404).json({
 					error: "Event not found",
 					detail: "This event no longer exists. Refresh the page to load the current list.",

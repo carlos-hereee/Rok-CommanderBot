@@ -97,7 +97,7 @@ startScheduler(client)
 cron.schedule ticks
       │
       ▼
-eventStore.findAll()          ← what events exist?
+eventStore.findByGuildId(g)   ← what events exist? (per-guild, Future-A safe)
       │
       ▼
 getUpcomingOccurrences()      ← when is the next one? (pure math, no DB)

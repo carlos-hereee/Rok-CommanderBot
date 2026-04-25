@@ -18,6 +18,7 @@ import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
 import { postFeatureAnnouncements } from "@features/announcements/postFeatureAnnouncement.js";
+import { registerOutageWatcher } from "@features/observability/outageWatcher.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 // paths
@@ -168,6 +169,15 @@ clientReady(client);
 		startScheduler(client);
 		registerActivityListeners(client);
 		startApiServer(client);
+
+		// ── outage watcher ────────────────────────────────────────
+		// Polls serverApi reachability state every 60s. DMs the platform
+		// owner once if the server is unreachable for >= 5 minutes, and
+		// once again when it recovers. No-op when CREATOR_DISCORD_ID is
+		// unset (logs a warn so operators notice on first boot). Fully
+		// decoupled from the request path — outageWatcher only reads
+		// state, never participates in the actual server calls.
+		registerOutageWatcher(client);
 
 		// ── realtime homebase self heal ───────────────────────────
 		// Registered BEFORE the ensureHomebase boot sweep below so the

@@ -56,10 +56,11 @@ export function createLeaderboardRouter(client: Client): Router {
 			const mode = (req.query.mode as string) ?? "alltime";
 			const occurrence = req.query.occurrence as string;
 
-			const event = await eventStore.findById(eventId);
-			// 404 (not 403) for wrong-guild is deliberate: do not leak the
-			// existence of events belonging to other guilds.
-			if (!event || event.guildId !== guildId) {
+			// findByIdInGuild applies the guild scope at the store layer. The 404 (not 403)
+			// on cross-guild is preserved — the store returns null for either missing or
+			// wrong-guild and we do not distinguish them in the public response.
+			const event = await eventStore.findByIdInGuild(eventId, guildId);
+			if (!event) {
 				res.status(404).json({ error: "Event not found" });
 				return;
 			}

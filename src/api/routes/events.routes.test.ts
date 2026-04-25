@@ -11,6 +11,13 @@ vi.mock("@db/stores/eventStore.js", () => ({
 	eventStore: {
 		findByGuildId: vi.fn(),
 		findById: vi.fn(),
+		// New guild-scoped variants added during F2 (Future-A migration). The routes
+		// now use these instead of the legacy findById/update/delete so the same
+		// code path works against both the local Mongo DB and the remote /api/events
+		// surface on the platform server.
+		findByIdInGuild: vi.fn(),
+		updateInGuild: vi.fn(),
+		deleteInGuild: vi.fn(),
 		create: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
@@ -25,6 +32,9 @@ import { eventStore } from "@db/stores/eventStore.js";
 const eventStoreMock = eventStore as unknown as {
 	findByGuildId: ReturnType<typeof vi.fn>;
 	findById: ReturnType<typeof vi.fn>;
+	findByIdInGuild: ReturnType<typeof vi.fn>;
+	updateInGuild: ReturnType<typeof vi.fn>;
+	deleteInGuild: ReturnType<typeof vi.fn>;
 	create: ReturnType<typeof vi.fn>;
 	update: ReturnType<typeof vi.fn>;
 	delete: ReturnType<typeof vi.fn>;
@@ -62,11 +72,9 @@ describe("events routes guild scoping and invariants", () => {
 	// guild the response must be 404, NOT 403. 403 would tell an attacker
 	// "this id exists, you just cannot see it", which is the leak.
 	it("GET /api/events/:eventId returns 404 when the event belongs to a different guild", async () => {
-		eventStoreMock.findById.mockResolvedValue({
-			eventId: "evt-1",
-			guildId: "guild-other",
-			name: "Foreign Event",
-		});
+		// findByIdInGuild applies the guild filter at the store layer so a wrong-guild
+		// lookup returns null directly. The route never sees the foreign event.
+		eventStoreMock.findByIdInGuild.mockResolvedValue(null);
 
 		const app = buildApp();
 		const res = await request(app).get("/api/events/evt-1").query({ guildId: "guild-mine" });

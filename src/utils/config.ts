@@ -14,7 +14,22 @@ const dashboardApiKey = process.env.DASHBOARD_API_KEY || "";
 // Shared HMAC secret used by the dashboard's Heroku proxy to sign each forwarded request.
 // Empty during rollout — the auth middleware falls back to apiKeyAuth until this is set
 // on both sides. Once present, signed requests are accepted and apiKey alone is rejected.
+// Reused for the reverse direction (bot → server) by serverApi.ts.
 const dashboardSigningSecret = process.env.DASHBOARD_SIGNING_SECRET || "";
+
+// ── Future-A remote events flag ──
+// What: when true, eventStore reads/writes route through the nexious-server's
+//   /api/events surface instead of this bot's local Mongo `Event` collection.
+// Who: every slash command, scheduler tick, and HTTP route that calls eventStore.
+// When: flipped to true AFTER F4 migration has copied existing events from the bot
+//   DB to the server DB. Default false so deploying the F2 code without the flag set
+//   is a no-op (safe rollback path).
+// Where: read by db/stores/eventStore.ts which delegates to remoteEventStore when on.
+// How: any non-empty truthy string ("1", "true", "yes") turns it on. Empty/unset = off.
+const useRemoteEvents = (() => {
+	const raw = (process.env.USE_REMOTE_EVENTS ?? "").toLowerCase().trim();
+	return raw === "1" || raw === "true" || raw === "yes";
+})();
 // CORS allow-list for the dashboard.
 // What: the Express `cors({ origin })` middleware accepts a string (single
 //   origin), an array (multiple origins), or a function. We want multiple
@@ -60,4 +75,5 @@ export {
 	dashboardApiKey,
 	dashboardSigningSecret,
 	dashboardOrigin,
+	useRemoteEvents,
 };

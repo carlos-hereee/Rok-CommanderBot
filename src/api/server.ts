@@ -3,6 +3,7 @@ import cors from "cors";
 import { Client } from "discord.js";
 import { verifySignature } from "./middleware/verifySignature.js";
 import { createEventsRouter } from "./routes/events.routes.js";
+import { createAnnounceRouter } from "./routes/announce.routes.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { createLeaderboardRouter } from "./routes/leaderboard.routes.js";
 import { createPlayersRouter } from "./routes/players.routes.js";
@@ -60,6 +61,11 @@ export function startApiServer(client: Client): void {
 
 	// routes
 	app.use("/api/events", createEventsRouter(client));
+	// Go-live-now sits as a sibling router under the same /api/events mount so its
+	// route shape (POST /:eventId/go-live-now) lives next to the persisted-event
+	// CRUD without forcing the events router to take on transient announcements.
+	// Unmatched paths in the events router fall through to this one in mount order.
+	app.use("/api/events", createAnnounceRouter(client));
 	// /api/health/guild is the guild-aware Test Connection endpoint. It lives
 	// AFTER verifySignature on purpose so a probing attacker cannot enumerate
 	// which guildIds the bot has configs for. The unauthenticated /health and
