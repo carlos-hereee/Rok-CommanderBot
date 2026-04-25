@@ -22,9 +22,34 @@ export const data = new SlashCommandBuilder()
 	);
 
 // ── autocomplete ─────────────────────────────────────────────
+// What:  surface the active events in this guild as the user types,
+//        ranked by case-insensitive substring match against the
+//        focused input value.
+// Who:   Discord's autocomplete pipeline. The user sees the event
+//        NAME in the picker; the option's `value` (sent to execute)
+//        is the eventId, so the existing eventStore.findByIdInGuild
+//        path stays unchanged.
+// When:  per keystroke in the `event` option.
+// Where: Discord caps autocomplete responses at 25 entries; we slice
+//        defensively even when the underlying findByGuildId returns
+//        fewer than 25 today, so this still behaves when a guild
+//        accumulates a long event list later.
+// How:   ① fetch all active events for the guild via eventStore.
+//        ② lowercase the focused value and the candidate names so
+//          the match is case-insensitive.
+//        ③ filter by substring. Substring (not prefix) so a streamer
+//          looking for "Friday Night Stream" finds it by typing
+//          "friday" or "stream".
+//        ④ slice to 25, map to { name, value } pairs, respond.
+//        Empty array is fine; Discord renders "No matches found."
 export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+	const focused = interaction.options.getFocused().toLowerCase();
 	const events = await eventStore.findByGuildId(interaction.guildId!);
-	await interaction.respond(events.map((e) => ({ name: e.name, value: e.eventId })));
+	const matches = events
+		.filter((e) => e.name.toLowerCase().includes(focused))
+		.slice(0, 25)
+		.map((e) => ({ name: e.name, value: e.eventId }));
+	await interaction.respond(matches);
 }
 
 // ── execute ──────────────────────────────────────────────────

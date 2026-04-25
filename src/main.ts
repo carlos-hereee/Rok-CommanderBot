@@ -162,8 +162,10 @@ clientReady(client);
 	}); // start the scheduler after commands are loaded
 	// && after client is ready (since it relies on the client to send messages)
 	client.once(Events.ClientReady, async () => {
-		// set bot presence
-		client.user?.setPresence({ activities: [{ name: "⚔️ Watching over KvK" }], status: "online" });
+		// set bot presence. Activity name is the bot's status line under
+		// its username in the member list. Default activity type is
+		// Watching, so this renders as "Watching 🎙️ Tuning the realm".
+		client.user?.setPresence({ activities: [{ name: "🎙️ Tuning the realm" }], status: "online" });
 
 		// start scheduler and activity tracker, and API server
 		startScheduler(client);

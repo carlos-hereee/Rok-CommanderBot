@@ -1,6 +1,7 @@
 import {
 	SlashCommandBuilder,
 	ChatInputCommandInteraction,
+	AutocompleteInteraction,
 	PermissionFlagsBits,
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -15,12 +16,19 @@ import { embedContent } from "@base/constants/embed-content.js";
 import { errorEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
+import {
+	parseFlexibleTime,
+	nextOccurrenceInZone,
+	isValidTimezone,
+	searchTimezones,
+} from "@utils/tzParser.js";
 
 // ── /configure-stream-schedule ────────────────────────────────────────
-// What:  creates a recurring weekly event on a fixed day + time of week.
-//        Every 168 hours from the first occurrence, the bot fires a
-//        reminder in the guild's announcements channel pinging an
-//        optional role override (defaults to the guild member role).
+// What:  creates a recurring weekly event on a fixed day + time of week
+//        in the streamer's chosen timezone. Every 168 hours from the
+//        first occurrence, the bot fires a reminder in the guild's
+//        announcements channel pinging an optional role override
+//        (defaults to the guild member role).
 // Who:   streamers (or anyone running a weekly recurring stream / call).
 //        Sibling to /configure-kvk-season — same primitive, simpler
 //        input surface because the cadence is fixed at "weekly".
@@ -31,11 +39,25 @@ import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 //        downstream system (ReminderScheduler, ScheduleBoard, Test
 //        Reminder, /event-list) reads it without code changes — that
 //        was the whole point of letting the data layer stay generic.
-// How:   ① validate day + time; ② compute the next occurrence in UTC
-//        from the day-of-week + time-of-day; ③ confirmation embed; ④
-//        on confirm, eventStore.create with type:"recurring",
-//        intervalHours:168, mentionRoleId:roleId, paused:false; ⑤ kick
-//        a schedule board refresh.
+//        firstOccurrence is stored as UTC; Discord's <t:UNIX:F> renders
+//        each viewer's local time so the timezone input affects only
+//        the cadence anchor, not the render shape.
+// How:   ① validate day + time + timezone; ② compute the next
+//        occurrence as a UTC Date anchored on the user's chosen
+//        timezone; ③ confirmation embed; ④ on confirm, eventStore.create
+//        with type:"recurring", intervalHours:168, mentionRoleId:roleId,
+//        paused:false; ⑤ kick a schedule board refresh.
+//
+// Time/timezone input contract:
+//   - `time` accepts both 12h ("7pm", "7:30 pm", "9 am", "12am") and
+//     24h ("19:30", "9:00", "9") formats. parseFlexibleTime in
+//     tzParser.ts owns the regex.
+//   - `timezone` is an IANA name ("America/New_York", "Europe/London",
+//     "UTC"). Autocomplete surfaces a curated short-list first then
+//     spills over to Intl.supportedValuesOf for the long tail. Default
+//     is "UTC" if the streamer skips the option, which preserves the
+//     pre-2026-04-25 behavior for any docs that say "all times are
+//     UTC".
 
 const c = embedContent.streamSchedule;
 
@@ -62,51 +84,14 @@ const DAY_LABEL: Record<number, string> = {
 	6: "Saturday",
 };
 
-/**
- * Parse a 24h "HH:MM" string into { hour, minute } or return null when
- * malformed. Permissive about leading zeros so "9:00" works as well as
- * "09:00", but rejects out-of-range values so 25:00 never lands in the
- * scheduler.
- */
-function parseTimeOfDay(raw: string): { hour: number; minute: number } | null {
-	const match = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
-	if (!match) return null;
-	const hour = Number(match[1]);
-	const minute = Number(match[2]);
-	if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
-	if (hour < 0 || hour > 23) return null;
-	if (minute < 0 || minute > 59) return null;
-	return { hour, minute };
-}
-
-/**
- * Compute the next UTC date that matches a given day-of-week + time-of-day.
- * If today is the target day and the time is still in the future, returns
- * today. Otherwise returns the next matching weekday. This is intentionally
- * UTC-based: the schedule cadence is a wall-clock weekly rhythm and
- * Discord's <t:UNIX:F> renders each viewer's local time, so anchoring in
- * UTC keeps the math simple and deterministic across timezones.
- */
-function nextOccurrenceUtc(targetDayIndex: number, hour: number, minute: number, now: Date = new Date()): Date {
-	const candidate = new Date(now);
-	candidate.setUTCHours(hour, minute, 0, 0);
-
-	const todayDow = candidate.getUTCDay();
-	let dayDelta = (targetDayIndex - todayDow + 7) % 7;
-
-	// If the candidate is the target day but the time has already passed,
-	// roll forward a full week. Without this guard, a streamer running the
-	// command at 3pm UTC for "Sunday 9am" would schedule the very next
-	// stream in the past — ReminderScheduler would skip it and the next
-	// fire would not happen until the following Sunday anyway, but the
-	// schedule board would render a confusing "in the past" timestamp.
-	if (dayDelta === 0 && candidate.getTime() <= now.getTime()) {
-		dayDelta = 7;
-	}
-
-	candidate.setUTCDate(candidate.getUTCDate() + dayDelta);
-	return candidate;
-}
+// Time parsing and timezone-aware next-occurrence math live in
+// @utils/tzParser. parseFlexibleTime accepts the 12h/24h forms
+// users actually type ("7pm", "7:30 pm", "19:30", "9", "12am"),
+// nextOccurrenceInZone walks the cadence anchored on the user's
+// timezone, and isValidTimezone is the validation gate before any
+// Date math touches the input. Keeping that logic in tzParser
+// instead of inline so a future "/configure-event-cadence" or
+// similar command can reuse the same parser without duplication.
 
 export const data = new SlashCommandBuilder()
 	.setName("configure-stream-schedule")
@@ -131,7 +116,17 @@ export const data = new SlashCommandBuilder()
 			)
 	)
 	.addStringOption((option) =>
-		option.setName("time-utc").setDescription("Start time in UTC, 24h format (e.g. 19:30)").setRequired(true)
+		option
+			.setName("time")
+			.setDescription("Start time, e.g. 7pm, 7:30 pm, 19:30, or 9 (12h or 24h, am/pm optional)")
+			.setRequired(true)
+	)
+	.addStringOption((option) =>
+		option
+			.setName("timezone")
+			.setDescription("Your timezone, e.g. America/New_York. Defaults to UTC if blank.")
+			.setRequired(false)
+			.setAutocomplete(true)
 	)
 	.addRoleOption((option) =>
 		option
@@ -146,6 +141,32 @@ export const data = new SlashCommandBuilder()
 			.setRequired(false)
 			.setMaxLength(500)
 	);
+
+// ── autocomplete ──────────────────────────────────────────────
+// What:  surface IANA timezone names matching the streamer's typed
+//        input.
+// Who:   Discord's autocomplete pipeline; main.ts dispatches to
+//        this via the command registry's autocomplete export.
+// When:  every keystroke in the timezone input.
+// Where: only the `timezone` option uses autocomplete in this
+//        command. Other options either have hardcoded choices
+//        (day) or are free text (name, time, description).
+// How:   defer to searchTimezones in tzParser. The returned array
+//        is { name, value } pairs where name is the human-visible
+//        zone string and value is the same string sent to execute().
+//        Cap at 25 — Discord rejects autocomplete responses larger
+//        than that.
+export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+	const focused = interaction.options.getFocused(true);
+	if (focused.name !== "timezone") {
+		// Defensive: future option additions might add their own
+		// autocomplete; only respond when it's our zone option.
+		await interaction.respond([]);
+		return;
+	}
+	const matches = searchTimezones(focused.value, 25);
+	await interaction.respond(matches.map((tz) => ({ name: tz, value: tz })));
+}
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
 	const guildId = interaction.guildId;
@@ -171,7 +192,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
 	const name = interaction.options.getString("name", true).trim();
 	const dayRaw = interaction.options.getString("day", true).toLowerCase();
-	const timeRaw = interaction.options.getString("time-utc", true);
+	const timeRaw = interaction.options.getString("time", true);
+	// Default to UTC when the streamer leaves the timezone blank. This
+	// preserves the pre-2026-04-25 contract where every time was UTC,
+	// so any guild that had docs/runbook entries pointing at "type your
+	// time in UTC" continues to work without changes.
+	const timezoneRaw = interaction.options.getString("timezone", false)?.trim() || "UTC";
 	const mentionRole = interaction.options.getRole("mention-role", false);
 	const description = interaction.options.getString("description", false)?.trim() ?? "";
 
@@ -181,9 +207,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 		return;
 	}
 
-	const time = parseTimeOfDay(timeRaw);
+	const time = parseFlexibleTime(timeRaw);
 	if (!time) {
 		await interaction.reply({ embeds: [errorEmbed(c.invalidTime)], flags: MessageFlags.Ephemeral });
+		return;
+	}
+
+	// Validate timezone before any Date math touches it. We never
+	// trust an autocomplete pick blindly because Discord lets users
+	// type-and-submit a value that wasn't in the suggestion list.
+	if (!isValidTimezone(timezoneRaw)) {
+		await interaction.reply({
+			embeds: [errorEmbed(`Unknown timezone: \`${timezoneRaw}\`. Try names like \`America/New_York\`, \`Europe/London\`, or \`UTC\`.`)],
+			flags: MessageFlags.Ephemeral,
+		});
 		return;
 	}
 
@@ -198,7 +235,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	}
 
 	// ── ② compute next occurrence ──────────────────────────────────
-	const firstOccurrence = nextOccurrenceUtc(dayIndex, time.hour, time.minute);
+	// nextOccurrenceInZone is the timezone-aware replacement for the
+	// old nextOccurrenceUtc helper. The returned Date is still UTC
+	// (storage contract is unchanged) but the cadence anchor honors
+	// the streamer's chosen timezone. Default UTC is preserved when
+	// the streamer skipped the option.
+	const firstOccurrence = nextOccurrenceInZone(dayIndex, time.hour, time.minute, timezoneRaw);
 	const firstOccurrenceUnix = Math.floor(firstOccurrence.getTime() / 1000);
 	const mentionRoleId = mentionRole?.id ?? null;
 
@@ -206,9 +248,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	// Two-line preview: cadence + next fire, plus the audience line so
 	// the streamer sees the role + channel before clicking save. Using
 	// MessageFlags.Ephemeral so the preview does not clutter the channel
-	// where the command was run.
+	// where the command was run. Timezone is rendered alongside the
+	// cadence so the streamer can sanity-check that "Friday 7pm" got
+	// interpreted in the zone they meant.
 	const previewLines = [
 		c.confirm.description(name, DAY_LABEL[dayIndex], firstOccurrenceUnix),
+		`Timezone: \`${timezoneRaw}\``,
 		"",
 		c.confirm.audienceLine(mentionRoleId ?? config.memberRoleId ?? null, config.announcementsChannelId),
 	];
