@@ -77,11 +77,42 @@ clientReady(client);
 	await connectMongoose();
 
 	// step 3 - set up event listeners before logging in, to avoid missing any events that fire on startup (like guildCreate)
+	//
+	// guildCreate handles three distinct re-entries:
+	//   ① brand new install: no GuildConfig row at all → autoSetup
+	//      builds the homebase from scratch + DM the owner.
+	//   ② re-install after a wipe: GuildConfig row exists with
+	//      setupComplete=true, but the user kicked the bot, deleted
+	//      the category/channels, and re-invited. The DB still says
+	//      "all good" but Discord side is empty. We need to rebuild.
+	//      Without this branch, the bot would silently no-op on
+	//      re-invite and the owner would think self-heal was broken.
+	//   ③ partial re-install: row exists but setupComplete=false
+	//      (rare; usually means an earlier autoSetup crashed mid-way).
+	//      Treat the same as ① and run autoSetup.
+	//
+	// ensureHomebase is the right tool for ②: it checks the stored
+	// category id against Discord, falls through to rebuildFromStaleConfig
+	// when the category is gone, and posts a "castle rebuilt" notice in
+	// the new inner sanctum. It's idempotent, so calling it on every
+	// guildCreate is safe even when the homebase is already healthy.
 	client.on(Events.GuildCreate, async (guild) => {
 		try {
 			const alreadyBuilt = await guildConfigStore.findByGuildId(guild.id);
-			if (alreadyBuilt?.setupComplete) return;
 
+			// ② re-install after a wipe. Hand off to ensureHomebase
+			// instead of short-circuiting. ensureHomebase will detect
+			// the missing category, run rebuildFromStaleConfig, and
+			// post the recovery notice. We do NOT re-DM the owner here
+			// because the INTRO_DM_SENT log is still set from the
+			// original install — re-DMing on every re-invite would be
+			// noise.
+			if (alreadyBuilt?.setupComplete) {
+				await GuildSetupManager.ensureHomebase(client, guild);
+				return;
+			}
+
+			// ① + ③ first-time or partial install.
 			const owner = await guild.fetchOwner();
 			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
 			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
