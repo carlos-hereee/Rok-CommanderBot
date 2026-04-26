@@ -1,7 +1,13 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
-import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
+// botInviteLink is composed in @utils/config from the env-driven
+// clientId, so a dev process serves the dev install URL and a prod
+// process serves the prod install URL automatically. We deliberately
+// do NOT import BOT_CONSTANTS.INVITE_URL anymore — that string is
+// pinned to the prod client id and was the source of dev/prod mix-up
+// risk.
+import { botInviteLink } from "@utils/config.js";
 
 const cc = embedContent.channelContent;
 
@@ -28,16 +34,18 @@ export const ChannelContent = {
 	//        the button gets silently dropped on boot (Discord clears
 	//        components on edit unless explicitly preserved).
 	// How:   single ButtonBuilder, ButtonStyle.Link, URL pulled from
-	//        BOT_CONSTANTS so the client id + permissions are authored
-	//        in one place and audited together with the permissions
-	//        breakdown comment. Label is in the godly voice — the button
-	//        is essentially a CTA written by the bot itself.
+	//        @utils/config.botInviteLink so the client id + permissions
+	//        track the running environment automatically. Permissions
+	//        breakdown comment lives next to botInviteLink in config.ts;
+	//        BOT_CONSTANTS.MIN_PERMISSIONS_DOCS holds the audit-friendly
+	//        list for install docs. Label is in the godly voice — the
+	//        button is essentially a CTA written by the bot itself.
 	introductionComponents(): ActionRowBuilder<ButtonBuilder> {
 		return new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder()
 				.setLabel("Summon me to your server, Mortal")
 				.setStyle(ButtonStyle.Link)
-				.setURL(BOT_CONSTANTS.INVITE_URL)
+				.setURL(botInviteLink)
 				.setEmoji("🔱")
 		);
 	},

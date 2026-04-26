@@ -3,10 +3,57 @@ import "dotenv/config.js";
 const isDev = process.env.NODE_ENV === "dev";
 const isProduction = process.env.NODE_ENV === "production";
 const dbEnv = process.env.DB_ENV || "development";
-const clientId = process.env.DISCORD_CLIENT_ID || "";
+
+// ── client id ────────────────────────────────────────────────
+// What:  pick the bot's Discord client id based on NODE_ENV so dev
+//        and prod can coexist in a single .env file (or be set in
+//        separate Railway environment scopes) without ever risking
+//        the dev process attaching to the prod application id.
+// Who:   deploy-commands.ts, botInviteLink (below), and any future
+//        code path that needs to reference the bot's identity.
+// When:  read once at module load. Process restart picks up env
+//        changes; live edits do not.
+// Where: NOTE — Discord client ids are NOT secrets. They appear on
+//        every OAuth URL and the bot's Discord profile. Storing
+//        them in env is purely an environment-separation
+//        convenience; the only true secret in this file is
+//        DISCORD_TOKEN.
+// How:   ① if NODE_ENV=production AND DISCORD_CLIENT_ID_PROD is
+//          set, use it.
+//        ② otherwise, if dev/anything-else AND DISCORD_CLIENT_ID_DEV
+//          is set, use it.
+//        ③ legacy fallback to the single DISCORD_CLIENT_ID var so
+//          existing deployments that haven't migrated to the split
+//          form keep working.
+//        ④ empty string sentinel if nothing is set; deploy-commands
+//          surfaces a missing-credentials error in that case.
+const clientId = (() => {
+	if (isProduction && process.env.DISCORD_CLIENT_ID_PROD) {
+		return process.env.DISCORD_CLIENT_ID_PROD;
+	}
+	if (!isProduction && process.env.DISCORD_CLIENT_ID_DEV) {
+		return process.env.DISCORD_CLIENT_ID_DEV;
+	}
+	return process.env.DISCORD_CLIENT_ID || "";
+})();
+
 const discordToken = process.env.DISCORD_TOKEN || "";
 const discordGuildId = process.env.DISCORD_GUILD_ID || "";
 const creatorId = process.env.CREATOR_DISCORD_ID || "";
+
+// ── bot invite link ───────────────────────────────────────────
+// What:  the canonical OAuth2 install URL for whichever bot
+//        identity is loaded in this process (dev or prod). Wired
+//        into the introductions intro embed via ChannelContent so
+//        a dev instance never serves the prod invite URL.
+// Who:   ChannelContent.introductionComponents() consumes this.
+// When:  evaluated once at module load with the resolved clientId.
+// Where: permissions=8 (Administrator) ships today as a known
+//        workaround for the Discord catch-22 around bot member
+//        overwrites in private channels. Tech-debt item is to
+//        refactor channel creation to use the bot's integration
+//        role overwrite and drop back to the minimum-bits set
+//        (268659792) — see BOT_CONSTANTS.MIN_PERMISSIONS_DOCS.
 const botInviteLink = `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&integration_type=0&scope=bot+applications.commands`;
 const port = process.env.PORT || 4937;
 const uri = process.env.MONGOOSE_URI || "";
