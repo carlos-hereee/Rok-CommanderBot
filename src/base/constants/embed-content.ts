@@ -76,10 +76,29 @@ export const embedContent = {
 	},
 
 	seasonEnd: {
-		title: "🏁 KvK Season Has Ended",
+		// ── season-end announcement (announcements channel) ──────
+		// What:  the single message posted in #announcements when a
+		//        guild's season expires. Voice leans kingdom-flavored
+		//        and motivational, not transactional. The previous copy
+		//        was "season concluded, run /configure-kvk-season" which
+		//        read like a system status line and ignored the fact
+		//        that members had spent weeks showing up for the bot.
+		// Who:   every member of the guild reads this. Tone has to honor
+		//        the work they put in, not just declare a state change.
+		//        The admin-only mechanic ("run /configure-kvk-season")
+		//        is still present because the bot owner and the alliance
+		//        leadership reading this message often overlap, but it
+		//        is demoted to the closing line.
+		// When:  exactly once per guild per season, gated by the
+		//        guild-scoped dedup in announceSeasonEnd. Never edit
+		//        this by tweaking past messages — refreshIntroEmbeds is
+		//        the only safe place to anchor-edit; one-shot
+		//        announcements like this one stand as posted.
+		title: "🏁 KvK Season Concluded — Stand Down, Heroes",
 		description:
-			"The KvK season has concluded. Reminders have been stopped.\n\n" +
-			"Run `/configure-kvk-season` when the next season begins.",
+			"The campaign closes. To every warrior who answered the bell, every commander who held the line, every governor who marched out when it counted — thank you. Your discipline shaped this season.\n\n" +
+			"Whether the kingdom feasts or rebuilds, the next decree always rises. When the call comes, an admin can summon the next schedule with `/configure-kvk-season`.\n\n" +
+			"Sharpen your blades. The realm remembers what you did here.",
 	},
 
 	leaderboard: {
@@ -109,7 +128,18 @@ export const embedContent = {
 		nextOccurrenceLabel: "Next",
 		scheduledDateLabel: "Scheduled",
 		intervalLabel: (hours: number) => `Repeats every **${hours} hours**`,
-		seasonEndLabel: "Season ends",
+		// Single source of truth for the bolded season-end banner that now
+		// renders once at the top of the embed description. Replaced the
+		// old per-row seasonEndLabel after the embed redesign moved the
+		// season anchor out of every event row.
+		seasonEndTopLabel: "Season ends",
+		// Field-name heading that introduces the "Events Completed This Season"
+		// block at the bottom of the embed. Field names render naturally bold
+		// in Discord, so no markdown is required around the title.
+		completedSectionTitle: "📜 Events Completed This Season",
+		// Label rendered alongside the date a one-time event was concluded
+		// (its firstOccurrence timestamp). Lives in completed-block rows.
+		completedDateLabel: "Concluded",
 		footer: "Updated automatically. The scroll refreshes itself.",
 	},
 	// user-facing strings for the /configure-kvk-season command. lives
@@ -165,8 +195,7 @@ export const embedContent = {
 		checklistResolvedCustom: (itemCount: number) =>
 			`✅ Custom checklist applied (${itemCount} item${itemCount === 1 ? "" : "s"}) to every event in this season.`,
 		checklistResolvedSkipped: "⏭️ Skipped — defaults applied. Edit per event from the dashboard any time.",
-		checklistEmptyError:
-			"❌ Checklist cannot be empty. Customize requires at least one item, or use Accept defaults instead.",
+		checklistEmptyError: "❌ Checklist cannot be empty. Customize requires at least one item, or use Accept defaults instead.",
 		checklistPromptTimedOut: "⏱️ Checklist prompt timed out — defaults were applied to every event.",
 	},
 	kvkConfirmation: {
@@ -176,11 +205,11 @@ export const embedContent = {
 			seasonEnd: "📅 Season End",
 			ruins: {
 				name: "🏚️ Ancient Ruins",
-				interval: "Repeats every **36 hours** until season end",
+				interval: "Repeats every **40 hours** until season end",
 			},
 			altar: {
 				name: "🕯️ Altar of Darkness",
-				interval: "Repeats every **84 hours** until season end",
+				interval: "Repeats every **86 hours** until season end",
 			},
 			kau: {
 				name: "⚔️ Trial of Kau Karuak",
@@ -327,10 +356,7 @@ export const embedContent = {
 					// leadership recognises their tools without scanning
 					// the stream-adjacent blocks below.
 					name: "⚔️ ROK KvK Commands",
-					value: [
-						"`/configure-kvk-season`",
-						"ROK (Rise of Kingdoms) only. Creates event reminders for a KvK season.",
-					].join("\n"),
+					value: ["`/configure-kvk-season`", "ROK (Rise of Kingdoms) specific. Event reminders for a KvK season."].join("\n"),
 				},
 				{
 					name: "📺 Stream / General Schedule Commands",
@@ -460,8 +486,8 @@ export const embedContent = {
 				"✅ **KvK reminders configured successfully!**",
 				"",
 				"**Events scheduled:**",
-				"- 🏚️ Ancient Ruins *(every 36h)*",
-				"- 🕯️ Altar of Darkness *(every 84h)*",
+				"- 🏚️ Ancient Ruins *(every 40h)*",
+				"- 🕯️ Altar of Darkness *(every 86h)*",
 				"- ⚔️ Trial of Kau Karuak *(Easy → Normal → Hard → Nightmare)*",
 				"",
 				`**Season ends:** <t:${seasonEnd}:D>`,
@@ -511,9 +537,7 @@ export const embedContent = {
 				].join("\n"),
 			// Three line summary of who gets pinged and where.
 			audienceLine: (mentionRoleId: string | null, channelId: string) =>
-				mentionRoleId
-					? `Pinging <@&${mentionRoleId}> in <#${channelId}>.`
-					: `Pinging the guild member role in <#${channelId}>.`,
+				mentionRoleId ? `Pinging <@&${mentionRoleId}> in <#${channelId}>.` : `Pinging the guild member role in <#${channelId}>.`,
 			// Optional auto-pause cap. Shown only when the streamer set a duration.
 			autoPauseLine: (untilUnix: number) => `Auto-pauses on <t:${untilUnix}:F> (<t:${untilUnix}:R>) unless extended.`,
 			confirmButtonLabel: "✅ Save schedule",
@@ -551,10 +575,7 @@ export const embedContent = {
 		// the markdown but the bot still does not allowedMentions @everyone).
 		announcementTitle: "📺 Going live soon",
 		announcementBody: (leadLabel: string, startUnix: number, note: string | null) =>
-			[
-				`Stream starts **${leadLabel}** — <t:${startUnix}:t> (<t:${startUnix}:R>).`,
-				note ? `\n${note}` : "",
-			]
+			[`Stream starts **${leadLabel}** — <t:${startUnix}:t> (<t:${startUnix}:R>).`, note ? `\n${note}` : ""]
 				.filter(Boolean)
 				.join("\n"),
 		posted: "✅ Announcement posted.",
@@ -576,47 +597,46 @@ export const embedContent = {
 	//        Update BOTH public and innerSanctum together when shipping
 	//        a new version; they describe the same release in two voices.
 	featureAnnouncement: {
-		// ── public #announcements copy ─────────────────────────────
-		// Loud, on-voice. This post is what mortals (and outsiders who
-		// have been shown the server) will see. Stays in the kingdom
-		// voice and pitches the new surface as a gift from the bot
-		// itself, not as a changelog entry.
+		// ── v1.4.0 — bug fix + decree editing release ─────────────
+		// Lead with the apology. The 2026-04-24 spam tick where six
+		// season-end embeds posted in one minute, plus the cadence
+		// drift that misfired Ruins and Altar reminders, were both
+		// real impacts on member experience. The kingdom-voice public
+		// copy acknowledges the dissonance directly before pivoting
+		// to the new edit surface. Inner-sanctum copy is the plain
+		// admin changelog, lists the migration that already ran, and
+		// closes with the new edit button operator notes.
 		public: {
-			title: "🔱 New Decrees Have Been Etched",
+			title: "🛡️ Decree of Restoration",
 			description:
-				"Mortals — **my Creator has added to my arsenal.**\n\n" +
-				"Know these new powers:\n\n" +
-				"**📺 Stream & Event Schedules**\n" +
-				"I now serve streamers, gaming communities, and any realm that gathers on a schedule.\n" +
-				"• `/configure-stream-schedule` — weekly recurring reminders.\n" +
-				"• `/announce-stream` — one-off reminders for a planned event.\n" +
-				"• `/go-live-soon` — a quick going-live shout for the forgetful.\n" +
-				"• `/pause-schedule` & `/continue-schedule` — silence without deletion.\n\n" +
-				"**🛡️ Self-Healing Homebase**\n" +
-				"My throne now rebuilds missing chambers on its own.\n" +
-				"You shall not summon new channels by hand.\n\n" +
-				"*The worthy shall adapt. The rest shall be left behind.*",
+				"Mortals — **my Creator has hunted down a pair of bugs that troubled the kingdom.**\n\n" +
+				"What ailed the realm has been mended:\n\n" +
+				"**⚙️ Decree timing has been corrected.**\n" +
+				"Ancient Ruins now repeats every 40 hours, and Altar of Darkness every 86. The cadences match the kingdom's true schedule. If your reminders rang at the wrong hour these past weeks, that is why — and it shall not happen again.\n\n" +
+				"**🪶 Season's end shall sound but once.**\n" +
+				"Where the herald previously shouted six times to mark the close of a season, you shall hear it now exactly once.\n\n" +
+				"**📜 The decree calendar reads cleaner.**\n" +
+				"Completed events now rest in their own chapter. The season's end is bolded once at the top instead of repeated on every line.\n\n" +
+				"**✏️ A new gift to those who lead.**\n" +
+				"On the next-decree channel, those granted the bot's trust may now click `Edit` to shift a decree's time, title, or description on the fly.\n\n" +
+				"*The realm regrets the disorder. Sharpen your blades.*",
 		},
-		// ── #inner-sanctum copy ────────────────────────────────────
-		// Plain admin-facing voice. Tells the owner + council what
-		// changed, how to use it, and where to find it. No ping. This
-		// is a courtesy update for people actually maintaining the bot.
 		innerSanctum: {
-			title: "📓 Feature Update for Admins",
+			title: "📓 v1.4.0 — Bug Fix and Decree Editing",
 			description:
-				"A new release has landed. Here is the operator-facing rundown.\n\n" +
-				"**New slash commands (Administrator-only):**\n" +
-				"• `/configure-stream-schedule` — weekly recurring reminder. Day-of-week + UTC time.\n" +
-				"• `/announce-stream` — one-off reminder at a specific future `MM/DD @HH:MM` UTC.\n" +
-				"• `/go-live-soon` — one-shot announcement posted now. Lead-time options: now / 10m / 30m / 1h / 3h / 6h.\n" +
-				"• `/pause-schedule` — pause a recurring event. Optional `days` arg sets an auto-resume timer.\n" +
-				"• `/continue-schedule` — resume a paused event immediately.\n\n" +
-				"**Behavior changes:**\n" +
-				"• Event schema gained `mentionRoleId` (per-event ping override), `paused`, and `pausedUntil` fields.\n" +
-				"• Reminder pings now use `event.mentionRoleId → config.memberRoleId → @here` precedence.\n" +
-				"• Schedule board renders paused events with a `⏸️ paused` tag and a pause notice.\n" +
-				"• Missing homebase channels now self-heal on boot when the stored id is null (previously only when it was stale).\n\n" +
-				"**Nothing to do.** This message is informational. Existing KvK behavior is unchanged.",
+				"This release corrects two production bugs and adds a new admin surface.\n\n" +
+				"**Fixes:**\n" +
+				"• `Ancient Ruins` cadence: 36h → 40h.\n" +
+				"• `Altar of Darkness` cadence: 84h → 86h.\n" +
+				"• Both required a one-time MongoDB migration to correct existing events; that migration ran at deploy time and is idempotent on re-run.\n" +
+				"• Season-end announcement now fires once per guild per season instead of once per active event (was firing 6× during the 2026-04-24 incident).\n\n" +
+				"**New — decree editing:**\n" +
+				"• `Edit` button on every next-decree post in 🛡️next-decree.\n" +
+				"• Server owner plus members of the configured admin role can adjust title, description, or time on a single occurrence (`Apply to this fire only`) or as a permanent shift to the recurring anchor (`Apply to all future fires`).\n" +
+				"• Time edits surface a 25-option timezone dropdown after modal submit; no IANA names to type.\n" +
+				"• Schedule board redesign: completed events partitioned into their own section, season-end line bolded once at the top.\n" +
+				"• Every edit writes to the `AuditLog` collection — `actor`, `before`, `after`, and scope.\n\n" +
+				"**Nothing to do.** The fixes apply themselves. The edit button is opt-in per click.",
 		},
 	},
 
@@ -638,9 +658,7 @@ export const embedContent = {
 					"Reminders fire at the offsets configured for this guild (default: 30 and 15 minutes before).",
 				].join("\n"),
 			audienceLine: (mentionRoleId: string | null, channelId: string) =>
-				mentionRoleId
-					? `Pinging <@&${mentionRoleId}> in <#${channelId}>.`
-					: `Pinging the guild member role in <#${channelId}>.`,
+				mentionRoleId ? `Pinging <@&${mentionRoleId}> in <#${channelId}>.` : `Pinging the guild member role in <#${channelId}>.`,
 			confirmButtonLabel: "✅ Schedule it",
 			cancelButtonLabel: "✖️ Cancel",
 		},

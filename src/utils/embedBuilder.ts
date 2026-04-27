@@ -102,9 +102,10 @@ export function seasonEndEmbed(): EmbedBuilder {
 
 // ── schedule board embed ──
 // rendered into the pinned message in the event-schedule channel. three
-// states: season ended, no events configured, or a roster of active events
-// with one row per event. the caller resolves the events + the guild's
-// announcements channel id so this function stays pure.
+// states: season ended, no events configured, or a roster of events split
+// into an active block + an optional "completed this season" block at the
+// bottom. the caller resolves the events + the guild's announcements
+// channel id + the canonical season anchor so this function stays pure.
 export interface IScheduleField {
 	name: string;
 	type: "recurring" | "one-time";
@@ -113,20 +114,33 @@ export interface IScheduleField {
 	nextOccurrenceTs: number | null;
 	intervalHours: number | null;
 	// unix seconds. null for regular announcements that opted out of the
-	// KvK season scope (announcementType "regular"). The schedule embed
-	// hides the "Season ends" line for those rows entirely.
+	// KvK season scope (announcementType "regular"). Retained because
+	// upstream (ScheduleBoard.toField) still computes it cheaply, but the
+	// schedule embed no longer renders a per-row season-end line — the
+	// banner moved to the description (see options.guildSeasonEndTs).
 	seasonEndTs: number | null;
 	// when true, the row renders with a "paused" tag in the field name and a
 	// short "Reminders paused" line in the body. Caller (ScheduleBoard.toField)
 	// reads event.paused directly so the board reflects the live DB state on
 	// every refresh tick.
 	paused?: boolean;
+	// unix seconds for the original firstOccurrence date. For one-time
+	// events this is the only date the event ever fires on; for recurring
+	// events it anchors the cadence. Used by the completed block to render
+	// the "Concluded" date once a one-time occurrence is in the past.
+	firstOccurrenceTs: number;
+	// True iff the event is one-time AND its firstOccurrence is in the past.
+	// Recurring events are never completed within a live season — they
+	// recur forever until the season closes. The caller (ScheduleBoard.toField)
+	// computes this against Date.now() at refresh time so the partition
+	// reflects the moment the embed renders.
+	isCompleted: boolean;
 }
 
 export function scheduleBoardEmbed(
 	fields: IScheduleField[],
 	announcementsChannelId: string | null,
-	options: { seasonEnded?: boolean } = {}
+	options: { seasonEnded?: boolean; guildSeasonEndTs?: number | null } = {}
 ): EmbedBuilder {
 	const c = embedContent.scheduleBoard;
 	const embed = base().setTitle(c.title).setColor(embedContent.COLORS.SCHEDULE).setFooter({ text: c.footer });
@@ -139,50 +153,100 @@ export function scheduleBoardEmbed(
 		return embed.setDescription(c.noEvents);
 	}
 
-	embed.setDescription(c.description(announcementsChannelId));
+	// ── description: greeting + bolded season-end banner ──
+	// What:  the season anchor renders ONCE at the top so the eye lands on
+	//        it before scanning the per-event roster. Per-row season-end
+	//        lines were dropped — every event in a guild shares the same
+	//        seasonEnd, so repeating it on N rows was noise.
+	// Who:   read by every warrior in the alliance (channel is public).
+	// When:  guildSeasonEndTs is provided when the guild has at least one
+	//        KvK event with a seasonEnd. A null/undefined value signals a
+	//        regular-announcements-only guild and the banner is omitted.
+	// How:   single newline-separated paragraph appended to the existing
+	//        greeting so the channel callout and the season banner stay
+	//        visually adjacent at the top of the embed.
+	const greeting = c.description(announcementsChannelId);
+	const seasonEndLine =
+		options.guildSeasonEndTs !== undefined && options.guildSeasonEndTs !== null
+			? `\n\n**${c.seasonEndTopLabel}:** <t:${options.guildSeasonEndTs}:D>`
+			: "";
+	embed.setDescription(`${greeting}${seasonEndLine}`);
 
-	for (const field of fields) {
-		const lines: string[] = [];
-		const occurrenceLabel = field.type === "recurring" ? c.nextOccurrenceLabel : c.scheduledDateLabel;
+	// Partition into active (current/future) and completed (one-time, past).
+	// Active block keeps the order received from the caller (sorted ascending
+	// by nextOccurrenceTs in ScheduleBoard.refreshSchedule). Completed block
+	// re-sorts descending by firstOccurrenceTs so the most recently concluded
+	// event leads — that's the row a returning warrior is most likely to want.
+	//
+	// ── field count audit (2026-04-27) ──
+	//   typical KvK guild: 6 active + 1 heading + 4 completed = 11 fields
+	//   Discord cap: 25 fields per embed, 6000 chars total per embed
+	//   Headroom is more than 2x today. If a future feature pushes the
+	//   roster past ~15 active rows, re-audit before shipping — the 25-field
+	//   cap is silent (Discord drops overflow without an error).
+	const active = fields.filter((f) => !f.isCompleted);
+	const completed = fields.filter((f) => f.isCompleted).sort((a, b) => b.firstOccurrenceTs - a.firstOccurrenceTs);
 
-		// Paused rows lead with the pause notice so the eye lands on it
-		// before the timestamps. The next-occurrence math still runs
-		// (occurrences are pure schedule arithmetic) but readers should
-		// treat them as "would have fired" not "will fire". When paused
-		// is false/absent (the historical default for KvK + legacy events)
-		// this line is omitted entirely so the existing layout is unchanged.
-		if (field.paused) {
-			lines.push("⏸️ _Reminders paused — resume with `/continue-schedule`_");
+	for (const field of active) {
+		embed.addFields(buildActiveField(field, c));
+	}
+
+	if (completed.length > 0) {
+		// Discord requires a non-empty value on every field; a zero-width
+		// space keeps the heading row visually empty while still rendering
+		// the bolded section title above the completed list.
+		embed.addFields({ name: c.completedSectionTitle, value: "​", inline: false });
+		for (const field of completed) {
+			embed.addFields(buildCompletedField(field, c));
 		}
-
-		if (field.nextOccurrenceTs !== null) {
-			// both relative ("in 2 hours") and full date, so Mortals in any
-			// timezone see a correct local time.
-			lines.push(`**${occurrenceLabel}:** <t:${field.nextOccurrenceTs}:R> · <t:${field.nextOccurrenceTs}:f>`);
-		} else {
-			lines.push(`**${occurrenceLabel}:** _awaiting next season_`);
-		}
-
-		if (field.type === "recurring" && field.intervalHours !== null) {
-			lines.push(c.intervalLabel(field.intervalHours));
-		}
-
-		// Hide the "Season ends" line for regular announcements that have
-		// no season anchor. Without the guard, null becomes "<t:null:D>" —
-		// Discord renders that as a literal "Invalid Date" string in the
-		// embed which looks like a bug to admins reading the schedule.
-		if (field.seasonEndTs !== null) {
-			lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
-		}
-
-		// Field name carries a "[paused]" tag so a glance at the bolded
-		// header is enough to spot which schedules are inert. Active rows
-		// fall through unchanged.
-		const headerName = field.paused ? `${c.fieldName(field.name, field.type)} · ⏸️ paused` : c.fieldName(field.name, field.type);
-		embed.addFields({ name: headerName, value: lines.join("\n"), inline: false });
 	}
 
 	return embed;
+}
+
+// ── private: scheduleBoardEmbed row builders ──
+
+function buildActiveField(field: IScheduleField, c: typeof embedContent.scheduleBoard): { name: string; value: string; inline: false } {
+	const lines: string[] = [];
+	const occurrenceLabel = field.type === "recurring" ? c.nextOccurrenceLabel : c.scheduledDateLabel;
+
+	// Paused rows lead with the pause notice so the eye lands on it before
+	// the timestamps. The next-occurrence math still runs (occurrences are
+	// pure schedule arithmetic) but readers should treat them as "would have
+	// fired" not "will fire".
+	if (field.paused) {
+		lines.push("⏸️ _Reminders paused — resume with `/continue-schedule`_");
+	}
+
+	if (field.nextOccurrenceTs !== null) {
+		// both relative ("in 2 hours") and full date, so Mortals in any
+		// timezone see a correct local time.
+		lines.push(`**${occurrenceLabel}:** <t:${field.nextOccurrenceTs}:R> · <t:${field.nextOccurrenceTs}:f>`);
+	} else {
+		lines.push(`**${occurrenceLabel}:** _awaiting next season_`);
+	}
+
+	if (field.type === "recurring" && field.intervalHours !== null) {
+		lines.push(c.intervalLabel(field.intervalHours));
+	}
+
+	const headerName = field.paused ? `${c.fieldName(field.name, field.type)} · ⏸️ paused` : c.fieldName(field.name, field.type);
+	return { name: headerName, value: lines.join("\n"), inline: false };
+}
+
+function buildCompletedField(
+	field: IScheduleField,
+	c: typeof embedContent.scheduleBoard
+): { name: string; value: string; inline: false } {
+	// Completed rows are intentionally minimal — name + concluded date. No
+	// next-occurrence (there will never be another), no interval (one-time
+	// events have no cadence), no pause notice (a completed event is by
+	// definition no longer firing).
+	return {
+		name: c.fieldName(field.name, field.type),
+		value: `_${c.completedDateLabel}:_ <t:${field.firstOccurrenceTs}:D>`,
+		inline: false,
+	};
 }
 // ── confirmation embed ──
 export function leaderboardEmbed(

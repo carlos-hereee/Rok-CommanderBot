@@ -3,7 +3,7 @@
 		{
 			"key": "ruins",
 			"name": "Ancient Ruins",
-			"intervalHours": 36,
+			"intervalHours": 40,
 			"type": "recurring",
 			"prepSteps": [
 				{ "label": "Activate stats token", "order": 1 },
@@ -14,7 +14,7 @@
 		{
 			"key": "altar_of_darkness",
 			"name": "Altar of Darkness",
-			"intervalHours": 84,
+			"intervalHours": 86,
 			"type": "recurring",
 			"prepSteps": [
 				{ "label": "Stockpile offerings", "order": 1 },

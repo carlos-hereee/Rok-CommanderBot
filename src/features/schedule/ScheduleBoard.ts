@@ -54,10 +54,32 @@ export async function refreshSchedule(client: Client, guildId: string): Promise<
 		const kvkEvents = events.filter((e) => Boolean(e.seasonEnd));
 		const seasonEnded = kvkEvents.length > 0 && kvkEvents.every((e) => new Date(e.seasonEnd as Date).getTime() <= now.getTime());
 
+		// ── canonical guild season anchor ──
+		// What:  unix timestamp of the earliest non-null seasonEnd across the
+		//        guild's KvK events. Rendered ONCE at the top of the embed
+		//        description (replaces the per-row "Season ends" line).
+		// Who:   read by scheduleBoardEmbed only.
+		// When:  null when the guild has zero KvK events (regular-announcements
+		//        guild) or a fully-ended season (kvkEvents already swept).
+		//        scheduleBoardEmbed treats null as "omit the banner".
+		// How:   earliest is a defensive choice. /configure-kvk-season writes
+		//        the same seasonEnd to every event, but if a future flow allows
+		//        per-event season extensions the earliest still represents the
+		//        season anchor every event respects.
+		const guildSeasonEndTs =
+			kvkEvents.length === 0
+				? null
+				: Math.floor(
+						Math.min(...kvkEvents.map((e) => new Date(e.seasonEnd as Date).getTime())) / 1000
+				  );
+
 		const fields: IScheduleField[] = events
 			.map((event) => toField(event as IGameEvent))
 			// chronological sort so Mortals see the soonest event first.
 			// events with no upcoming occurrence (null ts) sink to the bottom.
+			// scheduleBoardEmbed re-sorts the completed block descending by
+			// firstOccurrenceTs after partitioning, so this ordering only
+			// affects the active block.
 			.sort((a, b) => {
 				if (a.nextOccurrenceTs === null && b.nextOccurrenceTs === null) return 0;
 				if (a.nextOccurrenceTs === null) return 1;
@@ -65,7 +87,7 @@ export async function refreshSchedule(client: Client, guildId: string): Promise<
 				return a.nextOccurrenceTs - b.nextOccurrenceTs;
 			});
 
-		const embed = scheduleBoardEmbed(fields, config.announcementsChannelId ?? null, { seasonEnded });
+		const embed = scheduleBoardEmbed(fields, config.announcementsChannelId ?? null, { seasonEnded, guildSeasonEndTs });
 
 		await postOrEdit(channel, config.scheduleMessageId ?? null, embed, guildId);
 	} catch (error) {
@@ -96,10 +118,26 @@ function toField(event: IGameEvent): IScheduleField {
 	const nextOccurrenceTs = next ? Math.floor(next.getTime() / 1000) : null;
 
 	// Regular announcements have no seasonEnd, so we omit the timestamp
-	// (null) and the embed builder hides the "Season ends" line for that
-	// row. KvK events keep the historical behavior — a unix timestamp
-	// rendered as a Discord <t:…:D> date in the embed.
+	// (null). Retained for backwards compatibility with consumers that
+	// still read seasonEndTs per row, but the schedule embed no longer
+	// renders it in row bodies — the banner moved to the description.
 	const seasonEndTs = event.seasonEnd ? Math.floor(new Date(event.seasonEnd).getTime() / 1000) : null;
+
+	const firstOccurrenceMs = new Date(event.firstOccurrence).getTime();
+	// ── isCompleted: one-time events whose date already passed ──
+	// What:  partitions one-time events into "active" (date still future) and
+	//        "completed" (date passed) so scheduleBoardEmbed can render them
+	//        in separate blocks. Recurring events are NEVER completed within
+	//        a live season — they recur forever until seasonEnd swaps the
+	//        whole board into the season-ended state.
+	// When:  evaluated on every refresh tick against Date.now(). A one-time
+	//        event flips from active to completed the moment its
+	//        firstOccurrence passes; the next refresh after that moment
+	//        renders it in the completed block.
+	// Where: scheduleBoardEmbed reads this flag to partition fields and to
+	//        choose between buildActiveField (full body) and
+	//        buildCompletedField (minimal body, "Concluded" date only).
+	const isCompleted = event.type === "one-time" && firstOccurrenceMs < Date.now();
 
 	return {
 		name: event.name,
@@ -114,6 +152,8 @@ function toField(event: IGameEvent): IScheduleField {
 		// three falsy states map to "not paused", which matches how the
 		// scheduler and /pause-schedule both interpret the field.
 		paused: event.paused === true,
+		firstOccurrenceTs: Math.floor(firstOccurrenceMs / 1000),
+		isCompleted,
 	};
 }
 

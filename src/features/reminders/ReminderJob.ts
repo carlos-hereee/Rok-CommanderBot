@@ -4,6 +4,7 @@ import { reminderStore } from "@db/stores/reminderStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { reminderEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
+import { refreshNextUp } from "@features/schedule/NextUpBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 export async function fireReminder(client: Client, event: IGameEvent, occurrence: Date, offsetMinutes: number): Promise<void> {
@@ -66,6 +67,12 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 	// event advances visibly. fire and forget so a Discord hiccup here
 	// cannot undo the successful reminder fire.
 	refreshSchedule(client, event.guildId).catch((err) => console.error(LOG_MESSAGES.schedule.refreshAfterReminderFailed, err));
+
+	// ⑧ post any new upcoming decrees in the next-decree channel for this
+	// guild. Fire-and-forget for the same reason as refreshSchedule above —
+	// the NextUpBoard channel is append-only and a missed post just means
+	// the next refresh trigger (next fire, next boot) catches up.
+	refreshNextUp(client, event.guildId).catch((err) => console.error("[reminder] refreshNextUp failed after fire", err));
 }
 
 /*

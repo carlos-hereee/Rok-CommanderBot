@@ -5,6 +5,7 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
 import { fireReminder } from "./ReminderJob.js";
 import { reminderStore } from "@db/stores/reminderStore.js";
+import { eventOverrideStore } from "@db/stores/eventOverrideStore.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { IGameEvent } from "../events/event.types.js";
 import { seasonEndEmbed } from "@utils/embedBuilder.js";
@@ -12,6 +13,43 @@ import { refreshAllSchedules, refreshSchedule } from "@features/schedule/Schedul
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { getOutboundLatencyStats } from "@utils/serverApi.js";
 import { noteFailure as noteServerFailure, noteSuccess as noteServerSuccess } from "./serverHealthNotifier.js";
+
+// ── resolveOverride ────────────────────────────────────────────────
+// What:  given an event + an original occurrence (the cron-computed fire
+//        moment, before any edits), look up an EventOverride keyed on that
+//        moment and return a merged event payload + the effective fire
+//        moment. When no override exists the function returns the event
+//        and occurrence verbatim.
+// Who:   called from the per-event loop in startScheduler before computing
+//        reminderTime and before the dedup check. fireReminder receives the
+//        MERGED event so its embed renders the override values; the dedup
+//        check still uses the ORIGINAL occurrence so an override applied
+//        between cron ticks does not bypass already-fired reminders.
+// When:  per event per cron tick. One Mongo findOne per event per tick;
+//        with N guilds × M events per guild this is N*M reads per minute,
+//        a load the underlying compound unique index handles trivially.
+// Where: sits between the cron tick and fireReminder. ReminderJob.fireReminder
+//        does NOT consult EventOverride — only the scheduler does, so the
+//        contract is "scheduler resolves overrides, fireReminder posts".
+async function resolveOverride(
+	event: IGameEvent,
+	originalOccurrence: Date
+): Promise<{ mergedEvent: IGameEvent; fireMoment: Date }> {
+	const override = await eventOverrideStore.findOne({
+		eventId: event.eventId,
+		originalOccurrence,
+	});
+	if (!override) {
+		return { mergedEvent: event, fireMoment: originalOccurrence };
+	}
+	const mergedEvent: IGameEvent = {
+		...event,
+		name: override.overrideTitle ?? event.name,
+		description: override.overrideDescription ?? event.description,
+	};
+	const fireMoment = override.overrideTime ?? originalOccurrence;
+	return { mergedEvent, fireMoment };
+}
 
 // ── F5 observability: fire-rate counters ──
 // What: in-process counters tracking successful and failed reminder fires per hour.
@@ -52,14 +90,10 @@ const logHourlyMetrics = (): void => {
 	// roadmap (F5) calls out "alert if failure rate > 1% over a 1-hour window" —
 	// that's the threshold here.
 	if (latency.p99 > 500 && latency.samples >= 10) {
-		console.warn(
-			`[metrics] outbound_p99 ${latency.p99}ms exceeds 500ms threshold — cron tick may overrun its 60s budget`
-		);
+		console.warn(`[metrics] outbound_p99 ${latency.p99}ms exceeds 500ms threshold — cron tick may overrun its 60s budget`);
 	}
 	if (failureRate > 0.01 && total >= 10) {
-		console.warn(
-			`[metrics] reminder failure rate ${(failureRate * 100).toFixed(1)}% exceeds 1% threshold over the last hour`
-		);
+		console.warn(`[metrics] reminder failure rate ${(failureRate * 100).toFixed(1)}% exceeds 1% threshold over the last hour`);
 	}
 	// Reset counters for the next window.
 	fireSuccessCount = 0;
@@ -182,21 +216,32 @@ export function startScheduler(client: Client): void {
 				// unchanged.
 				if (event.seasonEnd && now > new Date(event.seasonEnd)) {
 					// Soft-delete, not a generic update: under remote mode the server's PATCH endpoint
-// does not accept `active` in the field whitelist (the soft-delete is its own DELETE
-// route). deleteInGuild routes to the right endpoint for both modes.
-await eventStore.deleteInGuild(event.eventId, event.guildId);
+					// does not accept `active` in the field whitelist (the soft-delete is its own DELETE
+					// route). deleteInGuild routes to the right endpoint for both modes.
+					await eventStore.deleteInGuild(event.eventId, event.guildId);
 					await announceSeasonEnd(client, event);
 					continue;
 				}
 
 				if (event.type === "one-time") {
 					// ── one-time events (kau karuak difficulties) ───────────
+					// Override resolution runs ONCE per event per tick (outside
+					// the offsets loop) so we don't pay an extra Mongo round-trip
+					// per offset. The merged event flows into fireReminder; the
+					// fireMoment shifts the reminder-window math.
+					const { mergedEvent, fireMoment } = await resolveOverride(event, event.firstOccurrence);
+
 					for (const offsetMinutes of event.reminderOffsets) {
-						const reminderTime = new Date(event.firstOccurrence.getTime() - offsetMinutes * 60 * 1000);
+						const reminderTime = new Date(fireMoment.getTime() - offsetMinutes * 60 * 1000);
 						const diff = reminderTime.getTime() - now.getTime();
 
 						if (diff < 0 || diff > BOT_CONSTANTS.REMINDER_FIRE_WINDOW_MS) continue;
 
+						// Dedup key remains the ORIGINAL firstOccurrence so an
+						// override applied between cron ticks cannot bypass an
+						// already-fired reminder. The compound index
+						// (eventId, eventOccurrence, offsetMinutes) anchors on
+						// the schedule's source of truth, not the override.
 						const alreadyFired = await reminderStore.exists({
 							eventId: event.eventId,
 							eventOccurrence: event.firstOccurrence,
@@ -209,7 +254,7 @@ await eventStore.deleteInGuild(event.eventId, event.guildId);
 						// throws on truly unexpected failures — but counting both branches
 						// gives operators a real signal in the hourly metric log.
 						try {
-							await fireReminder(client, event, event.firstOccurrence, offsetMinutes);
+							await fireReminder(client, mergedEvent, fireMoment, offsetMinutes);
 							recordFireSuccess();
 						} catch (err) {
 							recordFireFailure();
@@ -220,9 +265,9 @@ await eventStore.deleteInGuild(event.eventId, event.guildId);
 						// so it doesn't keep getting checked every tick
 						if (offsetMinutes === Math.min(...event.reminderOffsets)) {
 							// Soft-delete, not a generic update: under remote mode the server's PATCH endpoint
-// does not accept `active` in the field whitelist (the soft-delete is its own DELETE
-// route). deleteInGuild routes to the right endpoint for both modes.
-await eventStore.deleteInGuild(event.eventId, event.guildId);
+							// does not accept `active` in the field whitelist (the soft-delete is its own DELETE
+							// route). deleteInGuild routes to the right endpoint for both modes.
+							await eventStore.deleteInGuild(event.eventId, event.guildId);
 						}
 					}
 				} else {
@@ -230,12 +275,17 @@ await eventStore.deleteInGuild(event.eventId, event.guildId);
 					const [nextOccurrence] = getUpcomingOccurrences(event, 1);
 					if (!nextOccurrence) continue;
 
+					const { mergedEvent, fireMoment } = await resolveOverride(event, nextOccurrence);
+
 					for (const offsetMinutes of event.reminderOffsets) {
-						const reminderTime = new Date(nextOccurrence.getTime() - offsetMinutes * 60 * 1000);
+						const reminderTime = new Date(fireMoment.getTime() - offsetMinutes * 60 * 1000);
 						const diff = reminderTime.getTime() - now.getTime();
 
 						if (diff < 0 || diff > BOT_CONSTANTS.REMINDER_FIRE_WINDOW_MS) continue;
 
+						// Same rationale as the one-time branch: dedup keys on
+						// the original computed occurrence, not on the override
+						// moment. See resolveOverride above.
 						const alreadyFired = await reminderStore.exists({
 							eventId: event.eventId,
 							eventOccurrence: nextOccurrence,
@@ -244,7 +294,7 @@ await eventStore.deleteInGuild(event.eventId, event.guildId);
 						if (alreadyFired) continue;
 
 						try {
-							await fireReminder(client, event, nextOccurrence, offsetMinutes);
+							await fireReminder(client, mergedEvent, fireMoment, offsetMinutes);
 							recordFireSuccess();
 						} catch (err) {
 							recordFireFailure();
@@ -259,7 +309,7 @@ await eventStore.deleteInGuild(event.eventId, event.guildId);
 	});
 }
 
-async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<void> {
+export async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<void> {
 	try {
 		// resolve the same way as fireReminder: always the guild's configured
 		// announcements channel, no per-event override.
@@ -283,24 +333,81 @@ async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<voi
 			console.error(LOG_MESSAGES.scheduler.seasonEndCalledWithoutDate(event.guildId, event.eventId));
 			return;
 		}
+		// Extract once so both the dedup `exists()` lookup and the
+		// `create()` write key off the same Date object. Without this
+		// shared reference, a future refactor that mutates event.seasonEnd
+		// between the two reads (or moves the truthy guard) could land
+		// `eventOccurrence: 1970-01-01` on the create — silently
+		// breaking dedup since 1970-01-01 is a fixed-point epoch zero
+		// every guild would collide on.
+		const seasonEndDate = new Date(event.seasonEnd);
 
-		// check if we already announced for this event
-		// prevents announcing multiple times if cron ticks again
+		// ── guild-scoped dedup ───────────────────────────────────
+		// What:  one season-end announcement per guild per season, not
+		//        one per event. The previous keying on event.eventId
+		//        meant a guild with N expired events received N copies
+		//        of the same "kingdom stands down" embed in the same
+		//        cron tick (six in production: ruins, altar, four kau
+		//        difficulties).
+		// Who:   read+written by this function only. The composite key
+		//        (eventId + eventOccurrence + offsetMinutes) in
+		//        reminderStore is what gates the channel.send below;
+		//        widening eventId to a guild-scoped synthetic key turns
+		//        the per-event slot into a per-guild slot. eventOccurrence
+		//        stays anchored on event.seasonEnd so a new season (with
+		//        a different seasonEnd date) gets its own slot and is
+		//        not silenced by the previous season's record.
+		// When:  every cron tick that finds at least one expired event
+		//        in a guild. The first event creates the record, every
+		//        subsequent event in the same guild finds it and short
+		//        circuits the channel.send.
+		// Where: the loop in startReminderScheduler() is sequential
+		//        (for-of with await), so the first call's create() lands
+		//        before the second call's exists() runs — no TOCTOU race
+		//        within a single tick. Across ticks, the record persists
+		//        in reminderStore so the second tick is also a no-op.
+		// How:   prefix "season-end:" + event.guildId. The "season-end:"
+		//        prefix prevents any future eventId collision with a
+		//        real Mongo ObjectId/uuid.
+		const guildSeasonKey = `season-end:${event.guildId}`;
+
 		const alreadyAnnounced = await reminderStore.exists({
-			eventId: event.eventId,
-			eventOccurrence: new Date(event.seasonEnd),
+			eventId: guildSeasonKey,
+			eventOccurrence: seasonEndDate,
 			offsetMinutes: -1, // ← -1 is a special marker meaning "season end announcement"
 		});
 		if (alreadyAnnounced) return;
 
 		const embed = seasonEndEmbed();
 
+		// ── crash-window trade-off ───────────────────────────────
+		// What:  channel.send fires BEFORE reminderStore.create. If
+		//        the process crashes between these two awaits the
+		//        dedup row is never persisted and the next cron tick
+		//        re-announces (duplicate post in #announcements).
+		// Who:   the operator. A duplicate is visible and an admin
+		//        can delete the second copy. The inverse ordering
+		//        (write the row first, send second) would trade the
+		//        duplicate for a silent miss: a Discord 5xx or
+		//        permission change after the row lands blocks every
+		//        retry on subsequent ticks and the season-end is
+		//        skipped without a user-visible signal — a worse
+		//        failure mode.
+		// When:  the crash window between these two awaits is
+		//        sub-second on a healthy host, so a duplicate is the
+		//        right cost to pay for guaranteed delivery on every
+		//        uncrashed run.
+		// Where: any change to this ordering must update the unit
+		//        coverage in ReminderScheduler.test.ts which asserts
+		//        the post-then-write sequence.
 		await channel.send({ embeds: [embed] });
 
-		// log it so we never announce twice
+		// log it so we never announce twice. Same guild-scoped key as
+		// the exists() check above so subsequent ticks (and subsequent
+		// expired events in the same tick) find it on lookup.
 		await reminderStore.create({
-			eventId: event.eventId,
-			eventOccurrence: new Date(event.seasonEnd),
+			eventId: guildSeasonKey,
+			eventOccurrence: seasonEndDate,
 			offsetMinutes: -1, // ← same special marker
 			messageId: "season-end",
 			channelId: targetChannelId,
@@ -310,9 +417,7 @@ async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<voi
 		// flip the pinned schedule board into its "season ended" state. fire
 		// and forget so a Discord error here does not prevent the season end
 		// log write above from being considered successful.
-		refreshSchedule(client, event.guildId).catch((err) =>
-			console.error(LOG_MESSAGES.schedule.refreshAfterSeasonEndFailed, err)
-		);
+		refreshSchedule(client, event.guildId).catch((err) => console.error(LOG_MESSAGES.schedule.refreshAfterSeasonEndFailed, err));
 	} catch (error) {
 		console.error(LOG_MESSAGES.scheduler.seasonEndFailed, error);
 	}

@@ -20,6 +20,9 @@ import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
 import { postFeatureAnnouncements } from "@features/announcements/postFeatureAnnouncement.js";
 import { registerOutageWatcher } from "@features/observability/outageWatcher.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
+import { dispatchButton, dispatchModal } from "@handlers/interactionRegistry.js";
+import { registerDecreeEditHandlers } from "@features/schedule/decreeEditHandlers.js";
+import { refreshAllNextUp } from "@features/schedule/NextUpBoard.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -126,12 +129,72 @@ clientReady(client);
 			}
 		}
 	});
+	// register persistent button + modal handlers BEFORE the listener
+	// installs. Each register* call is idempotent at module level — the
+	// registry throws if the same prefix gets registered twice, which
+	// surfaces a duplicate-bootstrap bug at boot rather than at the first
+	// click. Add new handler registrations here as new persistent UIs ship.
+	registerDecreeEditHandlers();
+
 	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
 		// handle autocomplete interactions first, before command checks
 		if (interaction.isAutocomplete()) {
 			const command = client.commands.get(interaction.commandName);
 			if (command?.autocomplete) await command.autocomplete(interaction);
+			return;
+		}
+
+		// ── persistent button dispatch ──
+		// What:  routes button clicks (Edit on a NextUpBoard post, etc) to
+		//        the registered handler in interactionRegistry.
+		// When:  every Discord ButtonInteraction. A `false` return from
+		//        dispatchButton means no global handler matched — that's
+		//        the expected case for buttons consumed by an inline
+		//        awaitMessageComponent collector inside a slash command
+		//        (configure-rok-reminders, the apply-scope flow inside
+		//        decreeEditHandlers, etc). Both listeners receive the
+		//        same InteractionCreate event; whichever has a matching
+		//        handler acks the interaction.
+		// Where: handlers register their prefix at boot (registerDecreeEdit
+		//        Handlers above). Per-handler permission gates live inside
+		//        the handler — the dispatcher does not authorize.
+		if (interaction.isButton()) {
+			try {
+				await dispatchButton(interaction);
+			} catch (error) {
+				console.error(`[interactions] button handler threw for customId='${interaction.customId}'`, error);
+				if (!interaction.replied && !interaction.deferred) {
+					await interaction
+						.reply({
+							embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+							flags: MessageFlags.Ephemeral,
+						})
+						.catch(() => undefined);
+				}
+			}
+			return;
+		}
+
+		// ── persistent modal dispatch ──
+		// Same dispatch model as buttons. Modals submitted by an inline
+		// awaitModalSubmit collector (configure-rok-reminders' checklist
+		// modal) flow through here too; dispatchModal returns false and
+		// the inline collector handles the submit.
+		if (interaction.isModalSubmit()) {
+			try {
+				await dispatchModal(interaction);
+			} catch (error) {
+				console.error(`[interactions] modal handler threw for customId='${interaction.customId}'`, error);
+				if (!interaction.replied && !interaction.deferred) {
+					await interaction
+						.reply({
+							embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+							flags: MessageFlags.Ephemeral,
+						})
+						.catch(() => undefined);
+				}
+			}
 			return;
 		}
 
@@ -302,6 +365,18 @@ clientReady(client);
 		// How:  iterates client.guilds.cache sequentially (alphabetical by
 		//       guild id) so errors on one guild cannot stall the rest.
 		await refreshAllSchedules(client);
+
+		// ── startup sweep of next-decree boards ──
+		// What: posts every upcoming decree in the next 24h horizon to each
+		//       guild's nextDecreeChannelId. Pairs with refreshAllSchedules:
+		//       schedules are edited in place, next-decree posts are NEW.
+		// When: once per boot. The dedup Set inside NextUpBoard guarantees
+		//       a re-boot within 24h does not duplicate posts already made
+		//       by a prior process — except across a restart, where some
+		//       overlap is the accepted trade-off (channel is append-only).
+		// Where: failures per-guild are logged and swallowed inside
+		//        refreshAllNextUp; one bad guild does not stall the others.
+		await refreshAllNextUp(client);
 
 		// ── feature announcement sweep ─────────────────────────────
 		// What: once-per-version broadcast to every setup-complete guild.

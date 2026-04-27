@@ -15,7 +15,8 @@
 			"@api/*": ["./src/api/*"],
 			"@features/*": ["./src/features/*"],
 			"@commands/*": ["./src/commands/*"],
-			"@db/*": ["./src/db/*"]
+			"@db/*": ["./src/db/*"],
+			"@handlers/*": ["./src/handlers/*"]
 		},
 		"resolveJsonModule": true,
 		"allowArbitraryExtensions": true,
