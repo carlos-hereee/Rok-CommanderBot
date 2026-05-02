@@ -192,13 +192,33 @@ export function scheduleBoardEmbed(
 	}
 
 	if (completed.length > 0) {
-		// Discord requires a non-empty value on every field; a zero-width
-		// space keeps the heading row visually empty while still rendering
-		// the bolded section title above the completed list.
-		embed.addFields({ name: c.completedSectionTitle, value: "​", inline: false });
-		for (const field of completed) {
-			embed.addFields(buildCompletedField(field, c));
-		}
+		// ── single-field completed section ──
+		// What:  collapse the heading + every completed entry into ONE
+		//        Discord embed field. The heading becomes the field name
+		//        (rendered bold) and all entries are concatenated into
+		//        the field value, separated by blank lines.
+		// Who:   readers of the schedule board. The previous layout split
+		//        the heading into its own field with an empty value,
+		//        which made Discord stack two field-gaps under the
+		//        heading (one for the empty value, one for the field
+		//        separator). The visual effect was a heading that looked
+		//        attached to the active block above it instead of the
+		//        completed entries below it.
+		// When:  every refresh that has at least one completed event.
+		//        Skipped entirely when completed.length === 0 so guilds
+		//        with no concluded events do not get an empty field.
+		// Where: pairs with buildCompletedLine below — the line builder
+		//        is now plain text with markdown bolding (since the
+		//        field-name auto-bold is gone), not a full Discord field.
+		// How:   join entries with `\n\n` so each entry is visually
+		//        separated by a blank line but still inside the same
+		//        field, which Discord renders without an additional gap.
+		const completedValue = completed.map((field) => buildCompletedLine(field, c)).join("\n\n");
+		embed.addFields({
+			name: c.completedSectionTitle,
+			value: completedValue,
+			inline: false,
+		});
 	}
 
 	return embed;
@@ -234,19 +254,14 @@ function buildActiveField(field: IScheduleField, c: typeof embedContent.schedule
 	return { name: headerName, value: lines.join("\n"), inline: false };
 }
 
-function buildCompletedField(
-	field: IScheduleField,
-	c: typeof embedContent.scheduleBoard
-): { name: string; value: string; inline: false } {
-	// Completed rows are intentionally minimal — name + concluded date. No
-	// next-occurrence (there will never be another), no interval (one-time
-	// events have no cadence), no pause notice (a completed event is by
-	// definition no longer firing).
-	return {
-		name: c.fieldName(field.name, field.type),
-		value: `_${c.completedDateLabel}:_ <t:${field.firstOccurrenceTs}:D>`,
-		inline: false,
-	};
+function buildCompletedLine(field: IScheduleField, c: typeof embedContent.scheduleBoard): string {
+	// Completed entries render inside a SINGLE field's value (see
+	// scheduleBoardEmbed for the rationale on why we no longer give
+	// each completed event its own field). The auto-bold that field
+	// names get for free is gone here, so the event name is wrapped
+	// in markdown bold explicitly. The concluded line stays italic
+	// for the "label vs value" visual hierarchy.
+	return `**${c.fieldName(field.name, field.type)}**\n_${c.completedDateLabel}:_ <t:${field.firstOccurrenceTs}:D>`;
 }
 // ── confirmation embed ──
 export function leaderboardEmbed(

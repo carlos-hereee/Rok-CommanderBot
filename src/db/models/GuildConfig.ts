@@ -127,6 +127,63 @@ const guildConfigSchema = new Schema(
 		},
 
 		setupComplete: { type: Boolean, default: false },
+
+		// ── plugin id (streamer-plugin spec Phase 1) ───────────────────
+		// What:  which copy/voice pack the bot renders for this guild.
+		//        Today the registry knows two ids: "rok-commander" (the
+		//        kingdom-voice pack used by the original alliance bot) and
+		//        "general-events" (the streamer-tone pack scheduled to land
+		//        in Phase 2). Unset rows fall back to "rok-commander" via
+		//        the `default` here AND via the registry fallback in
+		//        `getPluginCopy`, so the field is purely additive on
+		//        legacy data.
+		// Who:   every embed builder that calls `getPluginCopy(guildConfig)`
+		//        reads this field to pick the right pack. Phase 1 ships
+		//        the schema, registry, and lookup helpers; the embed
+		//        builders themselves migrate to plugin-aware lookups in
+		//        the follow-up phase that lands the streamer pack content.
+		// When:  set when a guild installs a non-default plugin (Phase 2's
+		//        general-events install flow). Existing rows continue to
+		//        load as "rok-commander" without any data backfill.
+		// Where: read by `getPluginCopy` at every render. Written by the
+		//        plugin-install slash command (Phase 2) and never mutated
+		//        at runtime — switching plugins after install is an admin
+		//        action that requires re-running setup so the home base
+		//        category and channels match the new pack's expectations.
+		// How:   loose `String` validator (not an enum) so adding a third
+		//        plugin pack later is a code-only change without a schema
+		//        migration. The `PluginId` TypeScript union in
+		//        `@base/copy/types` is the canonical authority on which
+		//        ids are valid; Mongoose accepts any string and the
+		//        runtime resolver handles unknown ids by falling back.
+		pluginId: { type: String, required: false, default: "rok-commander" },
+
+		// ── per-guild copy overrides (streamer-plugin spec Phase 1) ────
+		// What:  owner-authored replacements for individual copy strings.
+		//        A map from dotted-path keys (e.g. "responses.setupFailed",
+		//        "scheduleBoard.title") to the override string the owner
+		//        wants the bot to use instead of the pack default.
+		// Who:   read by `getCopyOverride` ahead of every pack lookup so
+		//        an override wins over the pack default. Written by the
+		//        Phase 3 dashboard editor UI ("Voice & Copy" tab under
+		//        plugin settings).
+		// When:  Phase 1 ships the data plumbing only — the schema field
+		//        and the resolver function. Call sites do not honor the
+		//        override layer until they migrate to `getCopyOverride`,
+		//        which happens incrementally as Phase 2 / Phase 3 deliver
+		//        the streamer plugin and the editor UI. New rows get an
+		//        empty Map; legacy rows load Map() lazily on first read.
+		// Where: stored as a Mongoose Map so adding new overridable keys
+		//        requires no schema migration — every key the bot reads
+		//        through `getCopyOverride` is overridable for free.
+		// How:   `default: () => new Map()` rather than a static literal
+		//        so each document gets its own Map instance instead of
+		//        sharing a reference. Values are constrained to strings;
+		//        function-template copy (e.g. `intervalLabel(hours)`) is
+		//        intentionally NOT overridable in v1 because it would
+		//        require a templating engine and the audit surface gets
+		//        complicated fast. v2 can revisit if real demand shows up.
+		copyOverrides: { type: Map, of: String, required: false, default: () => new Map<string, string>() },
 	},
 	{ timestamps: true }
 );

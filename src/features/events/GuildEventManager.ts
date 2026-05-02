@@ -99,6 +99,50 @@ export class GuildEventManager {
 				return perTypeDefault.prepSteps.map((step) => ({ ...step, id: v4() }));
 			};
 
+			// ── replace prior season events ────────────────────────
+			// What:  before creating the new season's events, soft-delete
+			//        any currently-active KvK events in this guild whose
+			//        name matches one of the rok-events.json canonical
+			//        names. Without this step, a second run of
+			//        /configure-kvk-season for a new season simply
+			//        accumulates duplicates: the bot then ends up with
+			//        TWO active "Ancient Ruins" documents, fires reminders
+			//        twice per cycle, and the schedule board shows two
+			//        rows that confuse members.
+			// Who:   the admin who re-runs /configure-kvk-season at the
+			//        start of every new season. Streamer events created
+			//        via /configure-stream-schedule are NOT touched —
+			//        the seasonEnd != null filter excludes them because
+			//        streamer schedules leave seasonEnd null by design.
+			// When:  exactly once per /configure-kvk-season invocation,
+			//        before any of the create loops run. Soft-delete is
+			//        idempotent: events already inactive stay inactive
+			//        (the store's update is a no-op on already-flipped
+			//        docs).
+			// Where: pairs with eventStore.deleteInGuild which sets
+			//        active:false. The downstream readers (schedule board,
+			//        next-decree posts, reminder scheduler) all filter
+			//        active:true, so soft-deleted events disappear from
+			//        every surface immediately.
+			// How:   ① collect the set of canonical KvK names from
+			//          rok-events.json. ② fetch every active event for
+			//          this guild. ③ filter to those with a name match
+			//          AND a non-null seasonEnd (the KvK marker). ④ soft-
+			//          delete each via eventStore.deleteInGuild. Failures
+			//          are logged but do not abort the season setup —
+			//          a stale duplicate is less harmful than failing to
+			//          configure the new season.
+			const kvkNames = new Set(rokEvents.events.map((e) => e.name));
+			const existingForGuild = await eventStore.findByGuildId(guildId);
+			const priorKvkEvents = existingForGuild.filter((e) => kvkNames.has(e.name) && e.seasonEnd !== null);
+			for (const prior of priorKvkEvents) {
+				try {
+					await eventStore.deleteInGuild(prior.eventId, guildId);
+				} catch (deleteError) {
+					console.warn(LOG_MESSAGES.guildEvent.priorKvkDeleteFailed(guildId, prior.eventId), deleteError);
+				}
+			}
+
 			// ── recurring events ─────────────────────────────────
 			const recurringEvents = [
 				{ key: "ruins", firstOccurrence: input.ruinsFirst },

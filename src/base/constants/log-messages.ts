@@ -207,6 +207,12 @@ export const LOG_MESSAGES = {
 		// "no active season" until /setup populates the config.
 		configureKvkNoConfig: (guildId: string) =>
 			`[guild-event] no GuildConfig found for guild ${guildId} — kvkSeasonEnd not persisted; run /setup first`,
+		// Logged when the prior-season soft-delete pass in configureKvKSeason
+		// fails for a specific event. Does not abort the season setup —
+		// leaving one stale duplicate is less harmful than failing to
+		// configure the new season at all.
+		priorKvkDeleteFailed: (guildId: string, eventId: string) =>
+			`[guild-event] failed to soft-delete prior KvK event ${eventId} for guild ${guildId}; leaving it active and continuing with new season setup`,
 	},
 
 	// ── main / entry point ─────────────────────────────────────────────

@@ -77,10 +77,26 @@ Recovery: if the stored message was deleted by an admin, the next refresh repost
    - How: the mechanism or algorithm, especially when non obvious
    Not every comment needs all five. Function or module level comments should cover most of them. Inline comments on a single line can focus on the one or two that matter. Trivial wiring does not need comments; anything requiring a second read does. Match the existing voice: prose explanations, numbered steps (①②③) for multi phase functions, section markers (// ── Section ──) for major groups.
 4. Tests live colocated next to the module (`src/features/events/occurrenceCalculator.test.ts` next to `occurrenceCalculator.ts`). Vitest picks them up via `src/**/*.test.ts`, and the main tsconfig excludes them so they never compile into `dist/`.
-5. When adding user facing copy that warriors see in Discord, route it through `src/base/constants/embed-content.ts`. Keep the medieval kingdom voice (castle, scroll, shield, "Summon New Event", "The kingdom rests"). Admin facing ephemeral copy can be more practical.
+5. When adding user facing copy that warriors see in Discord, route it through the rok-commander pack at `src/base/copy/packs/rok-commander.pack.ts`. Keep the medieval kingdom voice (castle, scroll, shield, "Summon New Event", "The kingdom rests"). Admin facing ephemeral copy can be more practical. The legacy `src/base/constants/embed-content.ts` still exists as a back-compat re-export, but new edits should land in the pack file directly so they automatically apply to anything reading via `getPluginCopy(guildConfig)`.
 6. Stores (`src/db/stores/*`) are thin Mongoose wrappers. Business logic belongs in feature modules, not in stores. Do not test store methods.
 7. Discord side effects in a feature should be fire and forget when they follow a successful primary action (for example, schedule refreshes after reminder fires). Log errors, never throw back into the caller.
 8. The bot is ESM. All local imports must carry the `.js` suffix even though the source is `.ts`.
+
+## Plugin copy packs (streamer-plugin spec Phase 1)
+
+The bot's user-facing strings live in plugin-scoped packs under `src/base/copy/`. Two ids are reserved today: `rok-commander` (the kingdom-voice pack used by every existing guild) and `general-events` (the streamer-tone pack, content lands in Phase 2 — registry slot reserved, lookup falls back to rok-commander when the guild's pluginId points at an unregistered pack).
+
+Module layout:
+- `src/base/copy/packs/rok-commander.pack.ts` — the canonical pack. New copy edits land here.
+- `src/base/copy/types.ts` — `IEmbedField`, `IPluginCopy` (derived from the rok-commander pack), `PluginId` union.
+- `src/base/copy/packs.ts` — `COPY_PACKS` registry plus `DEFAULT_PLUGIN_ID`.
+- `src/base/copy/getCopy.ts` — `getPluginCopy(guildConfig)` resolves the active pack; `getCopyOverride(key, guildConfig)` resolves the per-guild owner-authored override (Phase 3 editor UI writes these).
+- `src/base/copy/index.ts` — barrel export (`@base/copy`).
+- `src/base/constants/embed-content.ts` — back-compat shim. Re-exports `rokCommanderCopy` as `embedContent` so the legacy import sites keep working untouched. Removing this file is a follow-up gated on every legacy call site migrating to `getPluginCopy(guildConfig)`.
+
+`GuildConfig` carries the per-guild pluginId and copyOverrides Map. Both fields default to "rok-commander" / empty Map respectively, so legacy rows load cleanly without a backfill.
+
+Phase 1 ships: pack architecture, schema fields, lookup helpers. Phase 1 does NOT migrate the 96 existing `embedContent.*` call sites — that is the follow-on phase that lands when embed builders gain a guildConfig parameter so they can honor pluginId. Until then, all guilds render rok-commander copy regardless of pluginId.
 
 ## Tech debt
 
