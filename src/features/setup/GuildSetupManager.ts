@@ -110,7 +110,29 @@ export class GuildSetupManager {
 	//       anything. Expectation is that the operator runs dev and prod
 	//       against separate MongoDB clusters; this guard is defense in
 	//       depth against a misconfigured MONGOOSE_URI.
+	// Per-guild mutex for autoSetup. Parallel calls for the same guildId both
+	// pass the early-return check below before either persists, so both create
+	// Discord channels and only one wins the unique-index race — leaving an
+	// orphaned duplicate category (hit this 2026-05-05 on first join to a new
+	// test server). The mutex caches the first call's promise so a second call
+	// returns the same work instead of starting a parallel run. Single-process
+	// bot only; multi-process would need a distributed lock.
+	private static inflightAutoSetups = new Map<string, Promise<void>>();
+
 	static async autoSetup(guild: Guild, config: ISetupConfig, options: { force?: boolean } = {}): Promise<void> {
+		const inflight = GuildSetupManager.inflightAutoSetups.get(config.guildId);
+		if (inflight) return inflight;
+
+		const work = GuildSetupManager.runAutoSetup(guild, config, options);
+		GuildSetupManager.inflightAutoSetups.set(config.guildId, work);
+		try {
+			await work;
+		} finally {
+			GuildSetupManager.inflightAutoSetups.delete(config.guildId);
+		}
+	}
+
+	private static async runAutoSetup(guild: Guild, config: ISetupConfig, options: { force?: boolean } = {}): Promise<void> {
 		const existing = await guildConfigStore.findByGuildId(config.guildId);
 		// default behavior: if a row exists, assume the homebase is already
 		// constructed (by this bot) and skip. ensureHomebase is the only

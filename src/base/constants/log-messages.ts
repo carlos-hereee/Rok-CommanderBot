@@ -219,8 +219,7 @@ export const LOG_MESSAGES = {
 	main: {
 		commandLoadWarning: (filePath: string) =>
 			`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`,
-		autoSetupFailedLeaving: (guildId: string) => `Auto-setup failed for guild ${guildId}, leaving:`,
-		leaveFailed: (guildId: string) => `Failed to leave guild ${guildId}:`,
+		autoSetupFailed: (guildId: string) => `Auto-setup failed for guild ${guildId}:`,
 		noCommandMatch: (commandName: string) => `No command matching ${commandName} was found.`,
 		commandExecuteError: (commandName: string) => `Error executing ${commandName}:`,
 		autoSetupFailedSkipping: (guildId: string) => `Auto-setup failed for guild ${guildId}, skipping:`,

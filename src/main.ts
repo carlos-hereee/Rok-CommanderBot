@@ -121,12 +121,13 @@ clientReady(client);
 			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
 			await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
 		} catch (error) {
-			console.error(LOG_MESSAGES.main.autoSetupFailedLeaving(guild.id), error);
-			try {
-				await guild.leave();
-			} catch (leaveError) {
-				console.error(LOG_MESSAGES.main.leaveFailed(guild.id), leaveError);
-			}
+			// Do NOT leave the guild on autoSetup failure. The bot stays in the
+			// guild so ensureHomebase can self-heal on the next boot via the
+			// rebuild paths. Leaving was the old behavior — it forced owners to
+			// re-invite manually after any transient failure (Discord 5xx, rate
+			// limit, mid-build disconnect), which is harsher than the partial
+			// install state ensureHomebase already knows how to recover from.
+			console.error(LOG_MESSAGES.main.autoSetupFailed(guild.id), error);
 		}
 	});
 	// register persistent button + modal handlers BEFORE the listener
