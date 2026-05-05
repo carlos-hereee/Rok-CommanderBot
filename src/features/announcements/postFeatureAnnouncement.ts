@@ -67,6 +67,15 @@ function loadBotVersion(): string {
 
 const BOT_VERSION = loadBotVersion();
 
+// Version → shipped-at cutoff. Compared against each guild's GuildConfig.createdAt
+// so a brand-new guild does not see a historical changelog about a bug it never
+// experienced. We hit this 2026-05-05 when the test guild joined post-1.4.0 and
+// got the bug-fix announcement on first boot. Update this map whenever shipping
+// a new version with a featureAnnouncement. ISO 8601 strings.
+const VERSION_SHIPPED_AT: Record<string, string> = {
+	"1.4.0": "2026-04-25T00:00:00Z",
+};
+
 export async function postFeatureAnnouncements(client: Client): Promise<void> {
 	if (!BOT_VERSION) return;
 
@@ -90,6 +99,18 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// announcement would be confusing when they have not yet
 			// experienced the baseline features.
 			if (!config?.setupComplete) {
+				skipped += 1;
+				continue;
+			}
+
+			// Skip guilds that joined AFTER this version shipped. They did
+			// not experience the bug or feature being announced, so sending
+			// them a historical changelog is confusing. Existing guilds
+			// (joined before the cutoff) still see the announcement, and
+			// the botLogStore check below keeps that exactly-once.
+			const shippedAt = VERSION_SHIPPED_AT[BOT_VERSION];
+			const guildCreatedAt = (config as { createdAt?: Date }).createdAt;
+			if (shippedAt && guildCreatedAt && guildCreatedAt.getTime() > new Date(shippedAt).getTime()) {
 				skipped += 1;
 				continue;
 			}
