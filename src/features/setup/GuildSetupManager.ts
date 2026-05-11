@@ -686,9 +686,34 @@ export class GuildSetupManager {
 		// re read the config here so we pick up the freshest admin role /
 		// owner / channel ids. the caller only passed us the initial state.
 		let stored = (await guildConfigStore.findByGuildId(guild.id)) as
-			| (Record<string, unknown> & { adminRoleId?: string | null; adminChannelId: string })
+			| (Record<string, unknown> & { adminRoleId?: string | null; adminChannelId: string; autoHealEnabled?: boolean })
 			| null;
 		if (!stored) return [];
+
+		// auto-heal toggle gate. when off, the admin has explicitly opted out
+		// of automatic channel rebuilds. count what WOULD have been repaired
+		// so we can emit a single summary log line (not one-per-channel) and
+		// then return without doing any repair work. This is the boot-side
+		// counterpart to ChannelDeleteWatcher's realtime gate, so a restart
+		// will not undo the admin's decision.
+		if (stored.autoHealEnabled === false) {
+			let wouldRepairCount = 0;
+			for (const spec of GuildSetupManager.CHANNEL_SPECS) {
+				const storedId = stored[spec.configField] as string | null | undefined;
+				if (!storedId) {
+					wouldRepairCount += 1;
+					continue;
+				}
+				const existing = await guild.channels.fetch(storedId).catch(() => null);
+				if (!existing) wouldRepairCount += 1;
+			}
+			if (wouldRepairCount > 0) {
+				console.log(
+					`[auto-heal] skipped repair of ${wouldRepairCount} channel(s) in guild ${guild.id} because autoHealEnabled is false; run /configure-auto-heal enabled:True to resume.`
+				);
+			}
+			return [];
+		}
 
 		const repaired: string[] = [];
 		for (const spec of GuildSetupManager.CHANNEL_SPECS) {

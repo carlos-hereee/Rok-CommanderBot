@@ -184,6 +184,43 @@ const guildConfigSchema = new Schema(
 		//        require a templating engine and the audit surface gets
 		//        complicated fast. v2 can revisit if real demand shows up.
 		copyOverrides: { type: Map, of: String, required: false, default: () => new Map<string, string>() },
+
+		// ── auto-heal toggle (streamer feedback 2026-05-11) ───────────────
+		// What:  master switch for the bot's channel auto-repair behavior.
+		//        When true (default), the boot sweep's repairMissingChannels
+		//        and the realtime ChannelDeleteWatcher rebuild any homebase
+		//        channel that goes missing. When false, both paths early-
+		//        return after logging a single summary line per boot so the
+		//        streamer can see in Railway logs that repairs were skipped
+		//        without filling the log with one entry per channel.
+		// Who:   admins who deliberately deleted/renamed channels and do not
+		//        want the bot reconstituting them. Asked for in 2026-05-11
+		//        streamer feedback.
+		// When:  read by ChannelDeleteWatcher and by GuildSetupManager.autoSetup
+		//        before the repair sweep. Toggled by /configure-auto-heal.
+		// Where: nullable so legacy rows load cleanly. Default true preserves
+		//        existing behavior — no data migration needed.
+		// How:   plain Boolean. Schema bumps for additional repair-related
+		//        flags can sibling this field; no need to nest yet.
+		autoHealEnabled: { type: Boolean, required: false, default: true },
+
+		// ── leaderboard tracking toggle (streamer feedback 2026-05-11) ────
+		// What:  master switch for participation tracking. When true (default),
+		//        ActivityTracker writes PlayerActivity rows on ✅ reactions and
+		//        voice-channel joins. When false, both listener handlers
+		//        early-return so no new rows are written. Existing rows stay
+		//        in the DB; /leaderboard continues to render historical data
+		//        because the toggle is about new tracking, not destruction.
+		// Who:   streamers who do not want participation tracked, or who want
+		//        to pause tracking during a hiatus without losing prior data.
+		// When:  read at the top of every MessageReactionAdd and voiceStateUpdate
+		//        handler in ActivityTracker. Toggled by /configure-leaderboard-tracking.
+		// Where: same row as autoHealEnabled. Both are global per-guild
+		//        switches, not per-event or per-channel.
+		// How:   plain Boolean. Hide-history-on-disable was rejected as MVP
+		//        scope creep: data deletion (or visibility flip) is a separate
+		//        admin action and should be its own command if/when needed.
+		leaderboardTrackingEnabled: { type: Boolean, required: false, default: true },
 	},
 	{ timestamps: true }
 );

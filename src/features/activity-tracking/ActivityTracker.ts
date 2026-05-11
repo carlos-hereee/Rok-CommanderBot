@@ -2,6 +2,7 @@ import { Client, Events, MessageReaction, User, VoiceState, PartialMessageReacti
 import { reminderStore } from "@db/stores/reminderStore.js";
 import { activityStore } from "@db/stores/activityStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { isEventWindowOpen } from "@features/events/occurrenceCalculator.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
 import { IVoiceSession } from "./activity.types.js";
@@ -33,6 +34,19 @@ export function registerActivityListeners(client: Client): void {
 				// always fetch partials before accessing their properties
 				// this is now necessary since reaction could be partial
 				const fullReaction = reaction.partial ? await reaction.fetch() : reaction;
+
+				// leaderboard tracking toggle gate. when off, the admin has
+				// explicitly opted out of new participation writes. existing
+				// PlayerActivity rows stay in the DB so /leaderboard keeps
+				// rendering historical data; this listener simply stops
+				// adding new ones. early-return BEFORE the reminderStore
+				// lookup so we also save the DB round trip on every ✅
+				// reaction in a tracking-disabled guild.
+				const reactionGuildId = fullReaction.message.guildId;
+				if (reactionGuildId) {
+					const cfg = await guildConfigStore.findByGuildId(reactionGuildId);
+					if (cfg && cfg.leaderboardTrackingEnabled === false) return;
+				}
 
 				const fullUser = user.partial ? await user.fetch() : user;
 
@@ -95,6 +109,18 @@ export function registerActivityListeners(client: Client): void {
 		try {
 			const member = newState.member ?? oldState.member;
 			if (!member || member.user.bot) return;
+
+			// leaderboard tracking toggle gate. mirror of the reaction
+			// listener's gate above. when off, no new voice-session
+			// PlayerActivity rows get written; existing rows continue
+			// to show on /leaderboard. early-return BEFORE the in-memory
+			// session bookkeeping so a tracking-disabled guild does not
+			// accumulate orphan sessions in activeSessions either.
+			const voiceGuildId = (newState.guild?.id ?? oldState.guild?.id) as string | undefined;
+			if (voiceGuildId) {
+				const cfg = await guildConfigStore.findByGuildId(voiceGuildId);
+				if (cfg && cfg.leaderboardTrackingEnabled === false) return;
+			}
 
 			const userId = member.id;
 			// member.displayName is the canonical "what to call this person in this

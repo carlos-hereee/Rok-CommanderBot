@@ -71,6 +71,19 @@ export function registerChannelDeleteWatcher(client: Client): void {
 			const stored = await guildConfigStore.findByGuildId(guild.id);
 			if (!stored) return;
 
+			// auto-heal toggle gate. when off, the admin has explicitly
+			// opted out of automatic channel rebuilds. log a single
+			// line citing the toggle so the admin can find it again,
+			// then bail before any repair work happens. The boot
+			// sweep honors the same flag so restart will not undo
+			// the admin's decision.
+			if (!stored.autoHealEnabled) {
+				console.log(
+					`[realtime-repair] skipped channel delete in guild ${guild.id} because autoHealEnabled is false; run /configure-auto-heal enabled:True to resume.`
+				);
+				return;
+			}
+
 			// ③ match the deleted channel id to one of the six homebase fields.
 			//    also short circuit if the deleted channel IS the category —
 			//    that is a full rebuild case and we leave it to the boot sweep
