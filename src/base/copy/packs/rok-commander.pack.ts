@@ -632,40 +632,45 @@ export const rokCommanderCopy = {
 		public: {
 			title: "🎁 Gifts From the Creator",
 			description:
-				"Mortals — **my Creator has gathered the wishes of those who lead and answered them.**\n\n" +
+				"Mortals. **My Creator has gathered the wishes of those who lead and answered them.**\n\n" +
 				"What was requested has been granted:\n\n" +
 				"**🛠️ Auto-heal may now be silenced.**\n" +
-				"Use `/configure-auto-heal enabled:False` to instruct the bot to leave razed chambers as they fall. Restore the protection any time with `enabled:True`. The kingdom shall obey your will, not its own.\n\n" +
+				"Use `/configure-auto-heal enabled:False` to instruct the bot to leave razed chambers as they fall. Restore the protection any time with `enabled:True`. The realm shall obey your kingdom's will, not its own.\n\n" +
 				"**📊 The rankings may now rest.**\n" +
-				"Use `/configure-leaderboard-tracking enabled:False` to pause participation tracking. Existing rankings remain visible. Resume with `enabled:True` whenever you wish — and the leaderboard chamber will be rebuilt if you also asked for it to be removed.\n\n" +
+				"Use `/configure-leaderboard-tracking enabled:False` to pause participation tracking. Existing rankings remain visible. Resume with `enabled:True` whenever you wish. The leaderboard chamber will also be rebuilt if you asked for it to be removed.\n\n" +
 				"**✏️ Chambers may now be renamed and the names shall persist.**\n" +
-				"`/rename-channel slot:<choose> name:<new>` renames a chamber. The chosen name now survives even when the chamber is razed and rebuilt. Direct renames in Discord still work for the moment but do not survive a rebuild — only the slash command does.\n\n" +
+				"`/rename-channel slot:<choose> name:<new>` renames a chamber. The chosen name now survives even when the chamber is razed and rebuilt. Direct renames in Discord still work for the moment but do not survive a rebuild. Only the slash command does.\n\n" +
 				"**🏆 The leaderboard speaks of many seasons.**\n" +
 				"`/leaderboard` now offers a dropdown: pick a single decree, this week's rankings (Sunday through Saturday), this month's, or all time across every event the kingdom has run.\n\n" +
-				"**🎛️ The dashboard now carries the Command Center.**\n" +
-				"Three new buttons on the kingdom's web dashboard: pause every decree at once, sound the drums for an unscheduled stream, and pause the leaderboard. What once required the slash commands may now be done from the browser.\n\n" +
-				"*Sharpen your blades — and tell my Creator what else you would have me grant.*",
+				"**🎛️ The kingdom's admin dashboard reaches new heights.**\n" +
+				"Visit your kingdom's plugin dashboard on Company Uno to manage the bot from a browser. The Command Center now carries three new actions for those granted the bot's trust: pause every decree at once, sound the drums for an unscheduled stream, or pause the leaderboard. The Settings panel adds toggles for auto-heal and leaderboard tracking. Many of the slash commands now have a dashboard counterpart.\n\n" +
+				"*Sharpen your blades. Tell my Creator what else you would have me grant.*",
 		},
 		innerSanctum: {
-			title: "📓 v1.5.0 — Streamer Feedback Patch",
+			title: "📓 v1.5.0 Streamer Feedback Patch",
 			description:
 				"This release is built from the feedback you sent. Every change here is an answered request.\n\n" +
 				"**New slash commands:**\n" +
-				"• `/configure-auto-heal enabled:<bool>` — toggle whether the bot rebuilds deleted homebase channels. Default true (existing behavior).\n" +
-				"• `/configure-leaderboard-tracking enabled:<bool>` — toggle participation writes. Existing rows stay; `/leaderboard` keeps rendering historical data. Disable also offers a Remove button to delete the leaderboard channel itself; the next enable rebuilds it if auto-heal is on.\n" +
-				"• `/rename-channel slot:<dropdown> name:<string>` — rename one of the seven trackable channels and persist the override into GuildConfig. Rebuild paths honor the override.\n\n" +
+				"• `/configure-auto-heal enabled:<True/False>`. Toggles whether the bot rebuilds deleted homebase channels. Default True (existing behavior).\n" +
+				"• `/configure-leaderboard-tracking enabled:<True/False>`. Toggles participation writes. Existing rows stay; `/leaderboard` keeps rendering historical data. Disable also offers a Remove button to delete the leaderboard channel itself; the next enable rebuilds it if auto-heal is on.\n" +
+				"• `/rename-channel slot:<dropdown> name:<your-name>`. Renames one of the seven trackable channels and persists the chosen name. Future rebuilds honor it.\n\n" +
 				"**`/leaderboard` redesign:**\n" +
-				"• `event` option is now an autocomplete dropdown listing every event by name, with `All time`, `This month`, and `This week` (Sunday-anchored) options at the top.\n" +
-				"• Same render path serves all four views; aggregation is server-side via `findAllGroupedByPlayerInEvents` with an optional date range.\n\n" +
+				"• `event` option is now an autocomplete dropdown listing every event by name, with `All time`, `This month`, and `This week` (Sunday anchored) options at the top.\n" +
+				"• One render path serves all four views.\n\n" +
 				"**Dashboard Command Center additions:**\n" +
-				"• Pause/Resume schedule button (writes `GuildConfig.schedulePaused`; `ReminderScheduler` honors it with auto-resume on the optional `pausedUntil`).\n" +
-				"• Standalone Go Live Now button (shares the per-guild cooldown with the event-bound version).\n" +
-				"• Pause/Resume leaderboard button (mirrors the slash command).\n" +
-				"• Leaderboard banner + toggle also lives on Settings.\n\n" +
+				"• Pause/Resume schedule button. Quiets every decree at once with optional auto-resume.\n" +
+				"• Standalone Go Live Now button. Posts an announcement without needing a scheduled event.\n" +
+				"• Pause/Resume leaderboard button.\n\n" +
+				"**Dashboard Settings additions:**\n" +
+				"• Leaderboard tracking section with state pill and toggle.\n" +
+				"• Auto-heal section with state pill and toggle.\n\n" +
 				"**Other touch-ups:**\n" +
-				"• Channel restoration audit notices consolidated to one summary embed instead of one per channel.\n" +
-				"• `GuildConfig.userRemovedChannels` flag prevents auto-heal from rebuilding admin-removed channels until the related toggle is re-enabled.\n" +
-				"• Platform server now rejects pairing one Discord guild to multiple apps (prevents shared-GuildConfig conflicts).\n\n" +
+				"• Channel restoration notices in this very channel now consolidate into one summary instead of one per channel.\n" +
+				"• Channels you remove via the dashboard stay removed; auto-heal honors the choice until you flip the related toggle back on.\n" +
+				"• Want to delete or restructure channels yourself? Turn off auto-heal first with `/configure-auto-heal enabled:False`. With it off, the bot will not rebuild what you remove.\n\n" +
+				"**For leaders:**\n" +
+				"• Set up the integration on the dashboard at https://www.companyuno.com.\n" +
+				"• Leaders, send word to my Creator on Discord: silent6804.\n\n" +
 				"**Nothing breaks on upgrade.** All new fields default to existing behavior; no migration required.",
 		},
 	},
