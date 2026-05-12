@@ -99,6 +99,23 @@ export function registerChannelDeleteWatcher(client: Client): void {
 			);
 			if (!spec) return; // not a homebase channel
 
+			// per-channel user-removed gate. when the admin explicitly removed
+			// THIS specific slot via a slash command's follow-up button (eg
+			// /configure-leaderboard-tracking → Remove leaderboard channel),
+			// the configField is in userRemovedChannels and we skip rebuild
+			// even though autoHealEnabled is on. This supersedes auto-heal at
+			// the slot level. The boot sweep honors the same flag. Defense
+			// in depth: the slash command handler also writes the flag BEFORE
+			// triggering the delete, so under correct ordering this gate is
+			// a backup; under incorrect ordering this gate still wins.
+			const userRemovedSlots = ((stored as unknown as { userRemovedChannels?: string[] }).userRemovedChannels ?? []) as string[];
+			if (userRemovedSlots.includes(spec.configField)) {
+				console.log(
+					`[realtime-repair] skipped rebuild of ${spec.configField} in guild ${guild.id} because the admin removed it explicitly; re-enable the related feature to restore.`
+				);
+				return;
+			}
+
 			// ④ cooldown gate. scope the key to guild + configField so two
 			//    different channels in the same guild can repair in parallel
 			//    without colliding, and so the same logical channel slot is

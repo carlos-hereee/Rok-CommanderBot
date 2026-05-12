@@ -22,6 +22,7 @@ import { registerOutageWatcher } from "@features/observability/outageWatcher.js"
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { dispatchButton, dispatchModal } from "@handlers/interactionRegistry.js";
 import { registerDecreeEditHandlers } from "@features/schedule/decreeEditHandlers.js";
+import { registerLeaderboardChannelHandlers } from "@features/leaderboard/leaderboardChannelHandlers.js";
 import { refreshAllNextUp } from "@features/schedule/NextUpBoard.js";
 
 // paths
@@ -136,6 +137,7 @@ clientReady(client);
 	// surfaces a duplicate-bootstrap bug at boot rather than at the first
 	// click. Add new handler registrations here as new persistent UIs ship.
 	registerDecreeEditHandlers();
+	registerLeaderboardChannelHandlers();
 
 	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {

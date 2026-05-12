@@ -55,10 +55,19 @@ export const activityStore = {
 	// guild's events. the route handler fetches the guild's events first,
 	// collects their eventIds, and passes them here.
 	// if eventIds is empty, returns an empty array (no matching events → no data).
-	async findAllGroupedByPlayerInEvents(eventIds: string[]) {
+	// dateRange (optional) restricts the aggregation to records whose
+	// eventOccurrence falls within [from, to]. Used by /leaderboard's
+	// "This month" and "This week" branches so the same primitive renders
+	// the all-time, this-month, and this-week views without separate
+	// queries. Omit dateRange for the all-time view (existing behavior).
+	async findAllGroupedByPlayerInEvents(eventIds: string[], dateRange?: { from: Date; to: Date }) {
 		if (eventIds.length === 0) return [];
+		const match: Record<string, unknown> = { eventId: { $in: eventIds } };
+		if (dateRange) {
+			match.eventOccurrence = { $gte: dateRange.from, $lte: dateRange.to };
+		}
 		return PlayerActivityModel.aggregate([
-			{ $match: { eventId: { $in: eventIds } } },
+			{ $match: match },
 			{
 				$group: {
 					_id: "$userId",

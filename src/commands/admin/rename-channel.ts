@@ -1,0 +1,205 @@
+import {
+	SlashCommandBuilder,
+	ChatInputCommandInteraction,
+	AutocompleteInteraction,
+	PermissionFlagsBits,
+	MessageFlags,
+	TextChannel,
+} from "discord.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
+import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
+import { embedContent } from "@base/constants/embed-content.js";
+
+// ── /rename-channel ──────────────────────────────────────────────────
+// What:  rename one of the bot-managed channels AND persist the new name
+//        so it survives the rebuild path. Without this command, admins
+//        could rename channels via Discord's UI but the rebuilds run by
+//        repairMissingChannels and ChannelDeleteWatcher would restore
+//        the pack default (eg "homebase-leaderboard") whenever a
+//        channel got deleted and re-created.
+// Who:   server admins. Permission-gated to Administrator like the rest
+//        of the /configure-* family.
+// When:  on demand. Idempotent — running with the same name twice is a
+//        no-op write (we still emit a "no change made" reply rather
+//        than a silent success so the admin gets clear feedback).
+// Where: writes both (a) the live Discord channel via channel.setName,
+//        and (b) GuildConfig.channelNames map keyed by configField.
+//        The rebuild path reads channelNames before falling back to
+//        spec.displayName.
+// How:   ① slot autocomplete: seven pack-neutral labels mapping to the
+//           seven trackable configField names so the command reads the
+//           same in rok-commander and general-events;
+//        ② resolve the channel id from GuildConfig and fetch the live
+//           channel; bail if the channel slot has never been set up;
+//        ③ rename the live channel via Discord API, then persist the
+//           override into the channelNames map;
+//        ④ explicit "this persists across rebuilds; direct Discord
+//           renames do not" reminder in the reply embed so the admin
+//           internalizes the rule the first time they use the command.
+
+// ── slot label table ──
+// Stable pack-neutral labels for the autocomplete dropdown. The label is
+// what the admin sees ("Leaderboard"); the value is the configField name
+// the handler operates on. Adding a future channel slot requires a one-
+// liner here plus the schema/spec wiring in GuildSetupManager.
+const SLOT_LABELS: ReadonlyArray<{ label: string; configField: string }> = [
+	{ label: "Welcome channel", configField: "introChannelId" },
+	{ label: "Commands channel", configField: "commandsChannelId" },
+	{ label: "Leaderboard", configField: "leaderboardChannelId" },
+	{ label: "Schedule board", configField: "scheduleChannelId" },
+	{ label: "Announcements", configField: "announcementsChannelId" },
+	{ label: "Admin / inner sanctum", configField: "adminChannelId" },
+	{ label: "Next-up board", configField: "nextDecreeChannelId" },
+];
+const VALID_SLOTS = new Set(SLOT_LABELS.map((s) => s.configField));
+
+export const data = new SlashCommandBuilder()
+	.setName("rename-channel")
+	.setDescription("Rename a bot-managed channel so the new name persists across rebuilds")
+	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+	.addStringOption((option) =>
+		option.setName("slot").setDescription("Which channel slot to rename").setRequired(true).setAutocomplete(true)
+	)
+	.addStringOption((option) =>
+		option
+			.setName("name")
+			.setDescription("New channel name (1-100 chars; Discord auto-converts spaces to dashes)")
+			.setRequired(true)
+			.setMinLength(1)
+			.setMaxLength(100)
+	);
+
+export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+	if (!interaction.guildId) {
+		await interaction.respond([]);
+		return;
+	}
+	// Static list — does not need to filter on the user's typed input
+	// because Discord's client filters client-side, and seven entries fit
+	// well under the 25-entry hard limit. Listing all entries always
+	// keeps the dropdown predictable.
+	await interaction.respond(SLOT_LABELS.map((s) => ({ name: s.label, value: s.configField })));
+}
+
+export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+	const guildId = interaction.guildId;
+	if (!guildId) {
+		await interaction.reply({
+			embeds: [errorEmbed("Run this in a server, not a DM.")],
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	const slot = interaction.options.getString("slot", true);
+	const newName = interaction.options.getString("name", true).trim();
+
+	// Validate the slot against the known set. Without this, a user typing
+	// a free-form value into the field could write to an arbitrary key on
+	// the channelNames map.
+	if (!VALID_SLOTS.has(slot)) {
+		await interaction.reply({
+			embeds: [errorEmbed("Pick a slot from the dropdown — that value is not a known channel slot.")],
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	const config = await guildConfigStore.findByGuildId(guildId);
+	if (!config) {
+		await interaction.reply({
+			embeds: [errorEmbed("This server has not been set up yet. Run /setup first.")],
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	// Resolve the channel id from GuildConfig. If the slot has never been
+	// set up (eg legacy guild predating a newer channel spec), surface
+	// the missing channel rather than silently rejecting.
+	const channelId = (config as unknown as Record<string, string | null | undefined>)[slot];
+	if (!channelId) {
+		await interaction.reply({
+			embeds: [
+				errorEmbed(
+					"That channel slot is not currently set up in this server. Run /setup or enable the related feature first."
+				),
+			],
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	const channel = await interaction.guild?.channels.fetch(channelId).catch(() => null);
+	if (!channel || !(channel instanceof TextChannel)) {
+		await interaction.reply({
+			embeds: [
+				errorEmbed("Could not find the live channel. It may have been deleted; let auto-heal rebuild it, then try again."),
+			],
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	// Idempotency. If the live channel already has this name AND the
+	// override matches, surface "no change made" rather than silently
+	// re-writing. Two equality checks because the override and the live
+	// name can theoretically drift (admin renamed via Discord directly
+	// since the last slash-command write).
+	const existingOverride = (config.channelNames as Map<string, string> | undefined)?.get(slot);
+	if (channel.name === newName && existingOverride === newName) {
+		await interaction.reply({
+			embeds: [
+				infoEmbed(
+					"Already that name",
+					`The channel is already named **${newName}** and that name is already persisted. No change made.`,
+					embedContent.COLORS.SCHEDULE
+				),
+			],
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	try {
+		// Rename the live channel first. If the API call fails (rate limit,
+		// permission missing, etc.) we bail before writing the override —
+		// otherwise the GuildConfig would claim a name that does not exist
+		// in Discord and rebuilds would propagate the false name forward.
+		await channel.setName(newName, "Renamed via /rename-channel");
+
+		// Persist the override in the channelNames map. Mongoose Maps need
+		// to be cloned + written back; guildConfigStore.update wraps in
+		// $set so passing a plain object with dotted notation is cleanest.
+		const updatedMap = new Map((config.channelNames as Map<string, string> | undefined) ?? []);
+		updatedMap.set(slot, newName);
+		// Mongoose accepts a plain object for a Map field on $set; convert
+		// to a record so the wire format matches what the store expects.
+		const channelNamesRecord: Record<string, string> = {};
+		for (const [key, val] of updatedMap.entries()) {
+			channelNamesRecord[key] = val;
+		}
+		await guildConfigStore.update(guildId, { channelNames: channelNamesRecord });
+
+		await interaction.reply({
+			embeds: [
+				infoEmbed(
+					"✏️ Channel renamed",
+					`The channel is now named **${newName}** and the rename is persisted, so it will survive any future auto-heal rebuild.\n\nHeads up: renaming the channel directly in Discord works for the live channel but does NOT update the persisted override. Use /rename-channel again any time you want the new name to stick across rebuilds.`,
+					embedContent.COLORS.SCHEDULE
+				),
+			],
+			flags: MessageFlags.Ephemeral,
+		});
+	} catch (err) {
+		console.error(`[rename-channel] failed for guild ${guildId}, slot ${slot}`, err);
+		await interaction.reply({
+			embeds: [
+				errorEmbed(
+					"Could not rename the channel. Check the bot's Manage Channels permission, or try again — Discord enforces a rate limit of 2 renames per 10 minutes per channel."
+				),
+			],
+			flags: MessageFlags.Ephemeral,
+		});
+	}
+}

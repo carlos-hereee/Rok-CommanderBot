@@ -108,6 +108,20 @@ export const ChannelContent = {
 			embedContent.COLORS.ADMIN
 		);
 	},
+	// Single summary embed when multiple channels are restored in one
+	// sweep. Replaces the "one embed per channel" spam previously emitted
+	// by postRepairNotices when the bot rebuilt several missing channels
+	// at once (eg after toggling leaderboard back on triggered a sweep
+	// that rebuilt every removed homebase channel). One message in
+	// inner-sanctum is enough — the admin only needs to know which
+	// channels were touched, not see N copies of the same warning
+	// paragraph. Reuses the existing repair-notice copy template via
+	// the locale's summaryTitle / summaryBody keys.
+	channelsRestoredSummary(channelNames: string[]): EmbedBuilder {
+		const list = channelNames.map((n) => `• ${n}`).join("\n");
+		const description = `${cc.channelRepairNotice.summaryBody(channelNames.length)}\n\n${list}`;
+		return infoEmbed(cc.channelRepairNotice.summaryTitle, description, embedContent.COLORS.ADMIN);
+	},
 	castleRebuiltNotice(): EmbedBuilder {
 		return infoEmbed(cc.castleRebuiltNotice.title, cc.castleRebuiltNotice.description, embedContent.COLORS.ADMIN);
 	},

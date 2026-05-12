@@ -1,7 +1,64 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, AutocompleteInteraction, MessageFlags } from "discord.js";
 import { activityStore } from "@db/stores/activityStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { leaderboardEmbed } from "@utils/embedBuilder.js";
+
+// ── /leaderboard ──────────────────────────────────────────────────────
+// What:  show participation rankings for an event or across every event
+//        the guild has run. Replaces the legacy "type an event id by hand"
+//        UX with an autocomplete dropdown that lists every event by name
+//        and offers an "All time" option at the top.
+// Who:   any member of the guild. Reads only — never mutates the activity
+//        store. Not admin-gated because mortals viewing their own
+//        ranking is the whole point of a leaderboard.
+// When:  on demand. Future enhancement: a LeaderboardBoard module will
+//        auto-post / auto-refresh in the leaderboard channel so members
+//        do not have to type this command every time they want to check
+//        standings. Captured as FUTURE_PLANS 11e.
+// Where: this command is the only data surface for live leaderboard
+//        views until LeaderboardBoard lands.
+// How:   ① autocomplete on `event` lists every event by name + sentinel
+//           "All time" as the first option;
+//        ② execute branches on the sentinel: all-time path aggregates
+//           across every event the guild owns; per-event path scopes to
+//           one event. Both paths use the server-side aggregation in
+//           activityStore.findAllGroupedByPlayerInEvents so the rendering
+//           logic below is identical between branches.
+
+// Sentinel values for the three guild-wide views. Picked underscore-fenced
+// strings so they are impossible to collide with a real eventId (those are
+// v4 uuids). All-time is the broadest; This month and This week narrow the
+// aggregation window by eventOccurrence so streamers can see "how is my
+// stream community ranking THIS week" without scrolling past every event
+// they have ever run.
+const ALL_TIME_SENTINEL = "__alltime__";
+const THIS_MONTH_SENTINEL = "__thismonth__";
+const THIS_WEEK_SENTINEL = "__thisweek__";
+
+// Compute [from, to] window for the current calendar month in the server's
+// local time. The bot runs in UTC on Railway so "this month" is UTC-anchored;
+// good enough for v1, can revisit if streamers want timezone-aware windows
+// (which probably belongs alongside FUTURE_PLANS 12b on per-user timezone).
+function thisMonthRange(): { from: Date; to: Date } {
+	const now = new Date();
+	const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+	// last millisecond of the last day of the month — month-end without
+	// caring how many days the month has.
+	const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+	return { from, to };
+}
+
+// Compute [from, to] window for the current calendar week. Sunday-anchored
+// because the bot's existing day-of-week constants (DAYS_OF_WEEK in the
+// dashboard's EventCreatePage) treat Sunday as day 0. Streamers can think of
+// "this week" as Sunday through Saturday.
+function thisWeekRange(): { from: Date; to: Date } {
+	const now = new Date();
+	const dayOfWeek = now.getDay(); // 0 = Sun
+	const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0, 0);
+	const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - dayOfWeek), 23, 59, 59, 999);
+	return { from, to };
+}
 
 // /leaderboard intentionally does NOT setDefaultMemberPermissions. As of
 // the 2026-04-24 public/admin command guide split it is a member command —
@@ -10,11 +67,42 @@ import { leaderboardEmbed } from "@utils/embedBuilder.js";
 // main.ts's ADMIN_COMMANDS was also dropped for the same reason.
 export const data = new SlashCommandBuilder()
 	.setName("leaderboard")
-	.setDescription("Show the participation leaderboard for an event")
-	.addStringOption((option) => option.setName("event-id").setDescription("The event ID to show rankings for").setRequired(true))
+	.setDescription("Show participation rankings for an event or across all time")
+	.addStringOption((option) =>
+		option
+			.setName("event")
+			.setDescription("Pick an event or a time window. Weeks run Sunday to Saturday.")
+			.setRequired(true)
+			.setAutocomplete(true)
+	)
 	.addBooleanOption((option) =>
 		option.setName("public").setDescription("Post publicly in channel? Default: only you can see it").setRequired(false)
 	);
+
+export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+	if (!interaction.guildId) {
+		await interaction.respond([]);
+		return;
+	}
+	// findByGuildId returns every event (active and retired) so members can
+	// look up past rankings too. We do NOT filter to active events here
+	// because a "season just ended" leaderboard is exactly the kind of
+	// thing members want to scroll back through.
+	const events = await eventStore.findByGuildId(interaction.guildId);
+	// All time first so it is the default highlighted suggestion. Slice
+	// events to 24 instead of 25 to leave room for the sentinel — Discord's
+	// hard limit is 25 total autocomplete entries.
+	// Three rolling-window views at the top of the dropdown, then events by
+	// name. Slice events to 22 instead of 25 to leave room for the three
+	// sentinels — Discord's hard limit is 25 total autocomplete entries.
+	const choices = [
+		{ name: "🌟 All time (across all events)", value: ALL_TIME_SENTINEL },
+		{ name: "📅 This month", value: THIS_MONTH_SENTINEL },
+		{ name: "📅 This week", value: THIS_WEEK_SENTINEL },
+		...events.slice(0, 22).map((e) => ({ name: e.name, value: e.eventId })),
+	];
+	await interaction.respond(choices);
+}
 
 export async function execute(interaction: ChatInputCommandInteraction) {
 	const guildId = interaction.guildId;
@@ -23,49 +111,90 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		return;
 	}
 
-	const eventId = interaction.options.getString("event-id", true);
+	const eventValue = interaction.options.getString("event", true);
 	const isPublic = interaction.options.getBoolean("public") ?? false;
 
-	// findByIdInGuild scopes the lookup to this guild — works under both the legacy
-	// local-DB path and the Future-A remote API path.
-	const event = await eventStore.findByIdInGuild(eventId, guildId);
-	if (!event) {
-		await interaction.reply({ content: "❌ Event not found.", ephemeral: true });
+	// ── guild-wide branches (all time / this month / this week) ──
+	// Three views share the same aggregation primitive; the difference is
+	// the optional dateRange filter. Each view pulls every event in the
+	// guild and lets the activityStore handle the per-occurrence date
+	// match server-side. This keeps one render path covering three
+	// sentinels and avoids duplicating embed-build / reply logic per
+	// branch.
+	const isGuildWideView =
+		eventValue === ALL_TIME_SENTINEL || eventValue === THIS_MONTH_SENTINEL || eventValue === THIS_WEEK_SENTINEL;
+	if (isGuildWideView) {
+		const guildEvents = await eventStore.findByGuildId(guildId);
+		const eventIds = guildEvents.map((e) => e.eventId);
+
+		let dateRange: { from: Date; to: Date } | undefined;
+		let title: string;
+		let emptyMessage: string;
+		if (eventValue === THIS_MONTH_SENTINEL) {
+			dateRange = thisMonthRange();
+			title = "This month";
+			emptyMessage = "No activity recorded this month yet.";
+		} else if (eventValue === THIS_WEEK_SENTINEL) {
+			dateRange = thisWeekRange();
+			title = "This week";
+			emptyMessage = "No activity recorded this week yet.";
+		} else {
+			dateRange = undefined;
+			title = "All time";
+			emptyMessage = "No activity recorded across any events yet.";
+		}
+
+		const records = await activityStore.findAllGroupedByPlayerInEvents(eventIds, dateRange);
+		if (!records.length) {
+			await interaction.reply({ content: emptyMessage, ephemeral: true });
+			return;
+		}
+		const ranked = records.slice(0, 10).map(
+			(r: { username: string; totalScore: number; eventsAttended: number; totalAcknowledged: number }) => ({
+				username: r.username,
+				totalScore: r.totalScore,
+				eventsAttended: r.eventsAttended,
+				totalAcknowledged: r.totalAcknowledged,
+			})
+		);
+		const embed = leaderboardEmbed(title, ranked);
+		await interaction.reply({
+			embeds: [embed],
+			flags: isPublic ? undefined : MessageFlags.Ephemeral,
+		});
 		return;
 	}
 
-	// aggregate all time scores for this event
-	const allRecords = await activityStore.findByEvent(eventId);
-	if (!allRecords.length) {
+	// ── per-event branch ─────────────────────────────────────────
+	// findByIdInGuild scopes the lookup to this guild — works under both
+	// the legacy local-DB path and the Future-A remote API path. eventValue
+	// here is a real eventId because the autocomplete dropdown handed it to
+	// the user; we still validate because nothing prevents a user from
+	// typing a free-form value into the field.
+	const event = await eventStore.findByIdInGuild(eventValue, guildId);
+	if (!event) {
+		await interaction.reply({ content: "❌ Event not found. Pick one from the dropdown.", ephemeral: true });
+		return;
+	}
+
+	// Use the same aggregation primitive as the all-time branch with a
+	// single-element eventIds set. Server-side aggregation is more efficient
+	// than fetching all records and grouping in memory, and it keeps the
+	// two branches sharing one code path through the embed render.
+	const records = await activityStore.findAllGroupedByPlayerInEvents([event.eventId]);
+	if (!records.length) {
 		await interaction.reply({ content: "No activity recorded for this event yet.", ephemeral: true });
 		return;
 	}
 
-	// group and sum scores per player
-	const playerMap = new Map<
-		string,
-		{ username: string; totalScore: number; eventsAttended: number; totalAcknowledged: number }
-	>();
-
-	for (const record of allRecords) {
-		const existing = playerMap.get(record.userId);
-		if (existing) {
-			existing.totalScore += record.participationScore;
-			existing.eventsAttended += 1;
-			existing.totalAcknowledged += record.acknowledgedReminder ? 1 : 0;
-		} else {
-			playerMap.set(record.userId, {
-				username: record.username,
-				totalScore: record.participationScore,
-				eventsAttended: 1,
-				totalAcknowledged: record.acknowledgedReminder ? 1 : 0,
-			});
-		}
-	}
-
-	const ranked = Array.from(playerMap.values())
-		.sort((a, b) => b.totalScore - a.totalScore)
-		.slice(0, 10); // top 10 only — embeds have character limits
+	const ranked = records.slice(0, 10).map(
+		(r: { username: string; totalScore: number; eventsAttended: number; totalAcknowledged: number }) => ({
+			username: r.username,
+			totalScore: r.totalScore,
+			eventsAttended: r.eventsAttended,
+			totalAcknowledged: r.totalAcknowledged,
+		})
+	);
 
 	const embed = leaderboardEmbed(event.name, ranked);
 

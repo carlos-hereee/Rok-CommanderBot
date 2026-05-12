@@ -338,6 +338,15 @@ export const generalEventsCopy: IPluginCopy = {
 				"⚠️ Every channel inside **📺 Stream Hub** is required for the bot to work. " +
 				"If any are removed I cannot function properly. " +
 				"Please leave them in place.",
+			// Summary copy for multi-channel restores in a single sweep.
+			summaryTitle: "🔧 Channels Were Restored",
+			summaryBody: (count: number) =>
+				`${count} channel${count === 1 ? "" : "s"} ${count === 1 ? "was" : "were"} deleted from the server. ` +
+				"I have rebuilt them.\n\n" +
+				"⚠️ Every channel inside **📺 Stream Hub** is required for the bot to work. " +
+				"If any are removed I cannot function properly. " +
+				"Please leave them in place.\n\n" +
+				"Restored channels:",
 		},
 		castleRebuiltNotice: {
 			title: "📺 Stream Hub Was Rebuilt",
@@ -447,34 +456,48 @@ export const generalEventsCopy: IPluginCopy = {
 	// lockstep — the admin sub-pack is the same content, only the public sub-pack
 	// gets translated per voice.
 	featureAnnouncement: {
+		// ── v1.5.0 — Streamer Feedback Patch ─────────────────────────
+		// Plain-English voicing of the gift framing. Every change here
+		// answers a specific piece of streamer feedback, so the copy
+		// names that explicitly. innerSanctum tracks the rok-commander
+		// pack in lockstep — both versions describe the same release.
 		public: {
-			title: "📺 Bot Update",
+			title: "🎁 Streamer Gifts",
 			description:
-				"Hey everyone — a couple of small fixes and one new feature shipped this week.\n\n" +
-				"**⚙️ Reminder timing fixed.**\n" +
-				"Recurring reminders now fire on their configured cadence. If you noticed reminders firing at odd times the past few weeks, that is why — and it is corrected now.\n\n" +
-				"**🪶 Season-end announcement is now once-only.**\n" +
-				"Only relevant for ROK guilds, but worth noting: the announcement no longer multi-fires.\n\n" +
-				"**📜 Schedule board reads cleaner.**\n" +
-				"Completed events have their own section now. Less scrolling.\n\n" +
-				"**✏️ Edit button on upcoming events.**\n" +
-				"Admins can now adjust an event's time, title, or description on the fly from the up-next channel.\n\n" +
-				"*Thanks for sticking around.*",
+				"Hey everyone — a stack of things you asked for shipped this week.\n\n" +
+				"**🛠️ Auto-heal can be turned off.**\n" +
+				"Run `/configure-auto-heal enabled:False` and the bot will stop rebuilding channels you delete. Turn it back on any time with `enabled:True`.\n\n" +
+				"**📊 Leaderboard tracking can be paused.**\n" +
+				"`/configure-leaderboard-tracking enabled:False` stops new participation writes. Existing leaderboard data stays visible. Re-enable any time — and if you also chose to remove the leaderboard channel, it rebuilds on the next sweep.\n\n" +
+				"**✏️ Channel renames now persist.**\n" +
+				"`/rename-channel slot:<choose> name:<new>` renames a channel and saves the name. The next rebuild uses your saved name instead of the default. Direct renames in Discord still work for the live channel but do not survive a rebuild — only the slash command does.\n\n" +
+				"**🏆 `/leaderboard` is easier to use.**\n" +
+				"Dropdown now: pick an event by name, this week (Sunday-Saturday), this month, or all time across every event. No more typing event IDs.\n\n" +
+				"**🎛️ Command Center on the dashboard got buttons.**\n" +
+				"Pause every reminder at once, post a Go Live announcement without setting up an event, or pause the leaderboard — all from the browser instead of slash commands.\n\n" +
+				"*Thanks for the feedback. Send more.*",
 		},
 		innerSanctum: {
-			title: "📓 v1.4.0 — Bug Fix and Event Editing",
+			title: "📓 v1.5.0 — Streamer Feedback Patch",
 			description:
-				"This release corrects two production bugs and adds a new admin surface.\n\n" +
-				"**Fixes:**\n" +
-				"• Recurring event cadences corrected. A one-time MongoDB migration ran at deploy time to fix existing event documents; idempotent on re-run.\n" +
-				"• Season-end announcement now fires once per guild per season (was firing once per active event during the 2026-04-24 incident).\n\n" +
-				"**New — event editing:**\n" +
-				"• `Edit` button on every up-next post.\n" +
-				"• Server owner plus members of the configured admin role can adjust title, description, or time on a single occurrence (`Apply to this fire only`) or as a permanent shift to the recurring anchor (`Apply to all future fires`).\n" +
-				"• Time edits surface a 25-option timezone dropdown after modal submit; no IANA names to type.\n" +
-				"• Schedule board redesign: completed events partitioned into their own section.\n" +
-				"• Every edit writes to the `AuditLog` collection — `actor`, `before`, `after`, and scope.\n\n" +
-				"**Nothing to do.** The fixes apply themselves. The edit button is opt-in per click.",
+				"This release is built from the feedback you sent. Every change here is an answered request.\n\n" +
+				"**New slash commands:**\n" +
+				"• `/configure-auto-heal enabled:<bool>` — toggle whether the bot rebuilds deleted homebase channels. Default true (existing behavior).\n" +
+				"• `/configure-leaderboard-tracking enabled:<bool>` — toggle participation writes. Existing rows stay; `/leaderboard` keeps rendering historical data. Disable also offers a Remove button to delete the leaderboard channel itself; the next enable rebuilds it if auto-heal is on.\n" +
+				"• `/rename-channel slot:<dropdown> name:<string>` — rename one of the seven trackable channels and persist the override into GuildConfig. Rebuild paths honor the override.\n\n" +
+				"**`/leaderboard` redesign:**\n" +
+				"• `event` option is now an autocomplete dropdown listing every event by name, with `All time`, `This month`, and `This week` (Sunday-anchored) options at the top.\n" +
+				"• Same render path serves all four views; aggregation is server-side via `findAllGroupedByPlayerInEvents` with an optional date range.\n\n" +
+				"**Dashboard Command Center additions:**\n" +
+				"• Pause/Resume schedule button (writes `GuildConfig.schedulePaused`; `ReminderScheduler` honors it with auto-resume on the optional `pausedUntil`).\n" +
+				"• Standalone Go Live Now button (shares the per-guild cooldown with the event-bound version).\n" +
+				"• Pause/Resume leaderboard button (mirrors the slash command).\n" +
+				"• Leaderboard banner + toggle also lives on Settings.\n\n" +
+				"**Other touch-ups:**\n" +
+				"• Channel restoration audit notices consolidated to one summary embed instead of one per channel.\n" +
+				"• `GuildConfig.userRemovedChannels` flag prevents auto-heal from rebuilding admin-removed channels until the related toggle is re-enabled.\n" +
+				"• Platform server now rejects pairing one Discord guild to multiple apps (prevents shared-GuildConfig conflicts).\n\n" +
+				"**Nothing breaks on upgrade.** All new fields default to existing behavior; no migration required.",
 		},
 	},
 

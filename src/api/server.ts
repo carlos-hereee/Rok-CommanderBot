@@ -3,11 +3,13 @@ import cors from "cors";
 import { Client } from "discord.js";
 import { verifySignature } from "./middleware/verifySignature.js";
 import { createEventsRouter } from "./routes/events.routes.js";
-import { createAnnounceRouter } from "./routes/announce.routes.js";
+import { createAnnounceRouter, createStandaloneGoLiveRouter } from "./routes/announce.routes.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { createLeaderboardRouter } from "./routes/leaderboard.routes.js";
 import { createPlayersRouter } from "./routes/players.routes.js";
 import { remindersRouter } from "./routes/reminders.routes.js";
+import { createScheduleRouter } from "./routes/schedule.routes.js";
+import { createLeaderboardTrackingRouter } from "./routes/leaderboardTracking.routes.js";
 import { dashboardOrigin, port } from "@utils/config.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
@@ -80,6 +82,17 @@ export function startApiServer(client: Client): void {
 	app.use("/api/leaderboard", createLeaderboardRouter(client));
 	app.use("/api/players", createPlayersRouter(client));
 	app.use("/api/reminders", remindersRouter);
+	// Schedule-level pause/resume for the Command Center button. Separate
+	// router from the per-event pause that lives in events.routes — the
+	// guild-wide flag has different semantics than the per-event flag.
+	app.use("/api/schedule", createScheduleRouter());
+	// Standalone /api/go-live-now (no eventId) for the Command Center
+	// Go Live button. The event-bound version remains mounted under
+	// /api/events/:eventId/go-live-now via createAnnounceRouter.
+	app.use("/api/go-live-now", createStandaloneGoLiveRouter(client));
+	// /api/leaderboard-tracking — HTTP twin of the slash command for the
+	// Command Center leaderboard pause/continue button.
+	app.use("/api/leaderboard-tracking", createLeaderboardTrackingRouter());
 
 	app.listen(port, () => {
 		console.log(LOG_MESSAGES.api.serverRunning(port));

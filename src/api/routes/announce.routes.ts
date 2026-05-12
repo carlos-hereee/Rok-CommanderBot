@@ -181,3 +181,125 @@ export function createAnnounceRouter(client: Client): Router {
 
 	return router;
 }
+
+// ── /api/go-live-now (standalone, no eventId) ─────────────────────────
+// Twin of the event-bound /api/events/:eventId/go-live-now route above
+// but for the Command Center button which is not scoped to a specific
+// event. Same embed/cooldown/mention logic — only the URL shape differs.
+// Lifting the implementation here lets us share the LEAD_TIMES table
+// and the per-guild cooldown map declared at the top of this module
+// rather than duplicating them in a new file.
+export function createStandaloneGoLiveRouter(client: Client): Router {
+	const router = Router({ mergeParams: true });
+
+	router.post("/", async (req: Request, res: Response) => {
+		const guildId = requireGuildId(req, res);
+		if (guildId === null) return;
+
+		try {
+			const body = (req.body ?? {}) as AnnounceBody;
+
+			const whenKey = typeof body.when === "string" ? body.when : "now";
+			const lead = LEAD_TIMES[whenKey];
+			if (!lead) {
+				res.status(400).json({
+					error: "Invalid lead time",
+					detail: embedContent.goLiveSoon.invalidLeadTime,
+				});
+				return;
+			}
+
+			const config = await guildConfigStore.findByGuildId(guildId);
+			if (!config?.announcementsChannelId) {
+				res.status(409).json({
+					error: "Setup incomplete",
+					reason: "guild_not_configured",
+					detail: embedContent.goLiveSoon.setupRequired,
+				});
+				return;
+			}
+
+			// Share the per-guild cooldown map with the event-bound route so
+			// rapid clicks across both surfaces still throttle to one
+			// announcement per minute. The map is keyed by guildId only,
+			// so an admin who hits Command Center's Go Live Now and then
+			// the Event detail's Go Live Now within 60s gets the second
+			// click rejected as a cooldown hit — which is the right
+			// behavior for "do not spam the announcements channel."
+			const last = lastFiredAt.get(guildId);
+			const now = Date.now();
+			if (last && now - last < COOLDOWN_MS) {
+				const retryAfterMs = COOLDOWN_MS - (now - last);
+				res.status(429).json({
+					error: "Cooldown in effect",
+					retryAfterMs,
+					retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
+				});
+				return;
+			}
+
+			const mentionRoleId =
+				typeof body.mentionRoleId === "string" && body.mentionRoleId
+					? body.mentionRoleId
+					: (config.memberRoleId ?? null);
+
+			const noteRaw = typeof body.note === "string" ? body.note.trim() : "";
+			const note = noteRaw && noteRaw.length > 0 ? noteRaw.slice(0, 500) : null;
+
+			const startUnix = Math.floor((Date.now() + lead.minutes * 60_000) / 1000);
+
+			let channel;
+			try {
+				channel = await client.channels.fetch(config.announcementsChannelId);
+			} catch (err) {
+				console.error("[go-live-now standalone] channel fetch failed", err);
+				res.status(409).json({
+					error: "Channel not reachable",
+					reason: "channel_not_found",
+					detail: embedContent.goLiveSoon.postFailed,
+				});
+				return;
+			}
+			if (!channel || !(channel instanceof TextChannel)) {
+				res.status(409).json({
+					error: "Channel is not a text channel",
+					reason: "channel_wrong_type",
+					detail: embedContent.goLiveSoon.postFailed,
+				});
+				return;
+			}
+
+			const embed = new EmbedBuilder()
+				.setTitle(embedContent.goLiveSoon.announcementTitle)
+				.setDescription(embedContent.goLiveSoon.announcementBody(lead.label, startUnix, note))
+				.setColor(embedContent.COLORS.ANNOUNCEMENTS)
+				.setFooter({ text: embedContent.FOOTER });
+
+			const mention = mentionRoleId ? `<@&${mentionRoleId}>` : "@here";
+
+			const message = await channel.send({
+				content: mention,
+				embeds: [embed],
+				allowedMentions: mentionRoleId ? { roles: [mentionRoleId] } : { parse: ["everyone"] },
+			});
+
+			lastFiredAt.set(guildId, now);
+
+			res.status(200).json({
+				data: {
+					ok: true,
+					messageId: message.id,
+					channelId: channel.id,
+					leadMinutes: lead.minutes,
+					startUnix,
+					cooldownMs: COOLDOWN_MS,
+				},
+			});
+		} catch (error) {
+			console.error("[go-live-now standalone] unhandled error", error);
+			res.status(500).json({ error: "Failed to post announcement" });
+		}
+	});
+
+	return router;
+}

@@ -59,9 +59,34 @@ healthRouter.get("/guild", async (req: Request, res: Response) => {
 		// format JSON friendly. null when no season has been configured
 		// yet — the dashboard treats that as "KvK toggle off, point user
 		// at /configure-kvk-season".
+		// Surface the schedule-level pause state alongside kvkSeasonEnd so
+		// the Command Center can render its pause banner without an extra
+		// round trip. Same "single endpoint, multiple fields" pattern this
+		// endpoint already uses for KvK status. leaderboardTrackingEnabled
+		// is surfaced here too so the leaderboard pause/continue button on
+		// Command Center can read state from the same call.
+		const schedulePausedRaw = (config as unknown as { schedulePaused?: { paused?: boolean; pausedUntil?: Date | null } }).schedulePaused;
+		// leaderboardChannelMissing is true when the channel id is unset OR
+		// the slot is in userRemovedChannels (user explicitly removed it via
+		// the slash command follow-up button). The Command Center uses this
+		// to decide whether to render the Pause/Resume leaderboard button —
+		// pausing tracking when there is no visible leaderboard channel is
+		// misleading, so the button hides until the channel is restored.
+		const userRemovedSlots = ((config as unknown as { userRemovedChannels?: string[] }).userRemovedChannels ?? []) as string[];
+		const leaderboardChannelMissing =
+			!config.leaderboardChannelId || userRemovedSlots.includes("leaderboardChannelId");
 		res.status(200).json({
 			ok: true,
 			kvkSeasonEnd: config.kvkSeasonEnd ? new Date(config.kvkSeasonEnd).toISOString() : null,
+			schedulePaused: {
+				paused: Boolean(schedulePausedRaw?.paused),
+				pausedUntil: schedulePausedRaw?.pausedUntil
+					? new Date(schedulePausedRaw.pausedUntil).toISOString()
+					: null,
+			},
+			leaderboardTrackingEnabled:
+				(config as unknown as { leaderboardTrackingEnabled?: boolean }).leaderboardTrackingEnabled !== false,
+			leaderboardChannelMissing,
 		});
 	} catch (error) {
 		// Don't leak Mongo errors to the dashboard. A real outage shows up

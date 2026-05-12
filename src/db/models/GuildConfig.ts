@@ -204,6 +204,94 @@ const guildConfigSchema = new Schema(
 		//        flags can sibling this field; no need to nest yet.
 		autoHealEnabled: { type: Boolean, required: false, default: true },
 
+		// ── schedule-level pause (Command Center, 2026-05-11) ─────────────
+		// What:  guild-wide pause state for the reminder scheduler. When
+		//        `paused` is true, the ReminderScheduler skips every event
+		//        for this guild on every tick, regardless of per-event
+		//        paused state. When `pausedUntil` is set, the scheduler
+		//        auto-resumes on the next tick at or after that time
+		//        (same auto-resume contract as per-event pausedUntil).
+		// Who:   written by the dashboard's "Pause schedule" button via
+		//        /api/proxy/{pluginId}/schedule/pause AND the inverse
+		//        /resume endpoint. Read by ReminderScheduler at the top
+		//        of every tick.
+		// When:  written on demand by an admin clicking pause/resume.
+		//        Auto-resumed by the scheduler when pausedUntil has
+		//        elapsed.
+		// Where: distinct from per-event Event.paused — that field
+		//        pauses ONE event in this guild's schedule; this field
+		//        pauses ALL events. Both checks compose: a guild that is
+		//        schedule-paused AND has a per-event-paused event will
+		//        not fire reminders for that event regardless of which
+		//        flag clears first.
+		// How:   nested object so future schedule-level controls (eg
+		//        skip-next-occurrence flags) can sibling these fields
+		//        without nesting deeper. Defaults so legacy rows load
+		//        as "not paused."
+		schedulePaused: {
+			type: {
+				paused: { type: Boolean, default: false },
+				pausedUntil: { type: Date, default: null },
+			},
+			required: false,
+			default: () => ({ paused: false, pausedUntil: null }),
+		},
+
+		// ── custom channel names (streamer feedback 2026-05-11) ───────────
+		// What:  per-slot custom name overrides set by /rename-channel.
+		//        Keyed by configField name (e.g., "leaderboardChannelId")
+		//        with the value being the admin's chosen channel name.
+		//        repairOneChannel reads this map before falling back to
+		//        spec.displayName so a rebuild after channel deletion
+		//        preserves whatever name the admin had chosen.
+		// Who:   written by /rename-channel slash command (renames the
+		//        live Discord channel AND persists the override here).
+		//        Read by GuildSetupManager.repairOneChannel and by any
+		//        future rebuild path that builds a channel from a spec.
+		// When:  written on every /rename-channel invocation. Read at
+		//        rebuild time. Cleared by /rename-channel if the admin
+		//        sets the name back to the pack default (which is the
+		//        existing spec.displayName).
+		// Where: a Mongoose Map so adding a new slot in the future is a
+		//        zero-migration write. Direct Discord-side renames do
+		//        NOT update this map by design — the announcement copy
+		//        explains the rule so admins understand "to persist
+		//        across rebuilds, use the slash command."
+		// How:   default empty Map. Legacy rows load with no overrides
+		//        and repair behavior is identical to pre-flag behavior
+		//        (use spec.displayName).
+		channelNames: { type: Map, of: String, required: false, default: () => new Map<string, string>() },
+
+		// ── user-removed channels (streamer feedback 2026-05-11) ──────────
+		// What:  array of GuildConfig configField names (e.g.
+		//        "leaderboardChannelId", "announcementsChannelId") that the
+		//        admin has explicitly removed via the dashboard or via a
+		//        slash command's follow-up button. repairMissingChannels
+		//        consults this array per spec and SKIPS rebuilding any
+		//        entry whose configField is listed here, even when
+		//        autoHealEnabled is true. This is how a user-initiated
+		//        removal supersedes the global auto-heal default — without
+		//        this flag the boot sweep treats null storedId as
+		//        "legacy row missing the new channel, rebuild it," which
+		//        is the wrong semantics for "the admin deleted this on
+		//        purpose."
+		// Who:   written by the per-channel deletion handlers (today only
+		//        leaderboardChannelHandlers.ts; future channel-lifecycle
+		//        work will add more). Cleared by the corresponding
+		//        toggle-back-on path on the related /configure-* command
+		//        so the channel rebuilds on the next sweep.
+		// When:  pushed when the admin clicks "Remove <channel>" on the
+		//        slash command's follow-up button. Pulled when the admin
+		//        re-enables the related feature toggle.
+		// Where: stored as a flat string array (configField names) rather
+		//        than nesting per-channel objects. Adding a new
+		//        removable channel later requires no schema migration —
+		//        just push its configField name from the new handler.
+		// How:   default empty array so legacy rows load cleanly. The
+		//        repair sweep treats absence-from-array as "not removed"
+		//        which is the same as the pre-flag behavior.
+		userRemovedChannels: { type: [String], required: false, default: () => [] as string[] },
+
 		// ── leaderboard tracking toggle (streamer feedback 2026-05-11) ────
 		// What:  master switch for participation tracking. When true (default),
 		//        ActivityTracker writes PlayerActivity rows on ✅ reactions and

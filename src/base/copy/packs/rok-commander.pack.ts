@@ -460,6 +460,16 @@ export const rokCommanderCopy = {
 				"⚠️ Every chamber in **🔱 BY DIVINE DECREE** is load bearing. " +
 				"If any are removed, I cannot function properly. " +
 				"Do not delete them.",
+			// Summary copy used when MULTIPLE channels are restored in one
+			// sweep. One embed replaces the per-channel spam pattern.
+			summaryTitle: "🔧 Chambers Have Been Restored",
+			summaryBody: (count: number) =>
+				`I noticed ${count} chamber${count === 1 ? "" : "s"} had been razed from my castle. ` +
+				"I have rebuilt them.\n\n" +
+				"⚠️ Every chamber in **🔱 BY DIVINE DECREE** is load bearing. " +
+				"If any are removed, I cannot function properly. " +
+				"Do not delete them.\n\n" +
+				"Restored chambers:",
 		},
 		castleRebuiltNotice: {
 			title: "🔱 The Castle Has Been Rebuilt",
@@ -613,46 +623,50 @@ export const rokCommanderCopy = {
 	//        Update BOTH public and innerSanctum together when shipping
 	//        a new version; they describe the same release in two voices.
 	featureAnnouncement: {
-		// ── v1.4.0 — bug fix + decree editing release ─────────────
-		// Lead with the apology. The 2026-04-24 spam tick where six
-		// season-end embeds posted in one minute, plus the cadence
-		// drift that misfired Ruins and Altar reminders, were both
-		// real impacts on member experience. The kingdom-voice public
-		// copy acknowledges the dissonance directly before pivoting
-		// to the new edit surface. Inner-sanctum copy is the plain
-		// admin changelog, lists the migration that already ran, and
-		// closes with the new edit button operator notes.
+		// ── v1.5.0 — Gifts to the Streamers (streamer feedback patch) ─
+		// Framed as a gift because every change in this release answers a
+		// specific piece of streamer feedback. Public voice keeps the
+		// kingdom framing for rok-commander guilds; inner-sanctum is plain
+		// admin changelog. The gift emoji headline matches the convention
+		// noted in FUTURE_PLANS for this release.
 		public: {
-			title: "🛡️ Decree of Restoration",
+			title: "🎁 Gifts From the Creator",
 			description:
-				"Mortals — **my Creator has hunted down a pair of bugs that troubled the kingdom.**\n\n" +
-				"What ailed the realm has been mended:\n\n" +
-				"**⚙️ Decree timing has been corrected.**\n" +
-				"Ancient Ruins now repeats every 40 hours, and Altar of Darkness every 86. The cadences match the kingdom's true schedule. If your reminders rang at the wrong hour these past weeks, that is why — and it shall not happen again.\n\n" +
-				"**🪶 Season's end shall sound but once.**\n" +
-				"Where the herald previously shouted six times to mark the close of a season, you shall hear it now exactly once.\n\n" +
-				"**📜 The decree calendar reads cleaner.**\n" +
-				"Completed events now rest in their own chapter. The season's end is bolded once at the top instead of repeated on every line.\n\n" +
-				"**✏️ A new gift to those who lead.**\n" +
-				"On the next-decree channel, those granted the bot's trust may now click `Edit` to shift a decree's time, title, or description on the fly.\n\n" +
-				"*The realm regrets the disorder. Sharpen your blades.*",
+				"Mortals — **my Creator has gathered the wishes of those who lead and answered them.**\n\n" +
+				"What was requested has been granted:\n\n" +
+				"**🛠️ Auto-heal may now be silenced.**\n" +
+				"Use `/configure-auto-heal enabled:False` to instruct the bot to leave razed chambers as they fall. Restore the protection any time with `enabled:True`. The kingdom shall obey your will, not its own.\n\n" +
+				"**📊 The rankings may now rest.**\n" +
+				"Use `/configure-leaderboard-tracking enabled:False` to pause participation tracking. Existing rankings remain visible. Resume with `enabled:True` whenever you wish — and the leaderboard chamber will be rebuilt if you also asked for it to be removed.\n\n" +
+				"**✏️ Chambers may now be renamed and the names shall persist.**\n" +
+				"`/rename-channel slot:<choose> name:<new>` renames a chamber. The chosen name now survives even when the chamber is razed and rebuilt. Direct renames in Discord still work for the moment but do not survive a rebuild — only the slash command does.\n\n" +
+				"**🏆 The leaderboard speaks of many seasons.**\n" +
+				"`/leaderboard` now offers a dropdown: pick a single decree, this week's rankings (Sunday through Saturday), this month's, or all time across every event the kingdom has run.\n\n" +
+				"**🎛️ The dashboard now carries the Command Center.**\n" +
+				"Three new buttons on the kingdom's web dashboard: pause every decree at once, sound the drums for an unscheduled stream, and pause the leaderboard. What once required the slash commands may now be done from the browser.\n\n" +
+				"*Sharpen your blades — and tell my Creator what else you would have me grant.*",
 		},
 		innerSanctum: {
-			title: "📓 v1.4.0 — Bug Fix and Decree Editing",
+			title: "📓 v1.5.0 — Streamer Feedback Patch",
 			description:
-				"This release corrects two production bugs and adds a new admin surface.\n\n" +
-				"**Fixes:**\n" +
-				"• `Ancient Ruins` cadence: 36h → 40h.\n" +
-				"• `Altar of Darkness` cadence: 84h → 86h.\n" +
-				"• Both required a one-time MongoDB migration to correct existing events; that migration ran at deploy time and is idempotent on re-run.\n" +
-				"• Season-end announcement now fires once per guild per season instead of once per active event (was firing 6× during the 2026-04-24 incident).\n\n" +
-				"**New — decree editing:**\n" +
-				"• `Edit` button on every next-decree post in 🛡️next-decree.\n" +
-				"• Server owner plus members of the configured admin role can adjust title, description, or time on a single occurrence (`Apply to this fire only`) or as a permanent shift to the recurring anchor (`Apply to all future fires`).\n" +
-				"• Time edits surface a 25-option timezone dropdown after modal submit; no IANA names to type.\n" +
-				"• Schedule board redesign: completed events partitioned into their own section, season-end line bolded once at the top.\n" +
-				"• Every edit writes to the `AuditLog` collection — `actor`, `before`, `after`, and scope.\n\n" +
-				"**Nothing to do.** The fixes apply themselves. The edit button is opt-in per click.",
+				"This release is built from the feedback you sent. Every change here is an answered request.\n\n" +
+				"**New slash commands:**\n" +
+				"• `/configure-auto-heal enabled:<bool>` — toggle whether the bot rebuilds deleted homebase channels. Default true (existing behavior).\n" +
+				"• `/configure-leaderboard-tracking enabled:<bool>` — toggle participation writes. Existing rows stay; `/leaderboard` keeps rendering historical data. Disable also offers a Remove button to delete the leaderboard channel itself; the next enable rebuilds it if auto-heal is on.\n" +
+				"• `/rename-channel slot:<dropdown> name:<string>` — rename one of the seven trackable channels and persist the override into GuildConfig. Rebuild paths honor the override.\n\n" +
+				"**`/leaderboard` redesign:**\n" +
+				"• `event` option is now an autocomplete dropdown listing every event by name, with `All time`, `This month`, and `This week` (Sunday-anchored) options at the top.\n" +
+				"• Same render path serves all four views; aggregation is server-side via `findAllGroupedByPlayerInEvents` with an optional date range.\n\n" +
+				"**Dashboard Command Center additions:**\n" +
+				"• Pause/Resume schedule button (writes `GuildConfig.schedulePaused`; `ReminderScheduler` honors it with auto-resume on the optional `pausedUntil`).\n" +
+				"• Standalone Go Live Now button (shares the per-guild cooldown with the event-bound version).\n" +
+				"• Pause/Resume leaderboard button (mirrors the slash command).\n" +
+				"• Leaderboard banner + toggle also lives on Settings.\n\n" +
+				"**Other touch-ups:**\n" +
+				"• Channel restoration audit notices consolidated to one summary embed instead of one per channel.\n" +
+				"• `GuildConfig.userRemovedChannels` flag prevents auto-heal from rebuilding admin-removed channels until the related toggle is re-enabled.\n" +
+				"• Platform server now rejects pairing one Discord guild to multiple apps (prevents shared-GuildConfig conflicts).\n\n" +
+				"**Nothing breaks on upgrade.** All new fields default to existing behavior; no migration required.",
 		},
 	},
 

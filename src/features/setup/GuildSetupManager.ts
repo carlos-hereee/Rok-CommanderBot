@@ -550,14 +550,27 @@ export class GuildSetupManager {
 		// How:   find by case-sensitive name match + TextChannel
 		//        instance check. Fall through to buildSingleChannel only
 		//        when no existing channel qualifies.
+		// Read the per-slot custom-name override (set by /rename-channel)
+		// before falling back to spec.displayName. This is the rule the
+		// streamer-feedback announcement promises: admin renames persist
+		// across rebuilds. The Mongoose Map can be either a true Map (when
+		// stored was hydrated as a document) or a plain object (when it was
+		// .lean()'d upstream), so probe both shapes defensively.
+		const channelNamesRaw = (stored as unknown as { channelNames?: Map<string, string> | Record<string, string> }).channelNames;
+		const overrideName =
+			channelNamesRaw instanceof Map
+				? channelNamesRaw.get(spec.configField)
+				: (channelNamesRaw as Record<string, string> | undefined)?.[spec.configField];
+		const effectiveName = overrideName || spec.displayName;
+
 		const existingByName = category.children.cache.find(
-			(child): child is TextChannel => child instanceof TextChannel && child.name === spec.displayName
+			(child): child is TextChannel => child instanceof TextChannel && child.name === effectiveName
 		);
 		const newChannel = existingByName
 			? existingByName
-			: await GuildSetupManager.buildSingleChannel(guild, category, spec.displayName, spec.kind, stored.adminRoleId ?? null);
+			: await GuildSetupManager.buildSingleChannel(guild, category, effectiveName, spec.kind, stored.adminRoleId ?? null);
 		if (existingByName) {
-			console.warn(LOG_MESSAGES.setup.channelAdopted(spec.displayName, guild.id));
+			console.warn(LOG_MESSAGES.setup.channelAdopted(effectiveName, guild.id));
 		}
 
 		// ── intro message resolution ────────────────────────────────
@@ -715,8 +728,27 @@ export class GuildSetupManager {
 			return [];
 		}
 
+		// Read the user-removed list once at the top of the sweep. configField
+		// names listed here represent channels the admin explicitly removed via
+		// the dashboard or a follow-up button — they supersede autoHealEnabled
+		// because the toggle is "do not auto-rebuild THIS specific slot" rather
+		// than "do not auto-rebuild any slot." This is the inverse semantics
+		// of the legacy null-storedId branch below.
+		const userRemovedSlots = ((stored as unknown as { userRemovedChannels?: string[] }).userRemovedChannels ?? []) as string[];
+
 		const repaired: string[] = [];
 		for (const spec of GuildSetupManager.CHANNEL_SPECS) {
+			// Honor per-channel user removal. If the admin removed this slot,
+			// skip it regardless of autoHealEnabled. The slot returns when the
+			// related toggle (eg /configure-leaderboard-tracking enabled:True)
+			// pulls the configField name back out of userRemovedChannels.
+			if (userRemovedSlots.includes(spec.configField)) {
+				console.log(
+					`[auto-heal] skipped rebuild of ${spec.configField} in guild ${guild.id} because the admin removed it explicitly; re-enable the related feature to restore.`
+				);
+				continue;
+			}
+
 			const storedId = stored[spec.configField] as string | null | undefined;
 
 			// What:  decide whether this spec needs a rebuild. Three states:
@@ -756,7 +788,17 @@ export class GuildSetupManager {
 				// was the one repaired, stored.adminChannelId now points at
 				// the new channel which is exactly where we want the notice.
 				stored = result.stored as typeof stored;
-				repaired.push(spec.displayName);
+				// Audit notice uses the EFFECTIVE channel name (override if
+				// set via /rename-channel, otherwise spec default). Without
+				// this, "homebase-leaderboard rebuilt" would post in admin
+				// after the rebuild even though the live channel is named
+				// "stream-rankings" per the persisted override.
+				const channelNamesRaw = (stored as unknown as { channelNames?: Map<string, string> | Record<string, string> }).channelNames;
+				const overrideName =
+					channelNamesRaw instanceof Map
+						? channelNamesRaw.get(spec.configField)
+						: (channelNamesRaw as Record<string, string> | undefined)?.[spec.configField];
+				repaired.push(overrideName || spec.displayName);
 			} catch (error) {
 				console.error(LOG_MESSAGES.setup.channelRepairFailed(spec.displayName, guild.id), error);
 				// continue to next spec. one failure should not block the
@@ -867,9 +909,14 @@ export class GuildSetupManager {
 		try {
 			const channel = await client.channels.fetch(adminChannelId).catch(() => null);
 			if (!channel || !(channel instanceof TextChannel)) return;
-			for (const name of repairedChannelNames) {
-				await channel.send({ embeds: [ChannelContent.channelRepairNotice(name)] });
-			}
+			// Single summary embed instead of one-per-channel. When the bot
+			// rebuilds several channels in a single sweep (eg after a
+			// toggle clears userRemovedChannels and auto-heal restores
+			// multiple slots), one message in inner-sanctum carries the
+			// audit signal without flooding the channel. Single-channel
+			// repairs keep the same shape — the summary template handles
+			// the count===1 case gracefully via singular/plural copy.
+			await channel.send({ embeds: [ChannelContent.channelsRestoredSummary(repairedChannelNames)] });
 		} catch (error) {
 			console.warn(LOG_MESSAGES.setup.repairNoticePostFailed(guildId), error);
 		}

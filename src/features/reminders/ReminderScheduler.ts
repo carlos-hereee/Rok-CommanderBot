@@ -141,12 +141,20 @@ export function startScheduler(client: Client): void {
 			// the recovery DM, only "tick had at least one success" does.
 			let anySuccess = false;
 			let anyUnreachable = false;
-			const eventsByGuild = await Promise.all(
+			// Fetch events AND guild config per guild in parallel. The config
+			// carries the schedule-level pause state (schedulePaused) which we
+			// honor BEFORE the per-event paused check below — when the
+			// schedule is paused, every event in this guild is skipped this
+			// tick regardless of its individual paused flag.
+			const guildDataByGuild = await Promise.all(
 				guildIds.map(async (guildId) => {
 					try {
-						const e = await eventStore.findByGuildId(guildId);
+						const [e, config] = await Promise.all([
+							eventStore.findByGuildId(guildId),
+							guildConfigStore.findByGuildId(guildId),
+						]);
 						anySuccess = true;
-						return e;
+						return { guildId, events: e, config };
 					} catch (err) {
 						// One guild's failure should not block the rest. The remote API
 						// will eventually return; the next tick will catch up. Logging
@@ -156,10 +164,40 @@ export function startScheduler(client: Client): void {
 						// as a platform outage; other errors (validation, auth) don't.
 						noteServerFailure(client, err);
 						anyUnreachable = true;
-						return [] as IGameEvent[];
+						return { guildId, events: [] as IGameEvent[], config: null };
 					}
 				})
 			);
+
+			// Apply schedule-level pause filtering. For each guild whose
+			// schedulePaused.paused is true, drop all its events from the
+			// processing list. Auto-resume parallels the per-event pattern
+			// below: if pausedUntil has elapsed, clear the flag and let
+			// events flow through this tick.
+			const eventsByGuild: IGameEvent[][] = [];
+			for (const { guildId, events: guildEvents, config } of guildDataByGuild) {
+				const schedulePaused = (config as unknown as { schedulePaused?: { paused?: boolean; pausedUntil?: Date | null } } | null)?.schedulePaused;
+				if (schedulePaused?.paused) {
+					const pausedUntil = schedulePaused.pausedUntil;
+					if (pausedUntil && Date.now() >= new Date(pausedUntil).getTime()) {
+						// Auto-resume from schedule-level pause. Clear the flag
+						// and fall through so this guild's events process this
+						// tick. The board refresh below will pick up the new
+						// state on its next pass.
+						try {
+							await guildConfigStore.update(guildId, {
+								schedulePaused: { paused: false, pausedUntil: null },
+							});
+						} catch (err) {
+							console.warn("[scheduler] schedule-level auto-resume write failed", { guildId, err });
+						}
+					} else {
+						// Still paused. Skip every event for this guild this tick.
+						continue;
+					}
+				}
+				eventsByGuild.push(guildEvents);
+			}
 			// Drive the success/failure tracker once per tick instead of once
 			// per guild so a partial outage doesn't toggle state on every guild.
 			if (anySuccess) noteServerSuccess(client);
