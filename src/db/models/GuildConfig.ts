@@ -204,39 +204,6 @@ const guildConfigSchema = new Schema(
 		//        flags can sibling this field; no need to nest yet.
 		autoHealEnabled: { type: Boolean, required: false, default: true },
 
-		// ── schedule-level pause (Command Center, 2026-05-11) ─────────────
-		// What:  guild-wide pause state for the reminder scheduler. When
-		//        `paused` is true, the ReminderScheduler skips every event
-		//        for this guild on every tick, regardless of per-event
-		//        paused state. When `pausedUntil` is set, the scheduler
-		//        auto-resumes on the next tick at or after that time
-		//        (same auto-resume contract as per-event pausedUntil).
-		// Who:   written by the dashboard's "Pause schedule" button via
-		//        /api/proxy/{pluginId}/schedule/pause AND the inverse
-		//        /resume endpoint. Read by ReminderScheduler at the top
-		//        of every tick.
-		// When:  written on demand by an admin clicking pause/resume.
-		//        Auto-resumed by the scheduler when pausedUntil has
-		//        elapsed.
-		// Where: distinct from per-event Event.paused — that field
-		//        pauses ONE event in this guild's schedule; this field
-		//        pauses ALL events. Both checks compose: a guild that is
-		//        schedule-paused AND has a per-event-paused event will
-		//        not fire reminders for that event regardless of which
-		//        flag clears first.
-		// How:   nested object so future schedule-level controls (eg
-		//        skip-next-occurrence flags) can sibling these fields
-		//        without nesting deeper. Defaults so legacy rows load
-		//        as "not paused."
-		schedulePaused: {
-			type: {
-				paused: { type: Boolean, default: false },
-				pausedUntil: { type: Date, default: null },
-			},
-			required: false,
-			default: () => ({ paused: false, pausedUntil: null }),
-		},
-
 		// ── custom channel names (streamer feedback 2026-05-11) ───────────
 		// What:  per-slot custom name overrides set by /rename-channel.
 		//        Keyed by configField name (e.g., "leaderboardChannelId")
