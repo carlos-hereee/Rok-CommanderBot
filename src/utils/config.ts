@@ -39,6 +39,27 @@ const clientId = (() => {
 
 const discordToken = process.env.DISCORD_TOKEN || "";
 const discordGuildId = process.env.DISCORD_GUILD_ID || "";
+// ── discordGuildIds (plural) ───────────────────────────────────
+// What:  comma-separated parsing of DISCORD_GUILD_ID so dev-mode
+//        deploy-commands can register to multiple test guilds in
+//        one run. Setting DISCORD_GUILD_ID="1234,5678,9012" pushes
+//        the slash command schemas to each guild in sequence.
+//        Single-id values still work — the split gives a one-
+//        element array, which deploy-commands iterates over the
+//        same way as a multi-id value.
+// Who:   deploy-commands.ts at the dev branch.
+// When:  read once at module load. Solo dev workflow: each
+//        deploy-commands run hits every listed guild.
+// Where: trims whitespace and filters empties so trailing commas
+//        or extra spaces in the env string do not silently produce
+//        empty-string guild ids that Discord rejects with 404.
+// How:   plain split, no schema validation — Discord's API will
+//        reject a malformed snowflake at registration time, which
+//        surfaces in the deploy-commands output for fast feedback.
+const discordGuildIds = discordGuildId
+	.split(",")
+	.map((id) => id.trim())
+	.filter((id) => id.length > 0);
 const creatorId = process.env.CREATOR_DISCORD_ID || "";
 
 // ── bot invite link ───────────────────────────────────────────
@@ -115,6 +136,7 @@ export {
 	clientId,
 	discordToken,
 	discordGuildId,
+	discordGuildIds,
 	creatorId,
 	botInviteLink,
 	port,

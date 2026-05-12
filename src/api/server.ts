@@ -10,6 +10,7 @@ import { createPlayersRouter } from "./routes/players.routes.js";
 import { remindersRouter } from "./routes/reminders.routes.js";
 import { createScheduleRouter } from "./routes/schedule.routes.js";
 import { createLeaderboardTrackingRouter } from "./routes/leaderboardTracking.routes.js";
+import { createAutoHealRouter } from "./routes/autoHeal.routes.js";
 import { dashboardOrigin, port } from "@utils/config.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
@@ -93,6 +94,9 @@ export function startApiServer(client: Client): void {
 	// /api/leaderboard-tracking — HTTP twin of the slash command for the
 	// Command Center leaderboard pause/continue button.
 	app.use("/api/leaderboard-tracking", createLeaderboardTrackingRouter());
+	// /api/auto-heal — HTTP twin of /configure-auto-heal for the Settings
+	// tab toggle. Same idempotency + payload shape as leaderboard-tracking.
+	app.use("/api/auto-heal", createAutoHealRouter());
 
 	app.listen(port, () => {
 		console.log(LOG_MESSAGES.api.serverRunning(port));

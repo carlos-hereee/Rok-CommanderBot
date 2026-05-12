@@ -87,6 +87,12 @@ healthRouter.get("/guild", async (req: Request, res: Response) => {
 			leaderboardTrackingEnabled:
 				(config as unknown as { leaderboardTrackingEnabled?: boolean }).leaderboardTrackingEnabled !== false,
 			leaderboardChannelMissing,
+			// Surface autoHealEnabled too so the Settings tab can render
+			// the same state-pill + button pattern as the leaderboard
+			// section. Default true if the field is unset on a legacy
+			// row (mirrors the schema default).
+			autoHealEnabled:
+				(config as unknown as { autoHealEnabled?: boolean }).autoHealEnabled !== false,
 		});
 	} catch (error) {
 		// Don't leak Mongo errors to the dashboard. A real outage shows up

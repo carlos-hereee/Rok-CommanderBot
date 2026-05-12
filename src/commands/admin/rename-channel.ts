@@ -43,7 +43,7 @@ import { embedContent } from "@base/constants/embed-content.js";
 // the handler operates on. Adding a future channel slot requires a one-
 // liner here plus the schema/spec wiring in GuildSetupManager.
 const SLOT_LABELS: ReadonlyArray<{ label: string; configField: string }> = [
-	{ label: "Welcome channel", configField: "introChannelId" },
+	{ label: "Introduction channel", configField: "introChannelId" },
 	{ label: "Commands channel", configField: "commandsChannelId" },
 	{ label: "Leaderboard", configField: "leaderboardChannelId" },
 	{ label: "Schedule board", configField: "scheduleChannelId" },
