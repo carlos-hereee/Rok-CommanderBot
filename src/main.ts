@@ -352,6 +352,46 @@ clientReady(client);
 				}
 			} catch (error) {
 				console.error(LOG_MESSAGES.main.autoSetupFailedSkipping(guild.id), error);
+
+				// ── auto-leave on Missing Permissions (2026-05-11) ──
+				// When ensureHomebase / autoSetup fails with Discord error
+				// 50013 (Missing Permissions), the bot is in this guild but
+				// cannot construct its homebase. It will fail the same way
+				// every boot until either (a) the admin grants Administrator
+				// permission or (b) we leave. Real example: guild
+				// 745227275196170320 sat in this state for over a month with
+				// no recovery. Leaving frees the slot toward Discord's 100-
+				// guild verification threshold and surfaces the issue to the
+				// admin (who has to re-invite if they want the bot back).
+				// We attempt a brief owner DM first so the admin understands
+				// why; swallow DM failures because some owners disable DMs
+				// from non-friends and the leave should still proceed.
+				const errCode = (error as { code?: number } | undefined)?.code;
+				if (errCode === 50013) {
+					try {
+						const owner = await guild.fetchOwner().catch(() => null);
+						if (owner) {
+							await owner
+								.send({
+									content:
+										`Hi! I tried to set up shop in **${guild.name}** but Discord blocked me from creating my channels (Missing Permissions). ` +
+										`I've left the server to keep things tidy. If you want me back, re-invite me with the Administrator scope and I'll set up cleanly. ` +
+										`Questions: silent6804 on Discord.`,
+								})
+								.catch(() => null);
+						}
+					} catch {
+						// owner DM failure is non-fatal; leave still proceeds
+					}
+					try {
+						await guild.leave();
+						console.warn(
+							`[auto-leave] left guild ${guild.id} (${guild.name}) due to 50013 Missing Permissions during autoSetup. Re-invite with Administrator scope to recover.`
+						);
+					} catch (leaveError) {
+						console.error(`[auto-leave] failed to leave guild ${guild.id}`, leaveError);
+					}
+				}
 			}
 		}
 
