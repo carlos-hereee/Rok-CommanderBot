@@ -297,9 +297,9 @@ export const rokCommanderCopy = {
 			// Where: paired with the "Summon me to your server, Mortal"
 			//        link button composed in ChannelContent.introductionComponents().
 			description:
-				"Mortals of this alliance — I am your **ROK Commander**.\n\n" +
-				"I do not serve out of kindness. I exist because " +
-				"**my Creator has willed it so**.\n\n" +
+				"Mortals of this alliance. I am your **ROK Commander**.\n\n" +
+				"My Creator built me as a **gift to those who would build great things**. " +
+				"They have sent me to your side, and I am yours to command.\n\n" +
 				"Through me, you will be reminded of your duties. " +
 				"Your deeds will be remembered. " +
 				"Your effort, rewarded. " +
