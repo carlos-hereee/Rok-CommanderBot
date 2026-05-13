@@ -74,11 +74,22 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
 		await interaction.respond([]);
 		return;
 	}
-	// Static list — does not need to filter on the user's typed input
-	// because Discord's client filters client-side, and seven entries fit
-	// well under the 25-entry hard limit. Listing all entries always
-	// keeps the dropdown predictable.
-	await interaction.respond(SLOT_LABELS.map((s) => ({ name: s.label, value: s.configField })));
+	// Filter to channels actually configured in this guild. v1.5.1 fix:
+	// previously the dropdown listed all 7 slots unconditionally, which
+	// made admins think they could rename channels that did not exist
+	// in their guild. The handler rejected those cases at runtime, but
+	// surfacing only configured slots in the dropdown gives clearer UX.
+	const config = await guildConfigStore.findByGuildId(interaction.guildId);
+	if (!config) {
+		await interaction.respond([]);
+		return;
+	}
+	const configRecord = config as unknown as Record<string, string | null | undefined>;
+	const configuredSlots = SLOT_LABELS.filter((s) => {
+		const id = configRecord[s.configField];
+		return typeof id === "string" && id.length > 0;
+	});
+	await interaction.respond(configuredSlots.map((s) => ({ name: s.label, value: s.configField })));
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {

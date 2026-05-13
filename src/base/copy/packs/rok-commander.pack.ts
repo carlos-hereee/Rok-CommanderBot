@@ -588,6 +588,37 @@ export const rokCommanderCopy = {
 		failed: "Could not update the schedule. Try again.",
 	},
 
+	// pause-all and resume-all act on every event in the guild at once.
+	// Skip-already-paused semantics on the pause path preserve any per-event
+	// pausedUntil dates the streamer set with /pause-schedule earlier.
+	pauseAllSchedules: {
+		noEvents: "No schedules to pause — this server has no events configured.",
+		allAlreadyPaused: (total: number) =>
+			`All ${total} schedules are already paused. Use \`/continue-all-schedules\` to resume them.`,
+		paused: (count: number, skipped: number) =>
+			skipped > 0
+				? `⏸️ Paused **${count}** schedule(s). Skipped ${skipped} already-paused schedule(s) so their existing auto-resume dates stay intact.`
+				: `⏸️ Paused **${count}** schedule(s). Resume any with \`/continue-schedule\` or all with \`/continue-all-schedules\`.`,
+		pausedUntil: (count: number, skipped: number, untilUnix: number) =>
+			skipped > 0
+				? `⏸️ Paused **${count}** schedule(s) until <t:${untilUnix}:F> (<t:${untilUnix}:R>). Skipped ${skipped} already-paused schedule(s) so their existing auto-resume dates stay intact.`
+				: `⏸️ Paused **${count}** schedule(s) until <t:${untilUnix}:F> (<t:${untilUnix}:R>). They will resume automatically.`,
+		invalidDuration: "Duration invalid. Use a positive number of days, max 90.",
+		partialFailure: (succeeded: number, failed: number) =>
+			`Updated ${succeeded} schedule(s) but ${failed} failed. Run \`/list-events\` to see which ones flipped, then retry the rest individually.`,
+		failed: "Could not pause the schedules. Try again.",
+	},
+
+	continueAllSchedules: {
+		noEvents: "No schedules to resume — this server has no events configured.",
+		noneCurrentlyPaused: "No schedules are currently paused. Nothing to resume.",
+		resumed: (count: number) =>
+			`▶️ Resumed **${count}** schedule(s). Reminders will fire on each event's next scheduled time.`,
+		partialFailure: (succeeded: number, failed: number) =>
+			`Resumed ${succeeded} schedule(s) but ${failed} failed. Run \`/list-events\` to see what is still paused, then retry the rest individually.`,
+		failed: "Could not resume the schedules. Try again.",
+	},
+
 	// ── /go-live-soon (panic button) ──────────────────────────────
 	// Drops a one-off announcement for a stream starting in the next few
 	// hours. NOT a recurring event — this is a single now-ish nudge, the

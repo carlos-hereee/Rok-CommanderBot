@@ -11,6 +11,16 @@ interface IListEventField {
 	// KvK season scope (announcementType "regular"). The list embed hides
 	// the "Season ends" line for those rows entirely.
 	seasonEndTs: number | null;
+	// Paused state mirrors the schedule board: when true the row gets a
+	// "⏸️ paused" tag in the field name and a reminder body line. v1.5.1
+	// added this so /list-events stops misrepresenting paused events as
+	// active. Optional so existing callers that do not surface pause state
+	// continue to compile.
+	paused?: boolean;
+	// unix seconds. null for indefinite pauses; set when the streamer
+	// passed `days:N` to /pause-schedule so the row can show an auto-resume
+	// timestamp instead of leaving readers guessing when reminders return.
+	pausedUntilTs?: number | null;
 }
 
 export function listEventsEmbed(fields: IListEventField[], announcementsChannelId: string | null = null): EmbedBuilder {
@@ -25,9 +35,24 @@ export function listEventsEmbed(fields: IListEventField[], announcementsChannelI
 		const lines: string[] = [];
 		const occurrenceLabel = field.type === "recurring" ? c.nextOccurrenceLabel : c.scheduledDateLabel;
 
-		lines.push(`**${occurrenceLabel}:** <t:${field.nextOccurrenceTs}:F>`);
-		if (field.type === "recurring" && field.intervalHours !== null) {
-			lines.push(c.intervalLabel(field.intervalHours));
+		// Paused rows lead with the pause notice and skip the next-occurrence
+		// line entirely. Pairing "paused" with a fire time was misleading —
+		// admins read it as "still firing at X". The interval line is also
+		// suppressed for the same reason (cadence is meaningless while paused).
+		// Mirrors the schedule board's pause vocabulary so the two surfaces
+		// stay consistent.
+		if (field.paused) {
+			lines.push("⏸️ _Reminders paused — resume with `/continue-schedule`_");
+			if (field.pausedUntilTs !== null && field.pausedUntilTs !== undefined) {
+				// relative + absolute so the admin can scan "in 3 days" without
+				// doing timezone math, then confirm the exact moment.
+				lines.push(`**Auto-resumes:** <t:${field.pausedUntilTs}:R> · <t:${field.pausedUntilTs}:f>`);
+			}
+		} else {
+			lines.push(`**${occurrenceLabel}:** <t:${field.nextOccurrenceTs}:F>`);
+			if (field.type === "recurring" && field.intervalHours !== null) {
+				lines.push(c.intervalLabel(field.intervalHours));
+			}
 		}
 		// Regular announcements skip the "Season ends" line. See IScheduleField
 		// notes — same reasoning, the embed must not render "Invalid Date"
@@ -36,7 +61,10 @@ export function listEventsEmbed(fields: IListEventField[], announcementsChannelI
 			lines.push(`**${c.seasonEndLabel}:** <t:${field.seasonEndTs}:D>`);
 		}
 
-		embed.addFields({ name: c.fieldName(field.name, field.type), value: lines.join("\n"), inline: false });
+		const headerName = field.paused
+			? `${c.fieldName(field.name, field.type)} · ⏸️ paused`
+			: c.fieldName(field.name, field.type);
+		embed.addFields({ name: headerName, value: lines.join("\n"), inline: false });
 	}
 
 	return embed;

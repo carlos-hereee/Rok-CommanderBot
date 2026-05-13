@@ -44,12 +44,21 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		// rendering an Invalid Date string from a null Date.
 		const seasonEndTs = event.seasonEnd ? Math.floor(new Date(event.seasonEnd).getTime() / 1000) : null;
 
+		// Pass pause state straight through so the embed can render the
+		// "⏸️ paused" tag. The schedule arithmetic above still runs even
+		// for paused events — paused only suppresses reminder firing, not
+		// the occurrence calculation — so "would have fired" timestamps
+		// stay informative for the admin scanning the list.
+		const pausedUntilTs = event.pausedUntil ? Math.floor(new Date(event.pausedUntil).getTime() / 1000) : null;
+
 		return {
 			name: event.name,
 			type: event.type as "recurring" | "one-time",
 			nextOccurrenceTs,
 			intervalHours: event.type === "recurring" ? event.intervalHours : null,
 			seasonEndTs,
+			paused: Boolean(event.paused),
+			pausedUntilTs,
 		};
 	});
 

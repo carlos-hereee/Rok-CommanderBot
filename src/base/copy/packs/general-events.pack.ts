@@ -437,6 +437,34 @@ export const generalEventsCopy: IPluginCopy = {
 		failed: "Could not update the schedule. Try again.",
 	},
 
+	pauseAllSchedules: {
+		noEvents: "No schedules to pause — this server has no events configured.",
+		allAlreadyPaused: (total: number) =>
+			`All ${total} schedules are already paused. Use \`/continue-all-schedules\` to resume them.`,
+		paused: (count: number, skipped: number) =>
+			skipped > 0
+				? `⏸️ Paused **${count}** schedule(s). Skipped ${skipped} already-paused schedule(s) so their existing auto-resume dates stay intact.`
+				: `⏸️ Paused **${count}** schedule(s). Resume any with \`/continue-schedule\` or all with \`/continue-all-schedules\`.`,
+		pausedUntil: (count: number, skipped: number, untilUnix: number) =>
+			skipped > 0
+				? `⏸️ Paused **${count}** schedule(s) until <t:${untilUnix}:F> (<t:${untilUnix}:R>). Skipped ${skipped} already-paused schedule(s) so their existing auto-resume dates stay intact.`
+				: `⏸️ Paused **${count}** schedule(s) until <t:${untilUnix}:F> (<t:${untilUnix}:R>). They will resume automatically.`,
+		invalidDuration: "Duration invalid. Use a positive number of days, max 90.",
+		partialFailure: (succeeded: number, failed: number) =>
+			`Updated ${succeeded} schedule(s) but ${failed} failed. Run \`/list-events\` to see which ones flipped, then retry the rest individually.`,
+		failed: "Could not pause the schedules. Try again.",
+	},
+
+	continueAllSchedules: {
+		noEvents: "No schedules to resume — this server has no events configured.",
+		noneCurrentlyPaused: "No schedules are currently paused. Nothing to resume.",
+		resumed: (count: number) =>
+			`▶️ Resumed **${count}** schedule(s). Reminders will fire on each event's next scheduled time.`,
+		partialFailure: (succeeded: number, failed: number) =>
+			`Resumed ${succeeded} schedule(s) but ${failed} failed. Run \`/list-events\` to see what is still paused, then retry the rest individually.`,
+		failed: "Could not resume the schedules. Try again.",
+	},
+
 	goLiveSoon: {
 		setupRequired: "Run `/setup` first so the bot has an announcements channel to post in.",
 		invalidLeadTime: "Pick a lead time from the list (now / 10m / 30m / 1h / 3h / 6h).",

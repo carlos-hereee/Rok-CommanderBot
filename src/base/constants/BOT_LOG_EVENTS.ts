@@ -18,6 +18,14 @@ export const BOT_LOG_EVENTS = {
 	//        the event string avoids adding a new schema field for
 	//        lastAnnouncedVersion.
 	FEATURE_ANNOUNCED_PREFIX: "feature_announced",
+	// ── auto-leave (v1.5.1 item 9, 2026-05-12) ─────────────────────
+	// Logged once per guild when the bot decides to leave a guild it
+	// cannot serve because category creation kept failing with
+	// DiscordAPIError 50013 (Missing Permissions) past the 7-day grace
+	// period. Metadata captures the failure-state duration and whether
+	// the owner DM landed. Read for audit when an operator wonders
+	// why the bot is no longer in a guild they previously invited.
+	AUTO_LEFT_GUILD: "auto_left_guild",
 	// add more here as needed
 } as const;
 

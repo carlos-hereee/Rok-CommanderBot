@@ -18,6 +18,17 @@ import { ISetupConfig, IAdminRoleConfig, ICreatedChannels, IChannelObjects, IEns
 import { ChannelContent } from "./ChannelContent.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
+import { botLogStore } from "@db/stores/botLogStore.js";
+import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
+
+// ── auto-leave grace period (v1.5.1 item 9, 2026-05-12) ─────────
+// Number of days a guild can sit in failed-permission state before the
+// bot leaves it. Chosen at 7 because real installs resolve within 24h
+// and a week is a comfortable buffer for admins in slow-response time
+// zones. Exported so the value is visible in one place and so tests
+// can override it via dependency injection if needed.
+const AUTO_LEAVE_GRACE_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const { channels } = embedContent.setup;
 
@@ -161,16 +172,29 @@ export class GuildSetupManager {
 		// How:   only the owner allow remains. dev suffix logic on the
 		//        category name is unchanged so a dev bot can still
 		//        coexist with prod in a shared guild.
-		const category = await guild.channels.create({
-			name: resolveCategoryName(),
-			type: ChannelType.GuildCategory,
-			permissionOverwrites: [
-				{
-					id: config.ownerId,
-					allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
-				},
-			],
-		});
+		// v1.5.1 item 9: wrap the category create in a 50013 catch so the
+		// bot can track guilds it cannot serve and eventually leave them
+		// after the grace period. Other Discord errors keep their existing
+		// throw-through behavior so legitimate failures still surface.
+		let category;
+		try {
+			category = await guild.channels.create({
+				name: resolveCategoryName(),
+				type: ChannelType.GuildCategory,
+				permissionOverwrites: [
+					{
+						id: config.ownerId,
+						allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+					},
+				],
+			});
+		} catch (error) {
+			if (error instanceof DiscordAPIError && error.code === 50013) {
+				await GuildSetupManager.handlePermissionFailure(guild);
+				return;
+			}
+			throw error;
+		}
 
 		const { ids, objects } = await GuildSetupManager.createChannels(guild, category, config);
 		const { scheduleMessageId, introMessageIds } = await GuildSetupManager.populateChannels(objects);
@@ -204,6 +228,12 @@ export class GuildSetupManager {
 			scheduleChannelId: ids.scheduleChannelId,
 			announcementsChannelId: ids.announcementsChannelId,
 			adminChannelId: ids.adminChannelId,
+			// v1.5.1 item 9: clear any previously-tracked permission failure
+			// so a guild that recovered from missing-permissions state stops
+			// being on the auto-leave countdown. Safe to set unconditionally
+			// because Mongo treats setting null to an already-null field as
+			// a no-op.
+			firstPermissionFailureAt: null,
 			// scheduleMessageId anchors the pinned schedule board that
 			// ScheduleBoard.refreshSchedule keeps up to date. see
 			// src/features/schedule/ScheduleBoard.ts for the lifecycle.
@@ -248,6 +278,130 @@ export class GuildSetupManager {
 				console.error(LOG_MESSAGES.setup.guildConfigDuplicateKey(config.guildId));
 			}
 			throw error;
+		}
+	}
+
+	// ── auto-leave (v1.5.1 item 9, 2026-05-12) ───────────────────
+	// Handle a permission failure during category creation. Tracks the
+	// first failure timestamp on a minimal GuildConfig row, and if the
+	// failure has persisted past AUTO_LEAVE_GRACE_DAYS, fires the
+	// auto-leave flow. Idempotent: re-running the handler on a guild
+	// already past the grace window will just re-attempt the leave.
+	// Idempotent on first call too because findOneAndUpdate is safe to
+	// repeat with the same now-timestamp.
+	private static async handlePermissionFailure(guild: Guild): Promise<void> {
+		console.warn(`[autoSetup] missing permissions during category create for guild ${guild.id}`);
+		const existing = await guildConfigStore.findByGuildId(guild.id);
+		const now = new Date();
+
+		// Read firstPermissionFailureAt off the existing row defensively.
+		// The field is declared on the schema but legacy rows may load
+		// without it; treat undefined as "never failed before."
+		const stored = existing as unknown as { firstPermissionFailureAt?: Date | null } | null;
+		const firstFailureAt = stored?.firstPermissionFailureAt ?? null;
+
+		if (!firstFailureAt) {
+			// First detected failure for this guild. Record the timestamp
+			// so subsequent checks know how long the guild has been in
+			// failed state. Write only the failure timestamp; do NOT
+			// populate channel ids or category id because none exist yet.
+			if (existing) {
+				await guildConfigStore.update(guild.id, { firstPermissionFailureAt: now });
+			} else {
+				// No GuildConfig row at all. We need one to track the
+				// failure timestamp, but we cannot create a full row
+				// because the schema requires categoryId and the channel
+				// ids that we cannot mint. Skipping persistence for now;
+				// next failure will see no existing row and re-enter this
+				// branch. The grace period effectively starts on the
+				// first successful guildConfigStore.create after the bot
+				// gets permissions, which is acceptable: a guild with no
+				// row at all means the bot has not yet succeeded at
+				// anything, so the worst case is the grace period starts
+				// fresh on first row-creation rather than first failure.
+				console.warn(`[autoSetup] no GuildConfig row exists for ${guild.id}; cannot track failure timestamp yet`);
+			}
+			return;
+		}
+
+		const failedFor = now.getTime() - new Date(firstFailureAt).getTime();
+		const gracePeriodMs = AUTO_LEAVE_GRACE_DAYS * MS_PER_DAY;
+
+		if (failedFor < gracePeriodMs) {
+			const daysLeft = Math.ceil((gracePeriodMs - failedFor) / MS_PER_DAY);
+			console.warn(
+				`[autoSetup] guild ${guild.id} still in failed-permissions state; ${daysLeft} day(s) of grace remaining`
+			);
+			return;
+		}
+
+		// Grace period exhausted. Fire the leave flow.
+		await GuildSetupManager.executeAutoLeave(guild, failedFor);
+	}
+
+	// Execute the auto-leave flow: DM the owner with an Administrator-
+	// invite explanation, audit-log the leave, then call guild.leave().
+	// Each step is best-effort; downstream failures should not prevent
+	// the leave call itself from firing. The DM is the most likely
+	// failure (some owners block DMs from non-friends) so it is wrapped
+	// in its own try/catch and the success boolean threads into the
+	// audit metadata for later review.
+	private static async executeAutoLeave(guild: Guild, failedForMs: number): Promise<void> {
+		const failedForDays = Math.round(failedForMs / MS_PER_DAY);
+		console.warn(`[autoSetup] auto-leaving guild ${guild.id} after ${failedForDays} day(s) of failed permissions`);
+
+		// Attempt owner DM. The invite URL re-includes Administrator scope
+		// (permissions=8) since the underlying reason the bot left was
+		// channel-creation perm issues; re-inviting with full admin is
+		// the most reliable path back. See memory at
+		// project_rok_commander_invite_url for the rationale on shipping
+		// with permissions=8 in the current version.
+		const botUserId = guild.client.user?.id;
+		const inviteUrl = botUserId
+			? `https://discord.com/oauth2/authorize?client_id=${botUserId}&permissions=8&scope=bot+applications.commands`
+			: null;
+
+		let dmSent = false;
+		try {
+			const owner = await guild.fetchOwner();
+			const dmBody = [
+				`I've been in your server **${guild.name}** for ${failedForDays} day(s) but cannot create the channels I need to operate.`,
+				`This usually means I'm missing the permission to create channels and categories.`,
+				inviteUrl
+					? `If you'd like me back, please re-invite me with this URL (it requests the Administrator scope I need):\n${inviteUrl}`
+					: `Re-invite me with Administrator scope if you'd like me back.`,
+				`Otherwise no action needed — I'll leave shortly to make room for other guilds.`,
+			].join("\n\n");
+			await owner.send(dmBody);
+			dmSent = true;
+		} catch (error) {
+			// DM-blocked or owner not fetchable. Continue with the leave;
+			// the audit row captures dmSent: false so the operator can
+			// reach the owner via another channel if needed.
+			console.warn(`[autoSetup] could not DM owner of ${guild.id} before auto-leave`, error);
+		}
+
+		// Audit log the leave so operators can trace why the bot left.
+		// botLogStore.log is generic key-value; failedForDays plus dmSent
+		// is enough to reconstruct the decision without extra context.
+		try {
+			await botLogStore.log(guild.id, BOT_LOG_EVENTS.AUTO_LEFT_GUILD, {
+				failedForDays,
+				dmSent,
+				guildName: guild.name,
+			});
+		} catch (error) {
+			console.error(`[autoSetup] failed to write auto-leave audit row for ${guild.id}`, error);
+		}
+
+		// Finally, leave the guild. If leave itself throws (rare), the
+		// bot stays in the guild and the next autoSetup tick re-evaluates;
+		// the audit row above will already be written so we have proof
+		// the decision was made even if the action failed.
+		try {
+			await guild.leave();
+		} catch (error) {
+			console.error(`[autoSetup] guild.leave() failed for ${guild.id}`, error);
 		}
 	}
 
@@ -368,10 +522,13 @@ export class GuildSetupManager {
 	static readonly CHANNEL_SPECS: Array<{
 		configField: (typeof GuildSetupManager.CHANNEL_FIELDS)[number];
 		displayName: string;
-		kind: "public" | "admin";
+		kind: "public" | "admin" | "commands";
 	}> = [
 		{ configField: "introChannelId", displayName: channels.intro, kind: "public" },
-		{ configField: "commandsChannelId", displayName: channels.commands, kind: "public" },
+		// commands kind: members get SendMessages + UseApplicationCommands
+		// so they can actually run slash commands in the command center.
+		// v1.5.1 split from "public" kind which denies SendMessages.
+		{ configField: "commandsChannelId", displayName: channels.commands, kind: "commands" },
 		{ configField: "leaderboardChannelId", displayName: channels.leaderboard, kind: "public" },
 		{ configField: "scheduleChannelId", displayName: channels.schedule, kind: "public" },
 		{ configField: "announcementsChannelId", displayName: channels.announcements, kind: "public" },
@@ -834,16 +991,34 @@ export class GuildSetupManager {
 		guild: Guild,
 		category: CategoryChannel,
 		name: string,
-		kind: "public" | "admin",
+		kind: "public" | "admin" | "commands",
 		adminRoleId: string | null
 	): Promise<TextChannel> {
-		// botSelfOverwrite must be in both shapes — same reasoning as
+		// botSelfOverwrite must be in every shape — same reasoning as
 		// createChannels (which mints the initial six). Without it, a
 		// repaired public channel would silently fail to accept the bot's
 		// intro repost; a repaired admin channel would not be visible to
 		// the bot at all.
 		const publicOverwrites = [
 			{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+			GuildSetupManager.botSelfOverwrite(guild),
+			{ id: guild.ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+		];
+		// Commands kind: same as public but @everyone is allowed
+		// SendMessages and UseApplicationCommands so members can run slash
+		// commands in the channel that is branded as the command center.
+		// v1.5.1 fix; mirrors the commandsOverwrites added in createChannels
+		// so repair-after-deletion produces the same permission shape as
+		// fresh creation.
+		const commandsOverwrites = [
+			{
+				id: guild.roles.everyone.id,
+				allow: [
+					PermissionFlagsBits.ViewChannel,
+					PermissionFlagsBits.SendMessages,
+					PermissionFlagsBits.UseApplicationCommands,
+				],
+			},
 			GuildSetupManager.botSelfOverwrite(guild),
 			{ id: guild.ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
 		];
@@ -857,16 +1032,26 @@ export class GuildSetupManager {
 		];
 
 		// layer the admin role grant on top of the base overwrites when
-		// the guild has already run Phase 2. public channels get send
-		// permission; the admin channel gets full access.
-		const overwrites = kind === "public" ? [...publicOverwrites] : [...adminOverwrites];
+		// the guild has already run Phase 2. public and commands channels
+		// get send permission; the admin channel gets full access.
+		let overwrites;
+		if (kind === "admin") {
+			overwrites = [...adminOverwrites];
+		} else if (kind === "commands") {
+			overwrites = [...commandsOverwrites];
+		} else {
+			overwrites = [...publicOverwrites];
+		}
 		if (adminRoleId) {
+			// admin kind gets full access (including history) so admins can
+			// scroll back through past notices. public and commands kinds
+			// get send permission only; history is implied by ViewChannel.
 			overwrites.push({
 				id: adminRoleId,
 				allow:
-					kind === "public"
-						? [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-						: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+					kind === "admin"
+						? [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
+						: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
 			});
 		}
 
@@ -1089,6 +1274,30 @@ export class GuildSetupManager {
 			},
 		];
 
+		// Commands channel needs SendMessages and UseApplicationCommands open
+		// to everyone so guild members can actually run slash commands in the
+		// channel that is branded as the command center. The other "public"
+		// channels stay read-only because their purpose is one-way (announce,
+		// leaderboard, schedule, next-decree). v1.5.1 fix per Carlos's feedback:
+		// previously commands inherited publicOverwrites which denied
+		// SendMessages, blocking members from typing slash commands and
+		// triggering "you cannot send messages here" errors mid-command.
+		const commandsOverwrites = [
+			{
+				id: guild.roles.everyone.id,
+				allow: [
+					PermissionFlagsBits.ViewChannel,
+					PermissionFlagsBits.SendMessages,
+					PermissionFlagsBits.UseApplicationCommands,
+				],
+			},
+			GuildSetupManager.botSelfOverwrite(guild),
+			{
+				id: config.ownerId,
+				allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+			},
+		];
+
 		// admin channel — owner only until Phase 2. botSelfOverwrite
 		// required for the same reason as the category: @everyone deny
 		// ViewChannel hides the channel from the bot otherwise.
@@ -1123,7 +1332,10 @@ export class GuildSetupManager {
 				name: channels.commands,
 				type: ChannelType.GuildText,
 				parent: category.id,
-				permissionOverwrites: publicOverwrites,
+				// commands channel uses commandsOverwrites so members can run
+				// slash commands without hitting the @everyone deny-SendMessages
+				// rule that publicOverwrites enforces on the other public channels.
+				permissionOverwrites: commandsOverwrites,
 			}),
 			guild.channels.create({
 				name: channels.leaderboard,

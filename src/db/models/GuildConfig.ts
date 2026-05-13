@@ -13,7 +13,11 @@ const guildConfigSchema = new Schema(
 		categoryId: { type: String, required: true },
 		// member role assigned to verified users during onboarding — stored here for easy access when assigning during onboarding
 		memberRoleId: { type: String, required: false, default: null },
-		// channel IDs — stored so bot always knows where to post
+		// channel IDs — stored so bot always knows where to post.
+		// All channels stay required because v1.5.1 ships the visibility-
+		// toggle approach (channels always exist, /setup hide/show controls
+		// @everyone ViewChannel overwrites). A future create-or-delete
+		// redesign would re-revisit nullability.
 		introChannelId: { type: String, required: true },
 		commandsChannelId: { type: String, required: true },
 		leaderboardChannelId: { type: String, required: true },
@@ -276,6 +280,60 @@ const guildConfigSchema = new Schema(
 		//        scope creep: data deletion (or visibility flip) is a separate
 		//        admin action and should be its own command if/when needed.
 		leaderboardTrackingEnabled: { type: Boolean, required: false, default: true },
+
+		// ── hidden channels (v1.5.1 item 4, added 2026-05-12) ──────────
+		// Tracks which optional bot-managed channels the admin has chosen
+		// to hide from members. Hiding applies @everyone deny ViewChannel
+		// on the channel; showing removes the deny. The channel itself
+		// always exists; the bot still posts to it; only member visibility
+		// changes. Solves the streamer feedback "many channels go unused"
+		// without the heavier create-or-delete refactor.
+		// Values are channel-kind names like "commandsChannelId",
+		// "leaderboardChannelId", etc, matching the GuildConfig field
+		// names. Empty array means all channels are visible (default).
+		// adminChannelId and introChannelId are NEVER added to this list
+		// because they are the bot's primary admin surface and marketing
+		// surface respectively. /setup hide refuses to accept them.
+		hiddenChannels: { type: [String], required: false, default: () => [] as string[] },
+
+		// ── auto-leave grace period (v1.5.1 item 9, added 2026-05-12) ──
+		// Timestamp of the first permission failure on category creation.
+		// Set when autoSetup catches DiscordAPIError 50013 on the category
+		// create call (the entry point that proves the bot does not have
+		// enough permissions to operate). Cleared on successful autoSetup.
+		// When this value is older than 7 days, the auto-leave flow fires:
+		// DM the owner with the Administrator-invite explanation, log the
+		// leave to botLogs, then call guild.leave(). Grace period prevents
+		// the bot from leaving guilds where an admin is mid-installation
+		// and still wiring permissions. Field is nullable so legacy rows
+		// load cleanly and rows that have never seen a failure stay
+		// unmarked. The 7-day threshold is chosen because real installs
+		// resolve within 24 hours and a week is a comfortable buffer for
+		// admins on vacation or in slow-response timezones.
+		firstPermissionFailureAt: { type: Date, required: false, default: null },
+		// ── schedule pause/resume (added 2026-05-12 to fix silent-drop bug) ─
+		// Holds the global schedule pause state for the guild. Written by
+		// the /api/schedule/pause and /resume HTTP routes; read by
+		// ReminderScheduler at every tick to decide whether to fire
+		// reminders for events on this guild's schedule. Previously written
+		// by the routes without being declared here, which meant Mongoose
+		// strict mode silently dropped every write and reads always returned
+		// undefined. The pause/resume feature looked functional in the
+		// dashboard (route returned 200) but did nothing in production
+		// because the data never persisted. The consumer-side
+		// `as unknown as { schedulePaused?: ... }` casts in schedule.routes,
+		// ReminderScheduler, and health.routes were the TypeScript workaround
+		// pattern that hid the schema gap. Default shape is
+		// { paused: false, pausedUntil: null } so existing rows load without
+		// a migration; the field appears on first write.
+		schedulePaused: {
+			type: {
+				paused: { type: Boolean, required: false, default: false },
+				pausedUntil: { type: Date, required: false, default: null },
+			},
+			required: false,
+			default: () => ({ paused: false, pausedUntil: null }),
+		},
 	},
 	{ timestamps: true }
 );

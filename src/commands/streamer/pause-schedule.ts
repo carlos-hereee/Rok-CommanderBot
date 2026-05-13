@@ -40,7 +40,7 @@ export const data = new SlashCommandBuilder()
 	.addIntegerOption((option) =>
 		option
 			.setName("days")
-			.setDescription("Auto-resume after this many days (omit for indefinite pause)")
+			.setDescription("Auto-resume after N days. Omit to pause indefinitely (then run /continue-schedule to resume).")
 			.setRequired(false)
 			.setMinValue(1)
 			.setMaxValue(90)
@@ -51,12 +51,15 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
 		await interaction.respond([]);
 		return;
 	}
-	// Show only ACTIVE events. A soft-deleted event cannot be paused —
-	// pausing it would do nothing because the scheduler ignores
-	// active:false events anyway. Listing them would just confuse the
-	// streamer ("why does pausing not show on the board?").
+	// Filter to NOT-paused events. The original implementation listed all
+	// events including already-paused ones, which made the dropdown
+	// misleading: the streamer would see already-paused schedules and
+	// either re-pause (idempotent no-op) or get confused about state.
+	// Filtering at autocomplete mirrors the symmetric pattern in
+	// /continue-schedule which lists only paused events. v1.5.1 fix.
 	const events = await eventStore.findByGuildId(interaction.guildId);
-	await interaction.respond(events.slice(0, 25).map((e) => ({ name: e.name, value: e.eventId })));
+	const active = events.filter((e) => !e.paused);
+	await interaction.respond(active.slice(0, 25).map((e) => ({ name: e.name, value: e.eventId })));
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {

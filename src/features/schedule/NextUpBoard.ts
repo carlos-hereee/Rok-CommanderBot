@@ -79,6 +79,13 @@ export async function refreshNextUp(client: Client, guildId: string): Promise<vo
 
 	for (const eventLike of events) {
 		const event = eventLike as unknown as IGameEvent;
+		// Skip paused events. ReminderScheduler already suppresses fires on
+		// paused events; the next-decree poster has to mirror that or
+		// "paused" reads as "no reminder ping, but here is your decree
+		// announcement anyway" which is the worst of both worlds. The auto-
+		// resume tick in ReminderScheduler clears event.paused, after which
+		// the next refreshNextUp run will start posting again.
+		if (event.paused) continue;
 		// Compute up to 5 upcoming occurrences and filter to the window.
 		// 5 is comfortably above the maximum a 40-hour-cadence event
 		// could produce in 24h (which is 1), and even a 4-hour cadence
