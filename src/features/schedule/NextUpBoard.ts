@@ -1,4 +1,12 @@
-import { Client, TextChannel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import {
+	Client,
+	TextChannel,
+	EmbedBuilder,
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ComponentType,
+} from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { eventOverrideStore } from "@db/stores/eventOverrideStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
@@ -7,33 +15,34 @@ import type { IGameEvent } from "@features/events/event.types.js";
 import { decreeEditCustomIds } from "./decreeEditHandlers.js";
 
 // ── NextUpBoard ─────────────────────────────────────────────────────
-// What:  posts a fresh embed for each upcoming decree in a guild's
-//        configured nextDecreeChannelId. Posts are append-only — every
-//        decree gets its own message so the channel doubles as an audit
-//        trail of what was scheduled and (via the Edit button) which
-//        decrees got modified.
-// Who:   triggered by main.ts on bot startup (refreshAllNextUp) and by
-//        ReminderScheduler after each fire (refreshNextUp). Read by
-//        any warrior in the alliance who joins the channel.
-// When:  the rolling 24-hour horizon means a decree gets posted as soon
-//        as it enters the window. The dedup Set below makes sure each
-//        (guild, event, occurrence) tuple is posted at most once per
-//        bot process lifetime — a bot restart will re-post the next 24h
-//        of decrees, which is the accepted trade-off (the channel is
-//        append-only by design, so a small number of re-posts on restart
-//        is preferable to introducing a persistent dedup table).
-// Where: never edits an existing message. The schedule board (pinned
-//        message in the schedule channel) is the place that mutates;
-//        next-decree posts are immutable historical records.
-// How:   per refresh: read events → compute upcoming-24h → look up
-//        overrides → render embed (with Edit button) → send. Errors per
-//        decree are logged and do not stop the loop.
+// Posts a fresh embed for each upcoming decree in a guild's configured
+// nextDecreeChannelId. Posts are append-only: every decree gets its own
+// message, so the channel doubles as an audit trail of what was scheduled
+// and (via the Edit button) which decrees got modified.
+//
+// Triggered by main.ts on bot startup (refreshAllNextUp) and by
+// ReminderScheduler after each fire (refreshNextUp). Read by any warrior
+// in the alliance who joins the channel. Rolling 24-hour horizon means
+// a decree gets posted as soon as it enters the window.
+//
+// Dedup model: the in-memory postedDecrees Set is a cache. The channel
+// itself is the source of truth — the Edit button on every post carries
+// a customId encoding (eventId, occurrenceUnix), so on first refresh per
+// guild per process we seed the cache from the channel's last 100
+// messages. That makes the dedup survive bot restarts without a database
+// table or a purge job. v1.5.1 fix; pre-fix every bot restart caused a
+// fresh wave of duplicate decree posts because the in-memory Set wiped.
 
 const HORIZON_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Module-scoped dedup Set. Key shape: `${guildId}:${eventId}:${occurrenceMs}`.
-// Written by tryPostDecree below. Lives in-process; no persistence.
+// Written by tryPostDecree AND by seedDedupFromChannel on first refresh.
 const postedDecrees = new Set<string>();
+
+// Tracks which guilds have had their dedup seeded from channel history in
+// THIS process. Without this gate, every refreshNextUp call would re-fetch
+// the same 100 messages, burning API quota.
+const seededGuilds = new Set<string>();
 
 function postedDecreeKey(guildId: string, eventId: string, occurrenceMs: number): string {
 	return `${guildId}:${eventId}:${occurrenceMs}`;
@@ -42,6 +51,7 @@ function postedDecreeKey(guildId: string, eventId: string, occurrenceMs: number)
 // Exported for testing — lets tests reset module state between runs.
 export function _resetNextUpDedupForTest(): void {
 	postedDecrees.clear();
+	seededGuilds.clear();
 }
 
 // ── public entry points ─────────────────────────────────────────────
@@ -71,6 +81,16 @@ export async function refreshNextUp(client: Client, guildId: string): Promise<vo
 	if (!channel || !(channel instanceof TextChannel)) {
 		console.error("[nextUp] next-decree channel not resolvable", { guildId, channelId: config.nextDecreeChannelId });
 		return;
+	}
+
+	// Seed dedup from channel history on the first refresh per guild per
+	// process. The channel is the source of truth for "what has already
+	// been posted"; the in-memory Set is just a cache that needs warming.
+	// Seed failures do not abort the refresh — worst case we re-post some
+	// decrees, which is the same bug we are fixing but degraded gracefully.
+	if (!seededGuilds.has(guildId)) {
+		await seedDedupFromChannel(channel, guildId);
+		seededGuilds.add(guildId);
 	}
 
 	const events = await eventStore.findByGuildId(guildId);
@@ -109,6 +129,47 @@ export async function refreshNextUp(client: Client, guildId: string): Promise<vo
 }
 
 // ── private ─────────────────────────────────────────────────────────
+
+// Walks the last 100 messages in the next-decree channel and seeds the
+// postedDecrees Set with the (guildId, eventId, occurrenceMs) tuples it
+// finds. The Edit button on each decree post carries a customId of shape
+// `edit_decree:{eventId}:{occurrenceUnix}` — parsing that gives back the
+// exact key the live refresh path writes after a successful post.
+//
+// 100 messages is enough for any realistic 24-hour horizon (typical KvK
+// guild: 7-10 events with 1-2 occurrences each = under 20 posts per day).
+// A guild with >100 next-decree posts in its recent history would have
+// the oldest tuples fall out of dedup, but those occurrences are well
+// outside the 24h horizon by then so they will not be considered for
+// re-posting anyway.
+async function seedDedupFromChannel(channel: TextChannel, guildId: string): Promise<void> {
+	try {
+		const messages = await channel.messages.fetch({ limit: 100 });
+		for (const message of messages.values()) {
+			for (const row of message.components) {
+				// message.components is typed as a union of every top-level
+				// component kind (ActionRow, FileComponent, Section, etc).
+				// Only ActionRow has nested .components, so narrow by type
+				// before iterating. The decree Edit button is always rendered
+				// inside an ActionRow (see tryPostDecree below) so this is
+				// the only kind we care about anyway.
+				if (row.type !== ComponentType.ActionRow) continue;
+				for (const component of row.components) {
+					const customId = (component as { customId?: string }).customId;
+					if (!customId) continue;
+					const parsed = decreeEditCustomIds.parse(customId);
+					if (!parsed) continue;
+					// customId stores occurrenceUnix in SECONDS; postedDecrees
+					// keys on MILLISECONDS to match Date.getTime(). Multiply.
+					const occurrenceMs = parsed.occurrenceUnix * 1000;
+					postedDecrees.add(postedDecreeKey(guildId, parsed.eventId, occurrenceMs));
+				}
+			}
+		}
+	} catch (error) {
+		console.error("[nextUp] dedup seed failed", { guildId }, error);
+	}
+}
 
 async function tryPostDecree(channel: TextChannel, event: IGameEvent, occurrence: Date): Promise<void> {
 	// Merge overrides on top of the event payload before rendering so

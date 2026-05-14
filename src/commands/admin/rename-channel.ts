@@ -70,7 +70,7 @@ export const data = new SlashCommandBuilder()
 	);
 
 export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
-	if (!interaction.guildId) {
+	if (!interaction.guildId || !interaction.guild) {
 		await interaction.respond([]);
 		return;
 	}
@@ -85,11 +85,33 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
 		return;
 	}
 	const configRecord = config as unknown as Record<string, string | null | undefined>;
-	const configuredSlots = SLOT_LABELS.filter((s) => {
-		const id = configRecord[s.configField];
-		return typeof id === "string" && id.length > 0;
-	});
-	await interaction.respond(configuredSlots.map((s) => ({ name: s.label, value: s.configField })));
+
+	// Display the LIVE channel name so the dropdown reflects prior renames.
+	// Without this, an admin who renamed "leaderboard" to "top-warriors"
+	// last week still saw "Leaderboard" in the dropdown the next time and
+	// had to remember which slot they were renaming. Slot label is appended
+	// in parens for context (useful when channel names are generic and the
+	// admin needs to confirm which logical slot they are targeting).
+	// Cache lookup (not fetch) keeps autocomplete responsive; the
+	// GUILD_CHANNELS gateway intent keeps the cache warm. Cache miss falls
+	// back to the static label so the slot stays selectable.
+	const suggestions: { name: string; value: string }[] = [];
+	for (const slot of SLOT_LABELS) {
+		const id = configRecord[slot.configField];
+		if (typeof id !== "string" || id.length === 0) continue;
+
+		const channel = interaction.guild.channels.cache.get(id);
+		const liveName = channel?.name;
+		// Discord caps autocomplete name at 100 chars; channel names cap at
+		// 100 already, so the parenthetical can push us over. Slice defensively.
+		const displayName =
+			liveName && liveName.length > 0
+				? `${liveName} (${slot.label})`.slice(0, 100)
+				: slot.label;
+		suggestions.push({ name: displayName, value: slot.configField });
+	}
+
+	await interaction.respond(suggestions);
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {

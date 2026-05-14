@@ -654,55 +654,37 @@ export const rokCommanderCopy = {
 	//        Update BOTH public and innerSanctum together when shipping
 	//        a new version; they describe the same release in two voices.
 	featureAnnouncement: {
-		// ── v1.5.0 — Gifts to the Streamers (streamer feedback patch) ─
-		// Framed as a gift because every change in this release answers a
-		// specific piece of streamer feedback. Public voice keeps the
-		// kingdom framing for rok-commander guilds; inner-sanctum is plain
-		// admin changelog. The gift emoji headline matches the convention
-		// noted in FUTURE_PLANS for this release.
+		// ── v1.5.1 ── Paused events stay quiet end to end ─────────────
+		// Bug-fix-framed release. The headline change for members is the
+		// NextUpBoard pause-blindness fix: paused decrees no longer get
+		// decree announcements posted. Inner sanctum carries the full
+		// admin punch list including the new bulk pause/resume commands
+		// and the visibility-toggle /channels command. Update BOTH this
+		// public block and the innerSanctum block together when shipping
+		// a new release; they describe the same patch in two voices.
 		public: {
-			title: "🎁 Gifts From the Creator",
+			title: "🛡️ v1.5.1: Paused events now stay fully silent",
 			description:
-				"Mortals. **My Creator has gathered the wishes of those who lead and answered them.**\n\n" +
-				"What was requested has been granted:\n\n" +
-				"**🛠️ Auto-heal may now be silenced.**\n" +
-				"Use `/configure-auto-heal enabled:False` to instruct the bot to leave razed chambers as they fall. Restore the protection any time with `enabled:True`. The realm shall obey your kingdom's will, not its own.\n\n" +
-				"**📊 The rankings may now rest.**\n" +
-				"Use `/configure-leaderboard-tracking enabled:False` to pause participation tracking. Existing rankings remain visible. Resume with `enabled:True` whenever you wish. The leaderboard chamber will also be rebuilt if you asked for it to be removed.\n\n" +
-				"**✏️ Chambers may now be renamed and the names shall persist.**\n" +
-				"`/rename-channel slot:<choose> name:<new>` renames a chamber. The chosen name now survives even when the chamber is razed and rebuilt. Direct renames in Discord still work for the moment but do not survive a rebuild. Only the slash command does.\n\n" +
-				"**🏆 The leaderboard speaks of many seasons.**\n" +
-				"`/leaderboard` now offers a dropdown: pick a single decree, this week's rankings (Sunday through Saturday), this month's, or all time across every event the kingdom has run.\n\n" +
-				"**🎛️ The kingdom's admin dashboard reaches new heights.**\n" +
-				"Visit your kingdom's plugin dashboard on Company Uno to manage the bot from a browser. The Command Center now carries three new actions for those granted the bot's trust: pause every decree at once, sound the drums for an unscheduled stream, or pause the leaderboard. The Settings panel adds toggles for auto-heal and leaderboard tracking. Many of the slash commands now have a dashboard counterpart.\n\n" +
-				"*Sharpen your blades. Tell my Creator what else you would have me grant.*",
+				"Previously, pausing a decree stopped its reminders as intended, but the next-decree channel could still post \"upcoming decree\" announcements ahead of time. This created confusion for alliances because an event would appear scheduled even though the admin had already silenced it.\n\n" +
+				"This update fixes that behavior. The next-decree channel now respects paused schedules and skips all announcements tied to them, keeping communication consistent from the moment an admin runs `/pause-schedule`.\n\n" +
+				"Thank you for taking the time to share your feedback. Every message helps improve the experience and shape future updates. We genuinely appreciate the support, ideas, and bug reports; if you have more ideas, suggestions, or even small nitpicks, send them my way.",
 		},
 		innerSanctum: {
-			title: "📓 v1.5.0 Streamer Feedback Patch",
+			title: "🗡️ v1.5.1: Admin patch",
 			description:
-				"This release is built from the feedback you sent. Every change here is an answered request.\n\n" +
-				"**New slash commands:**\n" +
-				"• `/configure-auto-heal enabled:<True/False>`. Toggles whether the bot rebuilds deleted homebase channels. Default True (existing behavior).\n" +
-				"• `/configure-leaderboard-tracking enabled:<True/False>`. Toggles participation writes. Existing rows stay; `/leaderboard` keeps rendering historical data. Disable also offers a Remove button to delete the leaderboard channel itself; the next enable rebuilds it if auto-heal is on.\n" +
-				"• `/rename-channel slot:<dropdown> name:<your-name>`. Renames one of the seven trackable channels and persists the chosen name. Future rebuilds honor it.\n\n" +
-				"**`/leaderboard` redesign:**\n" +
-				"• `event` option is now an autocomplete dropdown listing every event by name, with `All time`, `This month`, and `This week` (Sunday anchored) options at the top.\n" +
-				"• One render path serves all four views.\n\n" +
-				"**Dashboard Command Center additions:**\n" +
-				"• Pause/Resume schedule button. Quiets every decree at once with optional auto-resume.\n" +
-				"• Standalone Go Live Now button. Posts an announcement without needing a scheduled event.\n" +
-				"• Pause/Resume leaderboard button.\n\n" +
-				"**Dashboard Settings additions:**\n" +
-				"• Leaderboard tracking section with state pill and toggle.\n" +
-				"• Auto-heal section with state pill and toggle.\n\n" +
-				"**Other touch-ups:**\n" +
-				"• Channel restoration notices in this very channel now consolidate into one summary instead of one per channel.\n" +
-				"• Channels you remove via the dashboard stay removed; auto-heal honors the choice until you flip the related toggle back on.\n" +
-				"• Want to delete or restructure channels yourself? Turn off auto-heal first with `/configure-auto-heal enabled:False`. With it off, the bot will not rebuild what you remove.\n\n" +
-				"**For leaders:**\n" +
-				"• Set up the integration on the dashboard at https://www.companyuno.com.\n" +
-				"• Leaders, send word to my Creator on Discord: silent6804.\n\n" +
-				"**Nothing breaks on upgrade.** All new fields default to existing behavior; no migration required.",
+				"**Bug fixes:**\n" +
+				"• `/list-events` was showing paused schedules with no indicator, and the \"next occurrence\" timestamp on those rows read as if they were still about to fire. Admins reviewing the list could not tell which schedules were live and which were silenced. Paused rows now tag the field name with \"⏸️ paused\", hide the next-occurrence and interval lines, and show an auto-resume timestamp when one is set.\n" +
+				"• Decree announcements in the next-decree channel were still firing for paused events even though their reminders were silenced, so members saw upcoming-decree posts for events the admin had quieted. The next-decree channel now respects paused state and skips announcements for any paused schedule.\n" +
+				"• On bot restart, the next-decree channel was re-posting every decree inside the 24-hour horizon because the dedup cache lived in process memory only and wiped on each boot. The cache now seeds itself from the channel's last 100 messages on first refresh per guild per process, so restarts no longer cause duplicate decree posts.\n" +
+				"• `/rename-channel` autocomplete was showing the static slot labels (\"Leaderboard\", \"Schedule board\") instead of the live channel names admins had renamed them to, so the dropdown was stale the second time anyone ran the command. The dropdown now reads from current Discord state and shows the channel's actual name, with the slot label in parens for context.\n" +
+				"• `/pause-schedule` autocomplete was listing already-paused events alongside live ones, making the dropdown ambiguous about which schedules could still be paused. The autocomplete now filters paused events out so only live schedules appear.\n\n" +
+				"**New commands:**\n" +
+				"• `/pause-all-schedules` and `/continue-all-schedules`. Bulk versions of the single-event pause and continue commands. Pause-all skips already-paused schedules so any auto-resume dates set individually stay intact.\n" +
+				"• `/channels hide|show|list`. Toggle homebase channels on and off for members via permission overwrite. Channels stay alive in the background; bot keeps posting; only member visibility changes.\n\n" +
+				"**Operational:**\n" +
+				"• If the bot ever cannot build or rebuild its homebase due to missing permissions, the server owner gets a DM with a 7-day grace deadline. The bot leaves on day 7 unless the permissions are restored.\n\n" +
+				"Thank you for taking the time to share your feedback. Every message helps improve the experience and shape future updates. We genuinely appreciate the support, ideas, and bug reports; if you have more ideas, suggestions, or even small nitpicks, send them my way.\n\n" +
+				"Ping silent6804 on Discord.",
 		},
 	},
 

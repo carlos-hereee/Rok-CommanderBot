@@ -522,13 +522,15 @@ export class GuildSetupManager {
 	static readonly CHANNEL_SPECS: Array<{
 		configField: (typeof GuildSetupManager.CHANNEL_FIELDS)[number];
 		displayName: string;
-		kind: "public" | "admin" | "commands";
+		kind: "public" | "admin";
 	}> = [
 		{ configField: "introChannelId", displayName: channels.intro, kind: "public" },
-		// commands kind: members get SendMessages + UseApplicationCommands
-		// so they can actually run slash commands in the command center.
-		// v1.5.1 split from "public" kind which denies SendMessages.
-		{ configField: "commandsChannelId", displayName: channels.commands, kind: "commands" },
+		// Commands channel is read-only for members on purpose. The pinned
+		// command-center embed is the channel's reason for existing; opening
+		// SendMessages here would let unrelated chatter bury that message.
+		// Slash commands work in any channel anyway, so locking this one
+		// down does not block functionality.
+		{ configField: "commandsChannelId", displayName: channels.commands, kind: "public" },
 		{ configField: "leaderboardChannelId", displayName: channels.leaderboard, kind: "public" },
 		{ configField: "scheduleChannelId", displayName: channels.schedule, kind: "public" },
 		{ configField: "announcementsChannelId", displayName: channels.announcements, kind: "public" },
@@ -991,34 +993,16 @@ export class GuildSetupManager {
 		guild: Guild,
 		category: CategoryChannel,
 		name: string,
-		kind: "public" | "admin" | "commands",
+		kind: "public" | "admin",
 		adminRoleId: string | null
 	): Promise<TextChannel> {
-		// botSelfOverwrite must be in every shape — same reasoning as
+		// botSelfOverwrite must be in every shape, same reasoning as
 		// createChannels (which mints the initial six). Without it, a
 		// repaired public channel would silently fail to accept the bot's
 		// intro repost; a repaired admin channel would not be visible to
 		// the bot at all.
 		const publicOverwrites = [
 			{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
-			GuildSetupManager.botSelfOverwrite(guild),
-			{ id: guild.ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-		];
-		// Commands kind: same as public but @everyone is allowed
-		// SendMessages and UseApplicationCommands so members can run slash
-		// commands in the channel that is branded as the command center.
-		// v1.5.1 fix; mirrors the commandsOverwrites added in createChannels
-		// so repair-after-deletion produces the same permission shape as
-		// fresh creation.
-		const commandsOverwrites = [
-			{
-				id: guild.roles.everyone.id,
-				allow: [
-					PermissionFlagsBits.ViewChannel,
-					PermissionFlagsBits.SendMessages,
-					PermissionFlagsBits.UseApplicationCommands,
-				],
-			},
 			GuildSetupManager.botSelfOverwrite(guild),
 			{ id: guild.ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
 		];
@@ -1032,20 +1016,18 @@ export class GuildSetupManager {
 		];
 
 		// layer the admin role grant on top of the base overwrites when
-		// the guild has already run Phase 2. public and commands channels
-		// get send permission; the admin channel gets full access.
+		// the guild has already run Phase 2. public channels get send
+		// permission for the admin role; admin channel gets full access.
 		let overwrites;
 		if (kind === "admin") {
 			overwrites = [...adminOverwrites];
-		} else if (kind === "commands") {
-			overwrites = [...commandsOverwrites];
 		} else {
 			overwrites = [...publicOverwrites];
 		}
 		if (adminRoleId) {
 			// admin kind gets full access (including history) so admins can
-			// scroll back through past notices. public and commands kinds
-			// get send permission only; history is implied by ViewChannel.
+			// scroll back through past notices. public kind gets send
+			// permission only; history is implied by ViewChannel.
 			overwrites.push({
 				id: adminRoleId,
 				allow:
@@ -1274,31 +1256,7 @@ export class GuildSetupManager {
 			},
 		];
 
-		// Commands channel needs SendMessages and UseApplicationCommands open
-		// to everyone so guild members can actually run slash commands in the
-		// channel that is branded as the command center. The other "public"
-		// channels stay read-only because their purpose is one-way (announce,
-		// leaderboard, schedule, next-decree). v1.5.1 fix per Carlos's feedback:
-		// previously commands inherited publicOverwrites which denied
-		// SendMessages, blocking members from typing slash commands and
-		// triggering "you cannot send messages here" errors mid-command.
-		const commandsOverwrites = [
-			{
-				id: guild.roles.everyone.id,
-				allow: [
-					PermissionFlagsBits.ViewChannel,
-					PermissionFlagsBits.SendMessages,
-					PermissionFlagsBits.UseApplicationCommands,
-				],
-			},
-			GuildSetupManager.botSelfOverwrite(guild),
-			{
-				id: config.ownerId,
-				allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
-			},
-		];
-
-		// admin channel — owner only until Phase 2. botSelfOverwrite
+		// admin channel: owner only until Phase 2. botSelfOverwrite
 		// required for the same reason as the category: @everyone deny
 		// ViewChannel hides the channel from the bot otherwise.
 		const adminOverwrites = [
@@ -1332,10 +1290,12 @@ export class GuildSetupManager {
 				name: channels.commands,
 				type: ChannelType.GuildText,
 				parent: category.id,
-				// commands channel uses commandsOverwrites so members can run
-				// slash commands without hitting the @everyone deny-SendMessages
-				// rule that publicOverwrites enforces on the other public channels.
-				permissionOverwrites: commandsOverwrites,
+				// Commands channel uses publicOverwrites so members are
+				// read-only here. The pinned command-center embed is the
+				// channel's whole reason for existing; opening SendMessages
+				// would let unrelated chatter bury it. Slash commands work
+				// in any channel anyway, so the lockdown does not block use.
+				permissionOverwrites: publicOverwrites,
 			}),
 			guild.channels.create({
 				name: channels.leaderboard,

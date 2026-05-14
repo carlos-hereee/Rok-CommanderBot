@@ -75,6 +75,7 @@ const BOT_VERSION = loadBotVersion();
 const VERSION_SHIPPED_AT: Record<string, string> = {
 	"1.4.0": "2026-04-25T00:00:00Z",
 	"1.5.0": "2026-05-11T00:00:00Z",
+	"1.5.1": "2026-05-13T00:00:00Z",
 };
 
 export async function postFeatureAnnouncements(client: Client): Promise<void> {

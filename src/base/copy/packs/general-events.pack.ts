@@ -484,53 +484,35 @@ export const generalEventsCopy: IPluginCopy = {
 	// lockstep — the admin sub-pack is the same content, only the public sub-pack
 	// gets translated per voice.
 	featureAnnouncement: {
-		// ── v1.5.0 — Streamer Feedback Patch ─────────────────────────
-		// Plain-English voicing of the gift framing. Every change here
-		// answers a specific piece of streamer feedback, so the copy
-		// names that explicitly. innerSanctum tracks the rok-commander
-		// pack in lockstep — both versions describe the same release.
+		// ── v1.5.1 ── Paused schedules stay quiet end to end ──────────
+		// Bug-fix-framed release. Same content as rok-commander pack;
+		// only the public voicing changes (neutral "stream schedules"
+		// vs kingdom "decrees"). innerSanctum is structurally identical
+		// to rok-commander's, swapping decree/next-decree for stream/
+		// next-up.
 		public: {
-			title: "🎁 Streamer Gifts",
+			title: "📺 v1.5.1: Paused schedules now stay fully silent",
 			description:
-				"Hey everyone. A stack of things you asked for shipped this week.\n\n" +
-				"**🛠️ Auto-heal can be turned off.**\n" +
-				"Run `/configure-auto-heal enabled:False` and the bot will stop rebuilding channels you delete. Turn it back on any time with `enabled:True`.\n\n" +
-				"**📊 Leaderboard tracking can be paused.**\n" +
-				"`/configure-leaderboard-tracking enabled:False` stops new participation writes. Existing leaderboard data stays visible. Re-enable any time. If you also chose to remove the leaderboard channel, it rebuilds on the next sweep.\n\n" +
-				"**✏️ Channel renames now persist.**\n" +
-				"`/rename-channel slot:<choose> name:<new>` renames a channel and saves the name. The next rebuild uses your saved name instead of the default. Direct renames in Discord still work for the live channel but do not survive a rebuild. Only the slash command does.\n\n" +
-				"**🏆 `/leaderboard` is easier to use.**\n" +
-				"Dropdown now: pick an event by name, this week (Sunday through Saturday), this month, or all time across every event. No more typing event IDs.\n\n" +
-				"**🎛️ Your admin dashboard reaches new heights.**\n" +
-				"Visit your app's plugin dashboard on Company Uno to manage the bot from a browser. The Command Center now carries three new buttons: pause every reminder at once, post a Go Live announcement without setting up an event, or pause the leaderboard. The Settings panel adds toggles for auto-heal and leaderboard tracking. Many of the slash commands now have a dashboard counterpart.\n\n" +
-				"*Thanks for the feedback. Send more.*",
+				"Previously, pausing a stream schedule stopped its reminders as intended, but the next-up channel could still post \"upcoming stream\" announcements ahead of time. This created confusion for viewers because a stream would appear scheduled even though the streamer had already silenced it.\n\n" +
+				"This update fixes that behavior. The next-up channel now respects paused schedules and skips all announcements tied to them, keeping communication consistent from the moment a streamer runs `/pause-schedule`.\n\n" +
+				"Thank you for taking the time to share your feedback. Every message helps improve the experience and shape future updates. We genuinely appreciate the support, ideas, and bug reports; if you have more ideas, suggestions, or even small nitpicks, send them my way.",
 		},
 		innerSanctum: {
-			title: "📓 v1.5.0 Streamer Feedback Patch",
+			title: "🎬 v1.5.1: Streamer patch",
 			description:
-				"This release is built from the feedback you sent. Every change here is an answered request.\n\n" +
-				"**New slash commands:**\n" +
-				"• `/configure-auto-heal enabled:<True/False>`. Toggles whether the bot rebuilds deleted homebase channels. Default True (existing behavior).\n" +
-				"• `/configure-leaderboard-tracking enabled:<True/False>`. Toggles participation writes. Existing rows stay; `/leaderboard` keeps rendering historical data. Disable also offers a Remove button to delete the leaderboard channel itself; the next enable rebuilds it if auto-heal is on.\n" +
-				"• `/rename-channel slot:<dropdown> name:<your-name>`. Renames one of the seven trackable channels and persists the chosen name. Future rebuilds honor it.\n\n" +
-				"**`/leaderboard` redesign:**\n" +
-				"• `event` option is now an autocomplete dropdown listing every event by name, with `All time`, `This month`, and `This week` (Sunday anchored) options at the top.\n" +
-				"• One render path serves all four views.\n\n" +
-				"**Dashboard Command Center additions:**\n" +
-				"• Pause/Resume schedule button. Quiets every reminder at once with optional auto-resume.\n" +
-				"• Standalone Go Live Now button. Posts an announcement without needing a scheduled event.\n" +
-				"• Pause/Resume leaderboard button.\n\n" +
-				"**Dashboard Settings additions:**\n" +
-				"• Leaderboard tracking section with state pill and toggle.\n" +
-				"• Auto-heal section with state pill and toggle.\n\n" +
-				"**Other touch-ups:**\n" +
-				"• Channel restoration notices in this very channel now consolidate into one summary instead of one per channel.\n" +
-				"• Channels you remove via the dashboard stay removed; auto-heal honors the choice until you flip the related toggle back on.\n" +
-				"• Want to delete or restructure channels yourself? Turn off auto-heal first with `/configure-auto-heal enabled:False`. With it off, the bot will not rebuild what you remove.\n\n" +
-				"**For leaders:**\n" +
-				"• Set up the integration on the dashboard at https://www.companyuno.com.\n" +
-				"• Leaders, reach out to the developer on Discord: silent6804.\n\n" +
-				"**Nothing breaks on upgrade.** All new fields default to existing behavior; no migration required.",
+				"**Bug fixes:**\n" +
+				"• `/list-events` was showing paused schedules with no indicator, and the \"next occurrence\" timestamp on those rows read as if they were still about to fire. Admins reviewing the list could not tell which schedules were live and which were silenced. Paused rows now tag the field name with \"⏸️ paused\", hide the next-occurrence and interval lines, and show an auto-resume timestamp when one is set.\n" +
+				"• Upcoming-stream posts in the next-up channel were still firing for paused schedules even though their reminders were silenced, so viewers saw \"stream at X\" posts for events the streamer had paused. The next-up channel now respects paused state and skips posts for any paused schedule.\n" +
+				"• On bot restart, the next-up channel was re-posting every upcoming-stream announcement inside the 24-hour horizon because the dedup cache lived in process memory only and wiped on each boot. The cache now seeds itself from the channel's last 100 messages on first refresh per guild per process, so restarts no longer cause duplicate posts.\n" +
+				"• `/rename-channel` autocomplete was showing the static slot labels (\"Leaderboard\", \"Schedule board\") instead of the live channel names admins had renamed them to, so the dropdown was stale the second time anyone ran the command. The dropdown now reads from current Discord state and shows the channel's actual name, with the slot label in parens for context.\n" +
+				"• `/pause-schedule` autocomplete was listing already-paused events alongside live ones, making the dropdown ambiguous about which schedules could still be paused. The autocomplete now filters paused events out so only live schedules appear.\n\n" +
+				"**New commands:**\n" +
+				"• `/pause-all-schedules` and `/continue-all-schedules`. Bulk versions of the single-event pause and continue commands. Pause-all skips already-paused schedules so any auto-resume dates set individually stay intact.\n" +
+				"• `/channels hide|show|list`. Toggle channels on and off for members via permission overwrite. Channels stay alive in the background; bot keeps posting; only member visibility changes.\n\n" +
+				"**Operational:**\n" +
+				"• If the bot ever cannot build or rebuild its homebase due to missing permissions, the server owner gets a DM with a 7-day grace deadline. The bot leaves on day 7 unless the permissions are restored.\n\n" +
+				"Thank you for taking the time to share your feedback. Every message helps improve the experience and shape future updates. We genuinely appreciate the support, ideas, and bug reports; if you have more ideas, suggestions, or even small nitpicks, send them my way.\n\n" +
+				"Ping silent6804 on Discord.",
 		},
 	},
 
