@@ -16,6 +16,7 @@ import {
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { ISetupConfig, IAdminRoleConfig, ICreatedChannels, IChannelObjects, IEnsureHomebaseResult } from "./setup.types.js";
 import { ChannelContent } from "./ChannelContent.js";
+import { buildSuggestionBoxButtonRow } from "@features/suggestion-box/SuggestionBox.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
@@ -476,6 +477,26 @@ export class GuildSetupManager {
 			return { action: "rebuilt", repairedChannels: [] };
 		}
 
+		// ③.5 reconcile category name. Existing guilds paired before the
+		//      2026-05-22 universal-category rename still carry their old
+		//      pack-specific name (🔱 BY DIVINE DECREE for ROK,
+		//      📺 Stream Hub for streamer). Compare to the currently
+		//      desired name and rename in place if stale. Failure here
+		//      (rate limit, missing perms) is non fatal — the channel
+		//      sweep below still runs, and the next boot retries. One
+		//      PATCH per guild per restart at worst; no-op on subsequent
+		//      boots because the names will match.
+		const desiredCategoryName = resolveCategoryName();
+		if (category instanceof CategoryChannel && category.name !== desiredCategoryName) {
+			const previousName = category.name;
+			try {
+				await category.edit({ name: desiredCategoryName });
+				console.log(`[ensureHomebase] renamed category in guild ${guild.id} from "${previousName}" to "${desiredCategoryName}"`);
+			} catch (error) {
+				console.warn(`[ensureHomebase] failed to rename category in guild ${guild.id} to "${desiredCategoryName}"`, error);
+			}
+		}
+
 		// ④ category is ours. scan each of the six child channels and
 		//    rebuild any that were deleted while the bot was offline.
 		//    repairMissingChannels also posts the per channel notices so
@@ -600,6 +621,12 @@ export class GuildSetupManager {
 		switch (field) {
 			case "introChannelId":
 				return [ChannelContent.introductionComponents()];
+			case "commandsChannelId":
+				// Suggestion Box button on the pinned commandGuide so
+				// members can open the modal with one click instead of
+				// typing /suggestion-box. Returned as ActionRowBuilder
+				// to match the existing component contract.
+				return [buildSuggestionBoxButtonRow()];
 			default:
 				return null;
 		}
@@ -1424,7 +1451,11 @@ export class GuildSetupManager {
 				embeds: [ChannelContent.introduction()],
 				components: [ChannelContent.introductionComponents()],
 			}),
-			commandsChannel.send({ embeds: [ChannelContent.commandGuide()] }),
+			// Initial post includes the Suggestion Box button row so the
+			// pin carries the member-clickable surface from minute one.
+			// resolveIntroComponents returns the same row for refresh
+			// reposts on subsequent boots; keep both call sites aligned.
+			commandsChannel.send({ embeds: [ChannelContent.commandGuide()], components: [buildSuggestionBoxButtonRow()] }),
 			leaderboardChannel.send({ embeds: [ChannelContent.leaderboardIntro()] }),
 			scheduleChannel.send({ embeds: [ChannelContent.scheduleIntro()] }),
 			announcementsChannel.send({ embeds: [ChannelContent.announcementsIntro()] }),

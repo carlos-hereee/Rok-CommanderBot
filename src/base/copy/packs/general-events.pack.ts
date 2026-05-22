@@ -33,7 +33,9 @@ import type { IEmbedField, IPluginCopy } from "../types.js";
 const STUB = "[unused in this plugin]";
 
 export const generalEventsCopy: IPluginCopy = {
-	FOOTER: "Stream Commander",
+	// Platform brand, not bot brand. Same rationale as rok-commander
+	// pack — see that pack's FOOTER comment.
+	FOOTER: "Company Uno",
 
 	// Same palette as rok-commander. Color is neutral by design — the kingdom
 	// vs streamer split happens in words, not in chrome. Keeping the same
@@ -116,9 +118,11 @@ export const generalEventsCopy: IPluginCopy = {
 		medals: ["🥇", "🥈", "🥉"],
 	},
 
-	// Public schedule board pinned in the schedule channel. Voice stays
-	// streamer-friendly; the rok-commander pack used "Decree Calendar"
-	// here, this pack uses plain language.
+	// Public schedule board pinned in the schedule channel. Title
+	// "📅 Event Schedule" is universal across packs as of 2026-05-22
+	// (see project_category_name_universal memory). Both packs use the
+	// same generic name; per-pack voice differentiation continues in
+	// other surfaces (intro embed, leaderboard, command guides).
 	scheduleBoard: {
 		title: "📅 Event Schedule",
 		description: (announcementsChannelId: string | null) =>
@@ -214,9 +218,15 @@ export const generalEventsCopy: IPluginCopy = {
 	},
 
 	setup: {
-		// Neutral category name. The rok-commander pack uses "🔱 BY DIVINE DECREE";
-		// this pack uses plain language so it reads as a normal Discord category.
-		categoryName: "📺 Stream Hub",
+		// Universal category name across packs. Decision 2026-05-22: the category
+		// name is the first field that goes universal across packs (the rest of
+		// per-pack voice — intro copy, leaderboard framing, command guide tone —
+		// stays pack-specific). Rationale: the category is the bot's brand mark
+		// in every server, and ROK-coded names alienate streamer / community
+		// guilds. "Community Notice Board" reads natively for alliance leaders,
+		// streamers, and community organizers alike. Aligns with the item 32
+		// Herald rename direction toward unified bot identity at the brand level.
+		categoryName: "🪧 NOTICE BOARD",
 		devSuffix: " (dev)",
 		channels: {
 			// Same channel keys as rok-commander so GuildSetupManager.populateChannels
@@ -259,6 +269,10 @@ export const generalEventsCopy: IPluginCopy = {
 				{
 					name: "📋 Events",
 					value: ["`/list-events`", "View all configured events."].join("\n"),
+				},
+				{
+					name: "💡 Suggestion Box",
+					value: ["`/suggestion-box`", "Send a suggestion or feature request to the Company Uno team."].join("\n"),
 				},
 			] satisfies IEmbedField[],
 		},
@@ -335,7 +349,7 @@ export const generalEventsCopy: IPluginCopy = {
 			description: (channelName: string) =>
 				`I noticed **${channelName}** was deleted from the server. ` +
 				"I have rebuilt it.\n\n" +
-				"⚠️ Every channel inside **📺 Stream Hub** is required for the bot to work. " +
+				"⚠️ Every channel inside **🪧 NOTICE BOARD** is required for the bot to work. " +
 				"If any are removed I cannot function properly. " +
 				"Please leave them in place.",
 			// Summary copy for multi-channel restores in a single sweep.
@@ -343,16 +357,16 @@ export const generalEventsCopy: IPluginCopy = {
 			summaryBody: (count: number) =>
 				`${count} channel${count === 1 ? "" : "s"} ${count === 1 ? "was" : "were"} deleted from the server. ` +
 				"I have rebuilt them.\n\n" +
-				"⚠️ Every channel inside **📺 Stream Hub** is required for the bot to work. " +
+				"⚠️ Every channel inside **🪧 NOTICE BOARD** is required for the bot to work. " +
 				"If any are removed I cannot function properly. " +
 				"Please leave them in place.\n\n" +
 				"Restored channels:",
 		},
 		castleRebuiltNotice: {
-			title: "📺 Stream Hub Was Rebuilt",
+			title: "🪧 NOTICE BOARD Was Rebuilt",
 			description:
 				"My home category was missing when I came online. " +
-				"I have rebuilt **📺 Stream Hub** and every channel inside it.\n\n" +
+				"I have rebuilt **🪧 NOTICE BOARD** and every channel inside it.\n\n" +
 				"⚠️ The category and its channels are required for me to work. " +
 				"Please do not delete them.",
 		},
@@ -362,19 +376,20 @@ export const generalEventsCopy: IPluginCopy = {
 		adminRolePending:
 			"⚠️ **No admin role has been designated yet.**\n\n" + "Run `/setup` to assign a role that can configure this bot.",
 		noWizardPowers:
-			"⚠️ **You do not have permission to run this command.**\n\n" +
-			"This command is reserved for server admins.",
+			"⚠️ **Oops. You don't have wizard powers.**\n\n" +
+			"This action is reserved for the server owner and admin roles.\n" +
+			"Ask one of them if you need it done.",
 		ownerOnly:
 			"⚠️ **Only the server owner can run this command.**\n\n" +
 			"Setup must be completed by the server owner before other admins can configure the bot.",
 		alreadySetup:
-			"📺 **Stream Hub is already set up.**\n\n" +
+			"🪧 **NOTICE BOARD is already set up.**\n\n" +
 			"The bot's home category and channels already exist.\n" +
 			"You do not need to run setup twice.",
 		setupSuccess: (adminRoleId: string) => ({
-			title: "📺 Stream Hub Set Up",
+			title: "🪧 NOTICE BOARD Set Up",
 			description:
-				"📺 **Stream Hub has been built.**\n\n" +
+				"🪧 **NOTICE BOARD has been built.**\n\n" +
 				`<@&${adminRoleId}> now has access to the admin channel.\n\n` +
 				"You can configure your first event with `/configure-stream-schedule` or `/announce-stream`.",
 		}),
@@ -388,7 +403,7 @@ export const generalEventsCopy: IPluginCopy = {
 		setupChannelsPending: "Channels are still being created. Please wait a moment and try again.",
 		setupPending: {
 			title: "📺 Setting Up",
-			description: "Building **Stream Hub**... please stand by.",
+			description: "Building **NOTICE BOARD**... please stand by.",
 		},
 		setupRequired:
 			"⚠️ **Setup has not been completed.**\n\n" + "An admin must run `/setup` before any commands can be used.",
@@ -484,34 +499,34 @@ export const generalEventsCopy: IPluginCopy = {
 	// lockstep — the admin sub-pack is the same content, only the public sub-pack
 	// gets translated per voice.
 	featureAnnouncement: {
-		// ── v1.5.1 ── Paused schedules stay quiet end to end ──────────
-		// Bug-fix-framed release. Same content as rok-commander pack;
-		// only the public voicing changes (neutral "stream schedules"
-		// vs kingdom "decrees"). innerSanctum is structurally identical
-		// to rok-commander's, swapping decree/next-decree for stream/
-		// next-up.
+		// ── v1.5.2 ── Notice Board / Go Live button / Suggestion Box ──
+		// Three-feature release. Public voicing is plain English for the
+		// streamer audience; inner sanctum carries the full admin
+		// changelog. Same shape as rok-commander v1.5.2 with the
+		// streamer-specific category name (📺 Stream Hub → 🪧 NOTICE
+		// BOARD instead of 🔱 BY DIVINE DECREE → 🪧 NOTICE BOARD) and
+		// without the schedule-board-title bullet (this pack already
+		// used "Event Schedule").
 		public: {
-			title: "📺 v1.5.1: Paused schedules now stay fully silent",
+			title: "📺 v1.5.2: New tools for your community",
 			description:
-				"Previously, pausing a stream schedule stopped its reminders as intended, but the next-up channel could still post \"upcoming stream\" announcements ahead of time. This created confusion for viewers because a stream would appear scheduled even though the streamer had already silenced it.\n\n" +
-				"This update fixes that behavior. The next-up channel now respects paused schedules and skips all announcements tied to them, keeping communication consistent from the moment a streamer runs `/pause-schedule`.\n\n" +
-				"Thank you for taking the time to share your feedback. Every message helps improve the experience and shape future updates. We genuinely appreciate the support, ideas, and bug reports; if you have more ideas, suggestions, or even small nitpicks, send them my way.",
+				"Three new pieces ship today.\n\n" +
+				"🪧 **Category renamed.** What was previously \"📺 Stream Hub\" is now \"🪧 NOTICE BOARD\". One universal name across every community using this bot, so it reads the same whether your audience is streamers, alliance leaders, or general community organizers.\n\n" +
+				"📺 **Go Live Now button.** Open your pinned Event Schedule in your #event-schedule channel. There's a new green Go Live Now button. One click posts a going-live announcement to your announcements channel, same as `/go-live-soon when:now`. The slash command stays for richer options like 10-minute lead time, a custom note, or a different role to ping.\n\n" +
+				"💡 **Suggestion Box.** Any member of your server can now send a suggestion or feature request straight to the Company Uno team. Run `/suggestion-box` from anywhere, or press the new Suggestion Box button pinned in your #command-center channel.",
 		},
 		innerSanctum: {
-			title: "🎬 v1.5.1: Streamer patch",
+			title: "🎬 v1.5.2: New tools for your stream",
 			description:
-				"**Bug fixes:**\n" +
-				"• `/list-events` was showing paused schedules with no indicator, and the \"next occurrence\" timestamp on those rows read as if they were still about to fire. Admins reviewing the list could not tell which schedules were live and which were silenced. Paused rows now tag the field name with \"⏸️ paused\", hide the next-occurrence and interval lines, and show an auto-resume timestamp when one is set.\n" +
-				"• Upcoming-stream posts in the next-up channel were still firing for paused schedules even though their reminders were silenced, so viewers saw \"stream at X\" posts for events the streamer had paused. The next-up channel now respects paused state and skips posts for any paused schedule.\n" +
-				"• On bot restart, the next-up channel was re-posting every upcoming-stream announcement inside the 24-hour horizon because the dedup cache lived in process memory only and wiped on each boot. The cache now seeds itself from the channel's last 100 messages on first refresh per guild per process, so restarts no longer cause duplicate posts.\n" +
-				"• `/rename-channel` autocomplete was showing the static slot labels (\"Leaderboard\", \"Schedule board\") instead of the live channel names admins had renamed them to, so the dropdown was stale the second time anyone ran the command. The dropdown now reads from current Discord state and shows the channel's actual name, with the slot label in parens for context.\n" +
-				"• `/pause-schedule` autocomplete was listing already-paused events alongside live ones, making the dropdown ambiguous about which schedules could still be paused. The autocomplete now filters paused events out so only live schedules appear.\n\n" +
-				"**New commands:**\n" +
-				"• `/pause-all-schedules` and `/continue-all-schedules`. Bulk versions of the single-event pause and continue commands. Pause-all skips already-paused schedules so any auto-resume dates set individually stay intact.\n" +
-				"• `/channels hide|show|list`. Toggle channels on and off for members via permission overwrite. Channels stay alive in the background; bot keeps posting; only member visibility changes.\n\n" +
-				"**Operational:**\n" +
-				"• If the bot ever cannot build or rebuild its homebase due to missing permissions, the server owner gets a DM with a 7-day grace deadline. The bot leaves on day 7 unless the permissions are restored.\n\n" +
-				"Thank you for taking the time to share your feedback. Every message helps improve the experience and shape future updates. We genuinely appreciate the support, ideas, and bug reports; if you have more ideas, suggestions, or even small nitpicks, send them my way.\n\n" +
+				"**New features:**\n" +
+				"• **Suggestion Box.** New `/suggestion-box` slash command (open to all guild members) plus a matching button on the pinned command guide in 📖command-center. Submissions land in the Company Uno team's in-app inbox. No admin gate; friction defeats feedback.\n" +
+				"• **Go Live Now button.** New green button on the pinned Event Schedule in 📅event-schedule. One press fires the equivalent of `/go-live-soon when:now`. Permission-gated to server owner + admin role only; non-admin clicks get an ephemeral \"no permission\" reply.\n\n" +
+				"**Visible changes (cosmetic):**\n" +
+				"• **Category renamed.** 📺 Stream Hub is now 🪧 NOTICE BOARD. The rename propagates to every paired guild on the next bot restart. Channels under it untouched.\n" +
+				"• **Footer.** Every embed now reads \"Company Uno\".\n\n" +
+				"**Owner-only:**\n" +
+				"• **Discord Onboarding heads-up.** If your server has Onboarding enabled AND the NOTICE BOARD category is not in your default channels list, you'll get a one-time DM with setup instructions. Without that step, new members cannot see my channels until they opt in via Channels & Roles. Skip the DM if you'd rather members opt in on their own.\n\n" +
+				"If this bot has helped your community, consider sharing it with another server admin at [Company Uno](https://companyuno.com). Every recommendation helps the project grow.\n\n" +
 				"Ping silent6804 on Discord.",
 		},
 	},

@@ -10,7 +10,7 @@
 // When: every cutover, before each flag flip. Five minutes of operator time
 //   that can save hours of debugging an actual production outage.
 // Where: pure HTTP. Does not touch Mongo directly. Does not touch Discord.
-//   Hits whatever NEXIOUS_BASE_URL points at — staging or prod — using the
+//   Hits whatever SERVER_BASE_URL points at — staging or prod — using the
 //   guildId you pass via SMOKE_GUILD_ID.
 // How:
 //   ① Sign each request the same way serverApi.ts does (HMAC-SHA256, sorted
@@ -21,19 +21,19 @@
 //      does not leave a "Smoke Test Event 2026-XX-XX" sitting in real data.
 //
 // Usage:
-//   NEXIOUS_BASE_URL="https://staging.nexious-server.com" \
+//   SERVER_BASE_URL="https://staging.nexious-server.com" \
 //   DASHBOARD_SIGNING_SECRET="..." \
 //   SMOKE_GUILD_ID="<your test guild id>" \
 //   node scripts/cutover-smoke-test.mjs
 
 import { createHash, createHmac } from "crypto";
 
-const baseUrl = process.env.NEXIOUS_BASE_URL ?? "";
+const baseUrl = process.env.SERVER_BASE_URL ?? "";
 const secret = process.env.DASHBOARD_SIGNING_SECRET ?? "";
 const guildId = process.env.SMOKE_GUILD_ID ?? "";
 
 if (!baseUrl) {
-	console.error("NEXIOUS_BASE_URL is required.");
+	console.error("SERVER_BASE_URL is required.");
 	process.exit(2);
 }
 if (!secret) {

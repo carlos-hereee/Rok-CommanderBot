@@ -14,6 +14,7 @@ import { embedContent } from "@base/constants/embed-content.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { registerChannelDeleteWatcher } from "@features/setup/ChannelDeleteWatcher.js";
+import { checkOnboardingAndNotifyOwner } from "@features/setup/OnboardingCheck.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
@@ -24,6 +25,8 @@ import { dispatchButton, dispatchModal } from "@handlers/interactionRegistry.js"
 import { registerDecreeEditHandlers } from "@features/schedule/decreeEditHandlers.js";
 import { registerLeaderboardChannelHandlers } from "@features/leaderboard/leaderboardChannelHandlers.js";
 import { refreshAllNextUp } from "@features/schedule/NextUpBoard.js";
+import { ensureGoLiveButtonOnScheduleBoard, registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
+import { registerSuggestionBoxHandlers } from "@features/suggestion-box/SuggestionBox.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -113,6 +116,10 @@ clientReady(client);
 			// noise.
 			if (alreadyBuilt?.setupComplete) {
 				await GuildSetupManager.ensureHomebase(client, guild);
+				// Onboarding check on re-install too. A guild paired before this
+				// feature shipped may have Onboarding enabled and would not have
+				// been DM'd yet; the idempotency log gates duplicates.
+				await checkOnboardingAndNotifyOwner(client, guild);
 				return;
 			}
 
@@ -121,6 +128,12 @@ clientReady(client);
 			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
 			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
 			await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
+			// Onboarding compat heads-up. Fires AFTER the arrival DM so the
+			// owner gets the welcome before the operational notice. The
+			// helper bails silently when Onboarding is off or our category
+			// is already in the default channel list, which is the common
+			// case for non-community-enabled guilds.
+			await checkOnboardingAndNotifyOwner(client, guild);
 		} catch (error) {
 			// Do NOT leave the guild on autoSetup failure. The bot stays in the
 			// guild so ensureHomebase can self-heal on the next boot via the
@@ -138,6 +151,8 @@ clientReady(client);
 	// click. Add new handler registrations here as new persistent UIs ship.
 	registerDecreeEditHandlers();
 	registerLeaderboardChannelHandlers();
+	registerScheduleControlHandlers();
+	registerSuggestionBoxHandlers();
 
 	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
@@ -330,6 +345,33 @@ clientReady(client);
 				// entirely inside ensureHomebase (which posts the castle /
 				// per channel notices into the inner sanctum for the first
 				// two). nothing else to do here.
+
+				// ── Discord Onboarding compat heads-up ───────────────
+				// Restart-coverage for guilds paired before FUTURE_PLANS
+				// item 35 shipped. The helper is idempotent via the
+				// ONBOARDING_HEADSUP_SENT log key so once-per-guild DM
+				// behavior holds across boots. Failure to check is
+				// non-fatal — the bot still runs, just without the
+				// proactive heads-up for that one guild.
+				try {
+					await checkOnboardingAndNotifyOwner(client, guild);
+				} catch (onboardingError) {
+					console.warn(`[main] onboarding compat check failed for guild ${guild.id}`, onboardingError);
+				}
+
+				// ── Schedule board Go Live Now button (FUTURE_PLANS item 36 partial) ─
+				// Defensive check: if the schedule board message already
+				// carries the button, no-op. Otherwise attach. Covers
+				// guilds whose schedule message was posted before this
+				// feature shipped. refreshAllSchedules below ALSO re-
+				// attaches components via ScheduleBoard's edit path, so
+				// this helper is belt-and-suspenders rather than load-
+				// bearing. Cheap (one fetch per guild), idempotent.
+				try {
+					await ensureGoLiveButtonOnScheduleBoard(client, guild);
+				} catch (controlError) {
+					console.warn(`[main] schedule board button ensure failed for guild ${guild.id}`, controlError);
+				}
 
 				// ── intro embed refresh ───────────────────────────────
 				// What: after ensureHomebase has confirmed (or rebuilt) the

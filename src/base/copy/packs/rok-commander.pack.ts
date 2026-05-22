@@ -24,7 +24,10 @@ import type { IEmbedField } from "../types.js";
 //        words shipped to mortals are unchanged so this can land without
 //        any visual diff in Discord.
 export const rokCommanderCopy = {
-	FOOTER: "ROK Commander",
+	// Platform brand, not bot brand. Survives item 32's Herald rename
+	// and any future pack-name changes. Also reinforces companyuno.com
+	// recognition across every embed the bot posts.
+	FOOTER: "Company Uno",
 
 	COLORS: {
 		REMINDER: "Red",
@@ -131,7 +134,7 @@ export const rokCommanderCopy = {
 	// because this one is read by every warrior in the alliance, so the voice
 	// leans kingdom flavored and skips the admin only language.
 	scheduleBoard: {
-		title: "📅 Decree Calendar",
+		title: "📅 Event Schedule",
 		description: (announcementsChannelId: string | null) =>
 			announcementsChannelId
 				? `⚔️ Reminders will ring out in <#${announcementsChannelId}>. Mortals, stand ready.`
@@ -247,18 +250,22 @@ export const rokCommanderCopy = {
 			"I require one thing from you:\n\n" +
 			"**Run `/setup` in your server and " +
 			"designate an admin role.**\n\n" +
-			"Once done, 🔱 **BY DIVINE DECREE** will be " +
+			"Once done, 🪧 **NOTICE BOARD** will be " +
 			"constructed and my throne established.\n\n" +
 			"*Do not keep me waiting.*",
 	},
 
 	setup: {
-		categoryName: "🔱 BY DIVINE DECREE",
+		// Universal category name across packs. Decision 2026-05-22: the category
+		// name is the first field that goes universal across packs (intro copy,
+		// leaderboard framing, command guide tone all stay kingdom voice). The
+		// category is the bot's brand mark in every server, and ROK-coded names
+		// alienated streamer / community guilds. See general-events.pack.ts for
+		// the full rationale.
+		categoryName: "🪧 NOTICE BOARD",
 		// appended to categoryName when NODE_ENV=development so a dev instance
 		// sharing a guild with prod builds a visually distinct home base.
-		// GuildSetupManager reads this and composes the final name. keeping the
-		// string here rather than inlining the check means the wording stays
-		// editable from one place alongside the rest of the kingdom voice.
+		// GuildSetupManager reads this and composes the final name.
 		devSuffix: " (dev)",
 		channels: {
 			intro: "📜introductions",
@@ -337,6 +344,10 @@ export const rokCommanderCopy = {
 				{
 					name: "📋 Events",
 					value: ["`/list-events`", "View all configured events."].join("\n"),
+				},
+				{
+					name: "💡 Suggestion Box",
+					value: ["`/suggestion-box`", "Send a suggestion or feature request to the Company Uno team."].join("\n"),
 				},
 			] satisfies IEmbedField[],
 		},
@@ -457,7 +468,7 @@ export const rokCommanderCopy = {
 			description: (channelName: string) =>
 				`I noticed **${channelName}** had been razed from my castle. ` +
 				"I have rebuilt it.\n\n" +
-				"⚠️ Every chamber in **🔱 BY DIVINE DECREE** is load bearing. " +
+				"⚠️ Every chamber in **🪧 NOTICE BOARD** is load bearing. " +
 				"If any are removed, I cannot function properly. " +
 				"Do not delete them.",
 			// Summary copy used when MULTIPLE channels are restored in one
@@ -466,7 +477,7 @@ export const rokCommanderCopy = {
 			summaryBody: (count: number) =>
 				`I noticed ${count} chamber${count === 1 ? "" : "s"} had been razed from my castle. ` +
 				"I have rebuilt them.\n\n" +
-				"⚠️ Every chamber in **🔱 BY DIVINE DECREE** is load bearing. " +
+				"⚠️ Every chamber in **🪧 NOTICE BOARD** is load bearing. " +
 				"If any are removed, I cannot function properly. " +
 				"Do not delete them.\n\n" +
 				"Restored chambers:",
@@ -475,7 +486,7 @@ export const rokCommanderCopy = {
 			title: "🔱 The Castle Has Been Rebuilt",
 			description:
 				"My homebase was gone when I awoke. " +
-				"I have reconstructed **🔱 BY DIVINE DECREE** and every chamber within it.\n\n" +
+				"I have reconstructed **🪧 NOTICE BOARD** and every chamber within it.\n\n" +
 				"⚠️ The entire category and its channels are load bearing. " +
 				"Do not delete them. " +
 				"Without them I cannot serve this alliance.",
@@ -487,21 +498,21 @@ export const rokCommanderCopy = {
 			"⚠️ **No admin role has been designated yet.**\n\n" + "Run `/setup` to assign a role that can configure this bot.",
 		noWizardPowers:
 			"⚠️ **Oops. You don't have wizard powers.**\n\n" +
-			"This command is reserved for alliance commanders.\n" +
-			"You are not one of them.",
+			"This action is reserved for the server owner and admin roles.\n" +
+			"Ask one of them if you need it done.",
 		ownerOnly:
 			"⚠️ **Oops. You don't have wizard powers.**\n\n" +
 			"Only the server owner may establish " +
-			"**🔱 BY DIVINE DECREE**.\n" +
+			"**🪧 NOTICE BOARD**.\n" +
 			"Know your place.",
 		alreadySetup:
-			"🔱 **BY DIVINE DECREE already stands.**\n\n" +
+			"🪧 **NOTICE BOARD already stands.**\n\n" +
 			"My throne has already been constructed.\n" +
 			"It does not need to be built twice.",
 		setupSuccess: (adminRoleId: string) => ({
-			title: "🔱 BY DIVINE DECREE Established",
+			title: "🪧 NOTICE BOARD Established",
 			description:
-				"🔱 **BY DIVINE DECREE has been established.**\n\n" +
+				"🪧 **NOTICE BOARD has been established.**\n\n" +
 				`<@&${adminRoleId}> has been granted access ` +
 				"to the inner sanctum.\n\n" +
 				"My presence is now known. Inform your alliance.\n" +
@@ -532,7 +543,7 @@ export const rokCommanderCopy = {
 		setupChannelsPending: "Channels not yet constructed. Please wait a moment and try again.",
 		setupPending: {
 			title: "🔱 Setting Up",
-			description: "Constructing **BY DIVINE DECREE**... Stand by.",
+			description: "Constructing **NOTICE BOARD**... Stand by.",
 		},
 		setupRequired:
 			"⚠️ **My throne has not been constructed.**\n\n" + "An admin must run `/setup` before any commands can be used.",
@@ -654,36 +665,34 @@ export const rokCommanderCopy = {
 	//        Update BOTH public and innerSanctum together when shipping
 	//        a new version; they describe the same release in two voices.
 	featureAnnouncement: {
-		// ── v1.5.1 ── Paused events stay quiet end to end ─────────────
-		// Bug-fix-framed release. The headline change for members is the
-		// NextUpBoard pause-blindness fix: paused decrees no longer get
-		// decree announcements posted. Inner sanctum carries the full
-		// admin punch list including the new bulk pause/resume commands
-		// and the visibility-toggle /channels command. Update BOTH this
-		// public block and the innerSanctum block together when shipping
-		// a new release; they describe the same patch in two voices.
+		// ── v1.5.2 ── Notice Board / Go Live button / Suggestion Box ──
+		// Three-feature release. Public block leans on the kingdom voice
+		// to frame the changes for members; inner sanctum carries the
+		// full admin changelog plus the Discord Onboarding owner-DM
+		// note. Update BOTH this public block and the innerSanctum
+		// block together when shipping a new release; they describe the
+		// same patch in two voices.
 		public: {
-			title: "🛡️ v1.5.1: Paused events now stay fully silent",
+			title: "🛡️ v1.5.2: New tools for the realm",
 			description:
-				"Previously, pausing a decree stopped its reminders as intended, but the next-decree channel could still post \"upcoming decree\" announcements ahead of time. This created confusion for alliances because an event would appear scheduled even though the admin had already silenced it.\n\n" +
-				"This update fixes that behavior. The next-decree channel now respects paused schedules and skips all announcements tied to them, keeping communication consistent from the moment an admin runs `/pause-schedule`.\n\n" +
-				"Thank you for taking the time to share your feedback. Every message helps improve the experience and shape future updates. We genuinely appreciate the support, ideas, and bug reports; if you have more ideas, suggestions, or even small nitpicks, send them my way.",
+				"Mortals. Three changes weave through your home base today.\n\n" +
+				"🪧 **The Notice Board.** What was once 🔱 BY DIVINE DECREE shall now be known as 🪧 NOTICE BOARD. The name broadens so kingdoms and communities of every kind may read it the same way. The chambers within remain unchanged.\n\n" +
+				"📺 **Go Live Now button.** A new green button sits on the Event Schedule pinned in your event-schedule channel. With one press, an announcement rings out. The slash command lives on for richer options, but the button is the panic-drum when the moment is now.\n\n" +
+				"💡 **Suggestion Box.** Every member of this alliance may now whisper their counsel directly to my Creator. Run `/suggestion-box` from anywhere, or press the new Suggestion Box button in your 📖command-center channel. Words sent here land in their hands.",
 		},
 		innerSanctum: {
-			title: "🗡️ v1.5.1: Admin patch",
+			title: "🗡️ v1.5.2: Admin patch notes",
 			description:
-				"**Bug fixes:**\n" +
-				"• `/list-events` was showing paused schedules with no indicator, and the \"next occurrence\" timestamp on those rows read as if they were still about to fire. Admins reviewing the list could not tell which schedules were live and which were silenced. Paused rows now tag the field name with \"⏸️ paused\", hide the next-occurrence and interval lines, and show an auto-resume timestamp when one is set.\n" +
-				"• Decree announcements in the next-decree channel were still firing for paused events even though their reminders were silenced, so members saw upcoming-decree posts for events the admin had quieted. The next-decree channel now respects paused state and skips announcements for any paused schedule.\n" +
-				"• On bot restart, the next-decree channel was re-posting every decree inside the 24-hour horizon because the dedup cache lived in process memory only and wiped on each boot. The cache now seeds itself from the channel's last 100 messages on first refresh per guild per process, so restarts no longer cause duplicate decree posts.\n" +
-				"• `/rename-channel` autocomplete was showing the static slot labels (\"Leaderboard\", \"Schedule board\") instead of the live channel names admins had renamed them to, so the dropdown was stale the second time anyone ran the command. The dropdown now reads from current Discord state and shows the channel's actual name, with the slot label in parens for context.\n" +
-				"• `/pause-schedule` autocomplete was listing already-paused events alongside live ones, making the dropdown ambiguous about which schedules could still be paused. The autocomplete now filters paused events out so only live schedules appear.\n\n" +
-				"**New commands:**\n" +
-				"• `/pause-all-schedules` and `/continue-all-schedules`. Bulk versions of the single-event pause and continue commands. Pause-all skips already-paused schedules so any auto-resume dates set individually stay intact.\n" +
-				"• `/channels hide|show|list`. Toggle homebase channels on and off for members via permission overwrite. Channels stay alive in the background; bot keeps posting; only member visibility changes.\n\n" +
-				"**Operational:**\n" +
-				"• If the bot ever cannot build or rebuild its homebase due to missing permissions, the server owner gets a DM with a 7-day grace deadline. The bot leaves on day 7 unless the permissions are restored.\n\n" +
-				"Thank you for taking the time to share your feedback. Every message helps improve the experience and shape future updates. We genuinely appreciate the support, ideas, and bug reports; if you have more ideas, suggestions, or even small nitpicks, send them my way.\n\n" +
+				"**New features:**\n" +
+				"• **Suggestion Box.** New `/suggestion-box` slash command (open to all guild members) plus a matching button on the pinned command guide in 📖command-center. Submissions land in the Company Uno team's in-app inbox. No admin gate; friction defeats feedback.\n" +
+				"• **Go Live Now button.** New green button on the pinned Event Schedule in 📅event-schedule. One press fires the equivalent of `/go-live-soon when:now`. Permission-gated to server owner + admin role only; non-admin clicks get an ephemeral \"no permission\" reply.\n\n" +
+				"**Visible changes (cosmetic):**\n" +
+				"• **Category renamed.** 🔱 BY DIVINE DECREE is now 🪧 NOTICE BOARD. The rename propagates to every paired guild on the next bot restart. Channels under it untouched.\n" +
+				"• **Schedule board title.** \"Decree Calendar\" is now \"Event Schedule\" (universal across packs).\n" +
+				"• **Footer.** Every embed now reads \"Company Uno\".\n\n" +
+				"**Owner-only:**\n" +
+				"• **Discord Onboarding heads-up.** If your server has Onboarding enabled AND the NOTICE BOARD category is not in your default channels list, you'll get a one-time DM with setup instructions. Without that step, new members cannot see my channels until they opt in via Channels & Roles. Skip the DM if you'd rather members opt in on their own.\n\n" +
+				"If this bot has helped your community, consider sharing it with another server admin at [Company Uno](https://companyuno.com). Every recommendation helps the project grow.\n\n" +
 				"Ping silent6804 on Discord.",
 		},
 	},

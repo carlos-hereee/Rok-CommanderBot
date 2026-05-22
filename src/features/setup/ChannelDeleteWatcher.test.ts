@@ -196,7 +196,7 @@ describe("ChannelDeleteWatcher", () => {
 		// the deleted channel IS the stored category. realtime path must
 		// NOT try to rebuild the whole homebase — that is the boot sweep's
 		// job and racing it would fight the admin who is tearing down.
-		const deleted = makeDeletedChannel("cat-1", guild, "BY DIVINE DECREE");
+		const deleted = makeDeletedChannel("cat-1", guild, "NOTICE BOARD");
 		await captured.handler!(deleted);
 
 		expect(guildConfigMock.update).not.toHaveBeenCalled();

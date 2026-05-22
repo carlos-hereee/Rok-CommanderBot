@@ -19,7 +19,7 @@ alliance in Rise of Kingdoms:
   during events, and who is online at event start
 - **Participation scoring** — scores every player per event occurrence so leaders
   can make data-driven MGE priority decisions
-- **Self-setup** — constructs its own home base (🔱 BY DIVINE DECREE) with
+- **Self-setup** — constructs its own home base (🪧 NOTICE BOARD) with
   channels and permissions the moment it joins a server
 
 ---
@@ -140,7 +140,7 @@ src/
 
 | Command        | Description                                                  |
 | -------------- | ------------------------------------------------------------ |
-| `/setup @role` | Constructs 🔱 BY DIVINE DECREE and designates the admin role |
+| `/setup @role` | Constructs 🪧 NOTICE BOARD and designates the admin role |
 
 ### Admin Only
 
@@ -177,7 +177,7 @@ Bot DMs server owner
 Owner runs /setup @AdminRole
       │
       ▼
-🔱 BY DIVINE DECREE constructed
+🪧 NOTICE BOARD constructed
   ├── category created (hidden from @everyone)
   ├── #📜introductions  → bot introduces itself
   ├── #📖command-center → command guide

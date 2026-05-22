@@ -26,6 +26,14 @@ export const BOT_LOG_EVENTS = {
 	// the owner DM landed. Read for audit when an operator wonders
 	// why the bot is no longer in a guild they previously invited.
 	AUTO_LEFT_GUILD: "auto_left_guild",
+	// ── Discord Onboarding compat (FUTURE_PLANS item 35, 2026-05-22) ─
+	// One-shot DM to the guild owner when Onboarding is enabled AND the
+	// bot's homebase category is not in the server's default channels.
+	// Without the heads-up, new members never see the bot's channels
+	// because Onboarding hides everything not in the default list until
+	// the member opts in via Channels & Roles. Logged once per guild so
+	// every restart does not re-nag.
+	ONBOARDING_HEADSUP_SENT: "onboarding_headsup_sent",
 	// add more here as needed
 } as const;
 

@@ -45,6 +45,10 @@ const guildConfigSchema = new Schema(
 		// keeps up to date. null until autoSetup finishes posting the intro,
 		// at which point this is populated and every subsequent refresh edits
 		// that one message in place so the channel never accumulates clutter.
+		// As of FUTURE_PLANS item 36 (partial, 2026-05-22) this same message
+		// also hosts the Go Live Now button row; ScheduleBoard attaches the
+		// components on send + edit via buildGoLiveNowButtonRow in
+		// ScheduleControls.
 		scheduleMessageId: { type: String, required: false, default: null },
 
 		// ── KvK season end ─────────────────────────────────────────────

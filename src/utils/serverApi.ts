@@ -12,7 +12,7 @@ import { createHash, createHmac } from "crypto";
 // When: every read/write to a Future-A event when USE_REMOTE_EVENTS is on. Each call
 //   incurs one HTTPS round-trip to Heroku, so callers are responsible for caching when
 //   appropriate (the cron tick reads through remoteEventStore which has a 60s TTL).
-// Where: lives next to config.ts because it shares the same env vars (NEXIOUS_BASE_URL,
+// Where: lives next to config.ts because it shares the same env vars (SERVER_BASE_URL,
 //   DASHBOARD_SIGNING_SECRET). No Discord types — pure HTTP.
 // How:
 //   ① Build the canonical string: METHOD\npath?sortedQuery\ntimestamp\nsha256(body).
@@ -29,7 +29,7 @@ import { dashboardApiKey, dashboardSigningSecret } from "@utils/config.js";
 // Base URL of the nexious-server. Heroku in prod, localhost during dev. Empty when not
 // set — every call short-circuits to a "not configured" error so we never accidentally
 // leak requests to a default URL.
-const nexiousBaseUrl = process.env.NEXIOUS_BASE_URL ?? "";
+const serverBaseUrl = process.env.SERVER_BASE_URL ?? "";
 
 // Reuse the server's exact 5-minute window. Any request the bot signs must reach the
 // server within this window or it will be rejected as stale. Logging the latency would
@@ -100,7 +100,7 @@ export class ServerResponseError extends Error {
 
 export class ServerNotConfiguredError extends Error {
 	constructor() {
-		super("NEXIOUS_BASE_URL or DASHBOARD_SIGNING_SECRET is not set; cannot call server");
+		super("SERVER_BASE_URL or DASHBOARD_SIGNING_SECRET is not set; cannot call server");
 		this.name = "ServerNotConfiguredError";
 	}
 }
@@ -166,7 +166,7 @@ export const getServerReachabilityState = (): {
 // helpers stay one-liners.
 interface RequestArgs {
 	method: "GET" | "POST" | "PATCH" | "DELETE";
-	// Path under nexiousBaseUrl, e.g. "/api/events". Leading slash required.
+	// Path under serverBaseUrl, e.g. "/api/events". Leading slash required.
 	path: string;
 	// Optional query parameters as a record; serialized into the URL.
 	query?: Record<string, string>;
@@ -177,14 +177,14 @@ interface RequestArgs {
 }
 
 const request = async <T>({ method, path, query, body, timeoutMs }: RequestArgs): Promise<T> => {
-	if (!nexiousBaseUrl || !dashboardSigningSecret) {
+	if (!serverBaseUrl || !dashboardSigningSecret) {
 		throw new ServerNotConfiguredError();
 	}
 
 	// Build URL with sorted query for predictable signing input. The server canonicalizes
 	// again on its side, so any equivalent ordering would verify, but we sort here too so
 	// log lines match between the two services.
-	const url = new URL(path, nexiousBaseUrl);
+	const url = new URL(path, serverBaseUrl);
 	if (query) {
 		const entries = Object.entries(query)
 			.filter(([, v]) => v !== undefined && v !== null && v !== "")

@@ -6,6 +6,7 @@ import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js
 import { IGameEvent } from "@features/events/event.types.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
+import { buildGoLiveNowButtonRow } from "@features/schedule/ScheduleControls.js";
 
 // ── ScheduleBoard ─────────────────────────────────────────────────────
 // Owns a single pinned message per guild that lives in the event-schedule
@@ -190,7 +191,13 @@ async function postOrEdit(
 			if (selfId && existing.author.id !== selfId) {
 				staleAuthor = true;
 			} else {
-				await existing.edit({ embeds: [embed] });
+				// Components reapplied on every edit so the Go Live Now
+				// button persists. Without this, an edit that omitted
+				// components would still preserve them (Discord.js
+				// default), but reapplying makes the contract explicit
+				// at every call site and covers the case where the
+				// button row shape changes between releases.
+				await existing.edit({ embeds: [embed], components: [buildGoLiveNowButtonRow()] });
 				return;
 			}
 		} catch (error) {
@@ -237,7 +244,10 @@ async function postOrEdit(
 	// recovery path (or first post ever): send a new message, pin it, persist the id.
 	let message: Message;
 	try {
-		message = await channel.send({ embeds: [embed] });
+		// Send the schedule board with the channel-control button row.
+		// Same buildGoLiveNowButtonRow used by the edit path above so a
+		// fresh post and an in-place refresh produce identical surfaces.
+		message = await channel.send({ embeds: [embed], components: [buildGoLiveNowButtonRow()] });
 	} catch (error) {
 		console.error(LOG_MESSAGES.schedule.postFailed(guildId), error);
 		return;
