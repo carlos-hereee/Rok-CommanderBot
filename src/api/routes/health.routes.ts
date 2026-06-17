@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
+import mongoose from "mongoose";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { requireGuildId } from "../middleware/requireGuildId.js";
+import { lastReminderTickAt } from "@features/reminders/ReminderScheduler.js";
 
 // ── Guild-aware health ──────────────────────────────────────────────────────
 // What:  GET /api/health/guild?guildId=... returns whether THIS bot knows the
@@ -101,4 +103,33 @@ healthRouter.get("/guild", async (req: Request, res: Response) => {
 		console.error("[health/guild] lookup failed:", error);
 		res.status(500).json({ ok: false, reason: "internal_error" });
 	}
+});
+
+// ── readiness probe (audit L2) ──────────────────────────────────────
+// What:  GET /api/health/ready reports whether the bot is actually FUNCTIONING,
+//        not merely alive. The plain /health and /api/health liveness probes in
+//        server.ts answer "is the process up"; this answers "is Mongo connected
+//        AND is the per-minute scheduler actually ticking." Returns 200 ok:true
+//        when healthy, 503 ok:false when degraded, so an uptime monitor can
+//        alert on the "process alive but not working" failure mode that liveness
+//        alone misses (e.g. Mongo dropped, or the cron wedged).
+// Who:   operators / uptime monitors via the signed proxy. No guildId — it is a
+//        global bot-health signal, not per-tenant.
+// Where: mounted under verifySignature like /guild, so it does not expose
+//        internal state to the public. The pre-signature liveness probes remain
+//        for Railway/Render watchdogs that have no signing key.
+healthRouter.get("/ready", (_req: Request, res: Response) => {
+	// mongoose readyState 1 = connected. Anything else = down or still connecting.
+	const mongoConnected = mongoose.connection.readyState === 1;
+	// The tick runs every 60s; treat > 3 minutes since the last one (or never,
+	// just after boot) as not-ready so a wedged scheduler surfaces as degraded.
+	const tickAgeMs = lastReminderTickAt ? Date.now() - lastReminderTickAt.getTime() : null;
+	const tickFresh = tickAgeMs !== null && tickAgeMs < 3 * 60 * 1000;
+	const ok = mongoConnected && tickFresh;
+	res.status(ok ? 200 : 503).json({
+		ok,
+		mongoConnected,
+		lastTickAt: lastReminderTickAt ? lastReminderTickAt.toISOString() : null,
+		tickAgeMs,
+	});
 });

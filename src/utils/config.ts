@@ -108,6 +108,19 @@ const requireSignedRequests = (() => {
 	return raw === "1" || raw === "true" || raw === "yes";
 })();
 
+// ── PlayerActivity retention window (audit H7) ──
+// What: number of days of PlayerActivity history to keep. A daily cleanup cron
+//   in ReminderScheduler deletes rows whose eventOccurrence is older than this.
+// Who: read by the retention cron only.
+// When: 0 (the default when unset, non-numeric, or <= 0) DISABLES cleanup —
+//   nothing is ever deleted. PlayerActivity is leaderboard history, so deletion
+//   is opt-in: the owner sets a window deliberately (e.g. 365 to keep a year).
+// How: parsed as an integer; anything not a positive finite number means off.
+const playerActivityRetentionDays = (() => {
+	const raw = Number.parseInt(process.env.PLAYER_ACTIVITY_RETENTION_DAYS ?? "", 10);
+	return Number.isFinite(raw) && raw > 0 ? raw : 0;
+})();
+
 // ── Future-A remote events flag ──
 // What: when true, eventStore reads/writes route through the nexious-server's
 //   /api/events surface instead of this bot's local Mongo `Event` collection.
@@ -169,4 +182,5 @@ export {
 	requireSignedRequests,
 	dashboardOrigin,
 	useRemoteEvents,
+	playerActivityRetentionDays,
 };

@@ -105,4 +105,13 @@ export const activityStore = {
 	async findOne(eventId: string, eventOccurrence: Date, userId: string) {
 		return PlayerActivityModel.findOne({ eventId, eventOccurrence, userId });
 	},
+
+	// Retention cleanup (audit H7). Deletes rows whose occurrence is older than
+	// `cutoff`. Called by the daily retention cron, which only runs when the
+	// owner has set PLAYER_ACTIVITY_RETENTION_DAYS — this method never runs on
+	// its own. Returns the delete count for the cron's log line.
+	async deleteOlderThan(cutoff: Date): Promise<number> {
+		const result = await PlayerActivityModel.deleteMany({ eventOccurrence: { $lt: cutoff } });
+		return result.deletedCount ?? 0;
+	},
 };

@@ -1,4 +1,4 @@
-import { createHash, createHmac } from "crypto";
+import { createHmac } from "crypto";
 
 // ── serverApi ──
 // What: thin HTTP client for outbound calls from this bot to the nexious-server's
@@ -25,6 +25,7 @@ import { createHash, createHmac } from "crypto";
 //      from "validation failed" from "guild not found".
 
 import { dashboardApiKey, dashboardSigningSecret } from "@utils/config.js";
+import { buildCanonicalString, hashBody } from "@utils/canonicalRequest.js";
 
 // Base URL of the nexious-server. Heroku in prod, localhost during dev. Empty when not
 // set — every call short-circuits to a "not configured" error so we never accidentally
@@ -45,39 +46,11 @@ void SIGNATURE_WINDOW_MS; // exported only for documentation; runtime check happ
 // that still keeps the cron tick (60s budget) from blocking on a single hung request.
 const DEFAULT_TIMEOUT_MS = 5_000;
 
-// ── Canonical query encoding ──
-// Mirrors nexious-server/src/features/plugin-proxy/signRequest.ts exactly. If you change
-// either side, you MUST change both — the format-pinning test on the server is the
-// canonical lock. Do not "improve" this independently.
-const canonicalizeQuery = (query: string): string => {
-	if (!query) return "";
-	const params = new URLSearchParams(query);
-	const entries = [...params.entries()];
-	entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-	const rebuilt = new URLSearchParams();
-	for (const [k, v] of entries) rebuilt.append(k, v);
-	return rebuilt.toString();
-};
-
-const hashBody = (body: string): string => createHash("sha256").update(body, "utf8").digest("hex");
-
-const buildCanonicalString = ({
-	method,
-	path,
-	query,
-	timestamp,
-	bodyHash,
-}: {
-	method: string;
-	path: string;
-	query: string;
-	timestamp: string;
-	bodyHash: string;
-}): string => {
-	const canonicalQuery = canonicalizeQuery(query);
-	const pathWithQuery = canonicalQuery ? `${path}?${canonicalQuery}` : path;
-	return `${method.toUpperCase()}\n${pathWithQuery}\n${timestamp}\n${bodyHash}`;
-};
+// canonicalizeQuery / hashBody / buildCanonicalString moved to
+// @utils/canonicalRequest (audit M1) and imported above, so the inbound verifier
+// and this outbound signer share one definition. The server's copy lives in a
+// separate repo (nexious-server signRequest.ts) and must still be kept
+// byte-identical by hand.
 
 // ── Typed errors ──
 // Callers catch these to distinguish transport failures from validation failures.

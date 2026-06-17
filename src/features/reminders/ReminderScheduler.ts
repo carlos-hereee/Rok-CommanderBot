@@ -14,6 +14,8 @@ import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { getOutboundLatencyStats } from "@utils/serverApi.js";
 import { noteFailure as noteServerFailure, noteSuccess as noteServerSuccess } from "./serverHealthNotifier.js";
 import { mapWithConcurrency } from "@utils/mapWithConcurrency.js";
+import { activityStore } from "@db/stores/activityStore.js";
+import { playerActivityRetentionDays } from "@utils/config.js";
 
 // ── resolveOverride ────────────────────────────────────────────────
 // What:  given an event + an original occurrence (the cron-computed fire
@@ -124,6 +126,12 @@ let reminderTickInProgress = false;
 // dedup-row write (→ a duplicate on the next boot).
 const scheduledTasks: ReturnType<typeof cron.schedule>[] = [];
 
+// ── last tick timestamp (audit L2) ──────────────────────────────────
+// Set at the start of every per-minute tick. Exported so the readiness probe
+// (/api/health/ready) can report whether the scheduler is actually ticking, not
+// just whether the process is up. null until the first tick after boot.
+export let lastReminderTickAt: Date | null = null;
+
 export function startScheduler(client: Client): void {
 	// ── hourly schedule board safety tick ──
 	// every event mutation and reminder fire already triggers a board
@@ -142,6 +150,28 @@ export function startScheduler(client: Client): void {
 		logHourlyMetrics();
 	}));
 
+	// ── daily PlayerActivity retention sweep (audit H7) ──
+	// Off unless the owner sets PLAYER_ACTIVITY_RETENTION_DAYS (> 0). PlayerActivity
+	// is leaderboard history, so deletion is opt-in: nothing is pruned until a window
+	// is chosen. Runs at 04:00 (low traffic) and only deletes rows whose occurrence is
+	// older than the window. Pushed to scheduledTasks so stopScheduler halts it on
+	// shutdown. The whole branch is skipped (no cron registered) when the window is 0.
+	if (playerActivityRetentionDays > 0) {
+		scheduledTasks.push(
+			cron.schedule("0 4 * * *", async () => {
+				try {
+					const cutoff = new Date(Date.now() - playerActivityRetentionDays * 24 * 60 * 60 * 1000);
+					const deleted = await activityStore.deleteOlderThan(cutoff);
+					console.log(
+						`[retention] pruned ${deleted} PlayerActivity row(s) older than ${playerActivityRetentionDays}d (before ${cutoff.toISOString()})`
+					);
+				} catch (err) {
+					console.error("[retention] PlayerActivity cleanup failed", err);
+				}
+			})
+		);
+	}
+
 	scheduledTasks.push(cron.schedule(BOT_CONSTANTS.SCHEDULER_CRON, async () => {
 		// Skip this run if the previous minute's tick has not finished. See the
 		// reminderTickInProgress comment above for why a concurrent tick would
@@ -152,6 +182,7 @@ export function startScheduler(client: Client): void {
 			return;
 		}
 		reminderTickInProgress = true;
+		lastReminderTickAt = new Date(); // audit L2: the readiness probe reads this
 		try {
 			// ① Fetch all active events for every guild this bot is in.
 			//

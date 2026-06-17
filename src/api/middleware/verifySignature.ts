@@ -1,7 +1,8 @@
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { Request, Response, NextFunction } from "express";
 import { apiKeyAuth } from "./auth.js";
 import { dashboardApiKey, dashboardSigningSecret, requireSignedRequests } from "@utils/config.js";
+import { buildCanonicalString, hashBody } from "@utils/canonicalRequest.js";
 
 // ── verifySignature ──
 // What: authenticates inbound dashboard proxy requests by recomputing the HMAC-SHA256
@@ -46,40 +47,12 @@ declare module "express-serve-static-core" {
 	}
 }
 
-// Mirror of nexious-server/src/features/plugin-proxy/signRequest.ts canonicalizeQuery.
-// Both sides must use the same sort order or same-query-different-order requests will
-// fail verification. Kept in lockstep by the format-pinning test on the server side.
-const canonicalizeQuery = (query: string): string => {
-	if (!query) return "";
-	const params = new URLSearchParams(query);
-	const entries = [...params.entries()];
-	entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-	const rebuilt = new URLSearchParams();
-	for (const [k, v] of entries) rebuilt.append(k, v);
-	return rebuilt.toString();
-};
-
-const hashBody = (body: string): string => createHash("sha256").update(body, "utf8").digest("hex");
-
-// Exported for unit tests so we can assert the canonical shape without going through
-// an Express request. Not used anywhere else in the runtime path.
-export const buildCanonicalString = ({
-	method,
-	path,
-	query,
-	timestamp,
-	bodyHash,
-}: {
-	method: string;
-	path: string;
-	query: string;
-	timestamp: string;
-	bodyHash: string;
-}): string => {
-	const canonicalQuery = canonicalizeQuery(query);
-	const pathWithQuery = canonicalQuery ? `${path}?${canonicalQuery}` : path;
-	return `${method.toUpperCase()}\n${pathWithQuery}\n${timestamp}\n${bodyHash}`;
-};
+// canonicalizeQuery, hashBody, and buildCanonicalString now live in
+// @utils/canonicalRequest (audit M1) so the inbound verifier and the outbound
+// signer (serverApi.ts) share one definition instead of two drift-prone copies.
+// Re-exported here because the historical public surface exposed
+// buildCanonicalString from this module.
+export { buildCanonicalString };
 
 // Constant-time hex comparison. timingSafeEqual throws if the buffers differ in length,
 // so we pre-check length and fall through to a safe "false" result in that case. An
