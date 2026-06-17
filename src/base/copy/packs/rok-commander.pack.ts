@@ -29,6 +29,17 @@ export const rokCommanderCopy = {
 	// recognition across every embed the bot posts.
 	FOOTER: "Company Uno",
 
+	// Dero, the Company Uno mascot, is the bot's visual identity. Set as the
+	// embed author in embedBuilder.base() so every embed the bot posts carries
+	// his name and icon at once. iconURL points at the PNG deployed with the web
+	// app (nexious-client/public/dero); Discord shows the name alone and skips a
+	// 404 icon gracefully, so this is safe to ship before that deploy lands.
+	// Confirm the production domain before relying on the icon rendering.
+	AUTHOR: {
+		name: "Dero",
+		iconURL: "https://www.companyuno.com/dero/dero-icon-128.png",
+	},
+
 	COLORS: {
 		REMINDER: "Red",
 		SEASON_END: "DarkGrey",
@@ -45,6 +56,11 @@ export const rokCommanderCopy = {
 		// reads as "shield" without colliding with SCHEDULE (DarkGreen)
 		// or ANNOUNCEMENTS (DarkRed) in the sidebar.
 		NEXT_DECREE: "DarkNavy",
+		// Dero's brand-indigo accent (matches the web --main-brand-color).
+		// Decision 11: the bot identity pairs the "Dero" author + icon with a
+		// brand indigo bar. Available for Dero-led or default embeds; the
+		// per-type colors above keep their meaning and are unchanged.
+		DERO: "#4f46e5",
 	} satisfies Record<string, ColorResolvable>,
 
 	listEvents: {

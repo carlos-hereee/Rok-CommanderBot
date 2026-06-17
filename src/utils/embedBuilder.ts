@@ -72,7 +72,13 @@ export function listEventsEmbed(fields: IListEventField[], announcementsChannelI
 
 // ── private ───────────────────────────────────────────────────
 function base(): EmbedBuilder {
-	return new EmbedBuilder().setTimestamp().setFooter({ text: embedContent.FOOTER });
+	// Dero as the author brands every embed at once (the single chokepoint all
+	// embed builders flow through). The icon 404s gracefully to name-only until
+	// the web app deploys the PNG, so this is safe to ship ahead of that.
+	return new EmbedBuilder()
+		.setTimestamp()
+		.setAuthor({ name: embedContent.AUTHOR.name, iconURL: embedContent.AUTHOR.iconURL })
+		.setFooter({ text: embedContent.FOOTER });
 }
 
 // ── public ────────────────────────────────────────────────────
