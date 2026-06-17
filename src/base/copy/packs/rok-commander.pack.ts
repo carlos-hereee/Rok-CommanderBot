@@ -255,6 +255,21 @@ export const rokCommanderCopy = {
 			"*Do not keep me waiting.*",
 	},
 
+	// ── pairing claim code DM (FUTURE_PLANS item 63) ──
+	// Second DM after arrival on a fresh install, and the only DM on a
+	// re-invite. Gives the owner a one-time code to claim this guild from the
+	// plugin dashboard with no slash command. Copy names the code, the 15
+	// minute expiry, where to paste it, and that re-inviting issues a fresh
+	// code.
+	pairingCode: {
+		title: "🔑 Claim This Realm",
+		description: (code: string) =>
+			"To bind this server to your dashboard, present this code:\n\n" +
+			`**\`${code}\`**\n\n` +
+			"Open the ROK Commander panel on your Company Uno dashboard at companyuno.com and enter it there.\n\n" +
+			"The code expires in **15 minutes**. Re-invite me and I will issue a fresh one.",
+	},
+
 	setup: {
 		// Universal category name across packs. Decision 2026-05-22: the category
 		// name is the first field that goes universal across packs (intro copy,

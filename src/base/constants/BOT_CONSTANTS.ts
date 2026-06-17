@@ -41,6 +41,13 @@ export const BOT_CONSTANTS = {
 	// scheduler
 	SCHEDULER_CRON: "* * * * *", // every minute
 	REMINDER_FIRE_WINDOW_MS: 60_000, // how close to reminder time before we fire it
+	// Max number of guilds the per-minute tick reads in parallel. The tick fans
+	// out one events+config read per guild; without a ceiling, thousands of
+	// guilds means thousands of simultaneous DB/HTTP calls in one tick, which
+	// saturates the connection pool (or Heroku, under USE_REMOTE_EVENTS) and can
+	// blow the 60s budget. 20 keeps the pool busy without stampeding it. Read by
+	// ReminderScheduler via mapWithConcurrency.
+	SCHEDULER_GUILD_CONCURRENCY: 20,
 
 	// ── reminder log sentinel offsets ──────────────────────────────
 	// offsetMinutes values that aren't real "N minutes before event" markers.

@@ -29,7 +29,11 @@ import { dashboardApiKey, dashboardSigningSecret } from "@utils/config.js";
 // Base URL of the nexious-server. Heroku in prod, localhost during dev. Empty when not
 // set — every call short-circuits to a "not configured" error so we never accidentally
 // leak requests to a default URL.
-const serverBaseUrl = process.env.SERVER_BASE_URL ?? "";
+// Accept BOTH env names: the code historically read SERVER_BASE_URL, but both CLAUDE.md
+// files document the var as NEXIOUS_BASE_URL. Reading either prevents the remote-events
+// path from silently failing to configure when an operator follows the docs. Prefer
+// SERVER_BASE_URL if both are set so an existing Railway value keeps winning.
+const serverBaseUrl = process.env.SERVER_BASE_URL ?? process.env.NEXIOUS_BASE_URL ?? "";
 
 // Reuse the server's exact 5-minute window. Any request the bot signs must reach the
 // server within this window or it will be rejected as stale. Logging the latency would

@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { Request, Response, NextFunction } from "express";
 import { apiKeyAuth } from "./auth.js";
-import { dashboardApiKey, dashboardSigningSecret } from "@utils/config.js";
+import { dashboardApiKey, dashboardSigningSecret, requireSignedRequests } from "@utils/config.js";
 
 // ── verifySignature ──
 // What: authenticates inbound dashboard proxy requests by recomputing the HMAC-SHA256
@@ -99,6 +99,14 @@ export function verifySignature(req: Request, res: Response, next: NextFunction)
 	//    legacy caller that never signs, fall through to API key auth. This keeps the bot
 	//    operational while the signing rollout lands on both sides.
 	if (!dashboardSigningSecret) {
+		if (requireSignedRequests) {
+			// Strict mode promises every request is signature-verified, but with no
+			// secret configured we cannot verify anything — fail closed rather than
+			// silently downgrade to api-key auth. This only fires on a deploy that set
+			// REQUIRE_SIGNED_REQUESTS without DASHBOARD_SIGNING_SECRET (an operator error).
+			res.status(401).json({ error: "Unauthorized" });
+			return;
+		}
 		apiKeyAuth(req, res, next);
 		return;
 	}
@@ -108,8 +116,15 @@ export function verifySignature(req: Request, res: Response, next: NextFunction)
 
 	// Same rollout safety: if the server is signing-capable but this specific request has
 	// no signing headers (e.g. curl from an operator, old server binary), fall back to
-	// apiKeyAuth. Once every caller is signed we can tighten this to a hard 401.
+	// apiKeyAuth — UNLESS strict mode is on, in which case an unsigned request is rejected.
+	// Strict mode closes the last fallback path where a caller holding only the shared
+	// static api key could pass an arbitrary ?guildId= (audit item C2); flip it on once
+	// every caller signs.
 	if (typeof timestamp !== "string" || typeof signature !== "string") {
+		if (requireSignedRequests) {
+			res.status(401).json({ error: "Unauthorized" });
+			return;
+		}
 		apiKeyAuth(req, res, next);
 		return;
 	}

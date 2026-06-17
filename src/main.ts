@@ -4,18 +4,20 @@ import clientReady from "@commands/utility/ready.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
-import { startScheduler } from "@features/reminders/ReminderScheduler.js";
-import { connectMongoose } from "@db/db.js";
+import type { Server } from "http";
+import { startScheduler, stopScheduler } from "@features/reminders/ReminderScheduler.js";
+import { connectMongoose, disconnectMongoose } from "@db/db.js";
 import { registerActivityListeners } from "@features/activity-tracking/ActivityTracker.js";
 import { startApiServer } from "@api/server.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { arrivalEmbed, errorEmbed } from "@utils/embedBuilder.js";
+import { arrivalEmbed, errorEmbed, pairingCodeEmbed } from "@utils/embedBuilder.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { registerChannelDeleteWatcher } from "@features/setup/ChannelDeleteWatcher.js";
 import { checkOnboardingAndNotifyOwner } from "@features/setup/OnboardingCheck.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
+import { pendingPairingStore } from "@db/stores/pendingPairingStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
 import { postFeatureAnnouncements } from "@features/announcements/postFeatureAnnouncement.js";
@@ -39,7 +41,12 @@ const client = new Client({
 		GatewayIntentBits.GuildMessages,
 		GatewayIntentBits.GuildVoiceStates, // ← needed for VoiceStateUpdate
 		GatewayIntentBits.GuildPresences, // ← needed for PresenceUpdate
-		GatewayIntentBits.MessageContent,
+		// MessageContent intent intentionally NOT requested: the bot reads no
+		// message text (every message.content reference is commented-out legacy
+		// code, and there is no messageCreate listener). MessageContent is a
+		// privileged intent gated by Discord verification at 100+ guilds, so
+		// requesting it while unused is pure verification risk. Re-add only if a
+		// feature genuinely needs to read message bodies.
 		GatewayIntentBits.GuildMessageReactions, // ← needed for MessageReactionAdd
 	],
 	// Discord only sends full data for recent messages.
@@ -55,6 +62,62 @@ const client = new Client({
 });
 
 clientReady(client);
+
+// ── process lifecycle: graceful shutdown + global error nets ──────────
+// Railway sends SIGTERM on every deploy. Without a handler the cron keeps
+// firing while the client and Mongo connection are torn down, which can cut a
+// reminder fire between its Discord post and its dedup-row write (→ a duplicate
+// on the next boot). The shutdown sequence stops new work first, then tears
+// down in dependency order so an in-flight write has a chance to flush.
+let apiServer: Server | undefined;
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal: string, exitCode = 0): Promise<void> {
+	if (isShuttingDown) return; // a second signal during teardown is a no-op
+	isShuttingDown = true;
+	console.log(`[shutdown] received ${signal} — shutting down gracefully`);
+	// ① stop cron so no new reminder tick begins mid-teardown.
+	try {
+		stopScheduler();
+	} catch (err) {
+		console.error("[shutdown] stopScheduler failed", err);
+	}
+	// ② stop accepting new HTTP requests.
+	try {
+		apiServer?.close();
+	} catch (err) {
+		console.error("[shutdown] api server close failed", err);
+	}
+	// ③ disconnect the gateway (halts interaction + event handling).
+	try {
+		await client.destroy();
+	} catch (err) {
+		console.error("[shutdown] client.destroy failed", err);
+	}
+	// ④ close Mongo last so any in-flight write lands before the socket drops.
+	try {
+		await disconnectMongoose();
+	} catch (err) {
+		console.error("[shutdown] mongoose disconnect failed", err);
+	}
+	console.log("[shutdown] complete");
+	process.exit(exitCode);
+}
+
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+
+// The bot has many fire-and-forget side effects; an unhandled rejection should
+// be logged, not crash the process. An uncaught exception leaves an undefined
+// state, so we tear down cleanly and let Railway restart us with a non-zero
+// code rather than limp along corrupted.
+process.on("unhandledRejection", (reason) => {
+	console.error("[process] unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+	console.error("[process] uncaughtException:", err);
+	void gracefulShutdown("uncaughtException", 1);
+});
 
 // load commands first
 (async () => {
@@ -120,6 +183,22 @@ clientReady(client);
 				// feature shipped may have Onboarding enabled and would not have
 				// been DM'd yet; the idempotency log gates duplicates.
 				await checkOnboardingAndNotifyOwner(client, guild);
+				// ── pairing code DM (FUTURE_PLANS item 63, Phase 1) ──
+				// On a re-invite the owner may be following the dashboard panel's
+				// instruction to claim this guild, so the pairing code is the ONLY
+				// DM here: INTRO_DM_SENT is already set from the original install,
+				// so no arrival DM fires. Self-contained try/catch because some
+				// owners block DMs and a failed pairing DM must not abort
+				// guildCreate. PAIRING_CODE_SENT is logged only after the DM
+				// actually leaves so the funnel counts delivered codes.
+				try {
+					const owner = await guild.fetchOwner();
+					const pairingCode = await pendingPairingStore.issue(guild.id, guild.ownerId);
+					await owner.send({ embeds: [pairingCodeEmbed(pairingCode)] });
+					await botLogStore.log(guild.id, BOT_LOG_EVENTS.PAIRING_CODE_SENT, { ownerId: guild.ownerId });
+				} catch (pairingError) {
+					console.warn(`[main] pairing code DM failed for guild ${guild.id}`, pairingError);
+				}
 				return;
 			}
 
@@ -128,6 +207,19 @@ clientReady(client);
 			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
 			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
 			await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
+			// ── pairing code DM (FUTURE_PLANS item 63, Phase 1) ──
+			// A second DM right after the arrival embed so a brand-new owner can
+			// claim this guild from the plugin dashboard with no slash command.
+			// Self-contained try/catch so a blocked-DM owner does not abort the
+			// rest of guildCreate, and PAIRING_CODE_SENT is logged only when the
+			// DM actually leaves so the funnel counts delivered codes.
+			try {
+				const pairingCode = await pendingPairingStore.issue(guild.id, guild.ownerId);
+				await owner.send({ embeds: [pairingCodeEmbed(pairingCode)] });
+				await botLogStore.log(guild.id, BOT_LOG_EVENTS.PAIRING_CODE_SENT, { ownerId: guild.ownerId });
+			} catch (pairingError) {
+				console.warn(`[main] pairing code DM failed for guild ${guild.id}`, pairingError);
+			}
 			// Onboarding compat heads-up. Fires AFTER the arrival DM so the
 			// owner gets the welcome before the operational notice. The
 			// helper bails silently when Onboarding is off or our category
@@ -239,8 +331,17 @@ clientReady(client);
 					return;
 				}
 
-				const member = interaction.guild?.members.cache.get(interaction.user.id);
 				const isOwner = interaction.user.id === interaction.guild?.ownerId;
+				// Resolve the invoking member cache-first, then fall back to a fetch.
+				// The members cache can be cold (large guild, fresh restart, gateway
+				// gap), and a cache miss previously denied a legitimate admin with
+				// "no wizard powers." Only pay the fetch when there is an adminRoleId
+				// to check and the actor is not already the owner, so the hot paths
+				// (owner, or guild with no admin role) stay cache-only.
+				let member = interaction.guild?.members.cache.get(interaction.user.id) ?? null;
+				if (!member && !isOwner && config.adminRoleId) {
+					member = (await interaction.guild?.members.fetch(interaction.user.id).catch(() => null)) ?? null;
+				}
 				const hasAdminRole = (config.adminRoleId && member?.roles.cache.has(config.adminRoleId)) ?? false;
 
 				if (!isOwner && !hasAdminRole) {
@@ -282,7 +383,7 @@ clientReady(client);
 		// start scheduler and activity tracker, and API server
 		startScheduler(client);
 		registerActivityListeners(client);
-		startApiServer(client);
+		apiServer = startApiServer(client);
 
 		// ── outage watcher ────────────────────────────────────────
 		// Polls serverApi reachability state every 60s. DMs the platform

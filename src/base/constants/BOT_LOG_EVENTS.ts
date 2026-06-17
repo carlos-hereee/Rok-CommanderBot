@@ -34,6 +34,28 @@ export const BOT_LOG_EVENTS = {
 	// the member opts in via Channels & Roles. Logged once per guild so
 	// every restart does not re-nag.
 	ONBOARDING_HEADSUP_SENT: "onboarding_headsup_sent",
+	// ── pairing code DM (FUTURE_PLANS item 63, 2026-06-10) ─────────
+	// Logged each time the guild owner is DM'd a one-time claim code on
+	// guildCreate (both the fresh-install and re-install branches). Paired
+	// with PAIRING_REDEEMED (added in Phase 2) it yields the activation funnel:
+	// redemption rate = redeemed / sent, and time-to-redeem from the row
+	// timestamps. Not idempotent on purpose: every invite issues a new code and
+	// logs a new row.
+	PAIRING_CODE_SENT: "pairing_code_sent",
+	// ── pairing code redeemed (FUTURE_PLANS item 63, Phase 2, 2026-06-10) ─
+	// Logged once when the platform server successfully redeems a code through
+	// POST /api/pairing/redeem. Closes the activation funnel: redemption rate
+	// is rows-with-PAIRING_REDEEMED divided by rows-with-PAIRING_CODE_SENT
+	// for the same guildId, and time-to-redeem is the createdAt delta between
+	// the two. Not idempotent on purpose: every successful redemption logs a
+	// fresh row, so a re-invite that issues a new code and gets redeemed
+	// again shows up as a second redemption (the funnel measures activation
+	// events, not unique guilds). Metadata shape matches PAIRING_CODE_SENT
+	// — `{ ownerId }` (sourced from the PendingPairing row's ownerUserId
+	// field but keyed `ownerId` for cross-event funnel queries) — so the
+	// analytics query that joins the two events on guildId can also slice
+	// by ownerId without translating field names per event type.
+	PAIRING_REDEEMED: "pairing_redeemed",
 	// add more here as needed
 } as const;
 

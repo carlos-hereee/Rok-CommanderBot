@@ -85,7 +85,13 @@ async function handleGoLiveNowButton(interaction: ButtonInteraction): Promise<vo
 	// server owner can fire the button.
 	const config = await guildConfigStore.findByGuildId(guildId);
 	const isOwner = interaction.user.id === interaction.guild.ownerId;
-	const member = interaction.guild.members.cache.get(interaction.user.id);
+	// Cache-first, fetch-fallback: the members cache can be cold (large guild,
+	// fresh restart), and a miss would wrongly deny a legitimate admin. Only
+	// fetch when there is a role to check and the actor is not the owner.
+	let member = interaction.guild.members.cache.get(interaction.user.id) ?? null;
+	if (!member && !isOwner && config?.adminRoleId) {
+		member = (await interaction.guild.members.fetch(interaction.user.id).catch(() => null)) ?? null;
+	}
 	const hasAdminRole = (config?.adminRoleId && member?.roles.cache.has(config.adminRoleId)) ?? false;
 
 	if (!isOwner && !hasAdminRole) {

@@ -102,5 +102,17 @@ const eventSchema = new Schema(
 	{ timestamps: true } // adds createdAt + updatedAt automatically
 );
 
+// Hot-path index for the reminder scheduler. Every per-minute cron tick runs
+// EventModel.find({ guildId, active: true }) once per guild (see eventStore
+// .findByGuildId / .findAll). Without this compound index those are collection
+// scans, so tick duration grows linearly with the Event collection and
+// eventually overruns the 60s budget — the condition the overlap guard in
+// ReminderScheduler exists to survive. The field order is { guildId, active }
+// because guildId is the high-selectivity equality match and active narrows
+// within it; this same index also serves the guild-scoped findByGuildId reads
+// the dashboard and ActivityTracker issue. Not unique: a guild legitimately
+// has many active events.
+eventSchema.index({ guildId: 1, active: 1 });
+
 const EventModel = mongoose.model("Event", eventSchema);
 export default EventModel;

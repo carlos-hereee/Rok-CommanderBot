@@ -57,6 +57,15 @@ export const LOG_MESSAGES = {
 	// ── reminder scheduler ─────────────────────────────────────────────
 	scheduler: {
 		tickError: "Scheduler error:",
+		// Emitted when a cron tick fires while the previous minute's tick is
+		// still running. node-cron does not skip overlapping runs, so without
+		// the in-process guard two concurrent ticks could both pass the
+		// reminderStore.exists() dedup check and double-fire the same reminder.
+		// Warn-level: a single skipped tick is self-correcting (the next minute
+		// catches up), but a sustained stream of these means the tick is
+		// overrunning its 60s budget and needs investigation (large guild
+		// fan-out, slow remote-event calls, or a missing DB index).
+		tickOverlapSkipped: "[scheduler] previous tick still running — skipping this minute to avoid duplicate fires",
 		seasonEndNoChannel: (guildId: string) => `[season-end] no channel available for guild ${guildId}`,
 		seasonEndFailed: "Failed to announce season end:",
 		// Defensive: announceSeasonEnd should never be reached for an event
@@ -231,6 +240,13 @@ export const LOG_MESSAGES = {
 	db: {
 		missingUri: "[ERROR] MONGOOSE_URI environment variable is not set.",
 		connected: "\n\n✅ Connected to MongoDB",
+		// Connection lifecycle. Mongoose auto-reconnects by default; these just
+		// make the transitions visible in Railway logs so a flaky Atlas link is
+		// diagnosable instead of manifesting only as silent query timeouts.
+		disconnected: "[db] ⚠️ MongoDB connection lost — Mongoose will attempt to reconnect",
+		reconnected: "[db] ✅ MongoDB reconnected",
+		connectionError: "[db] MongoDB connection error:",
+		disconnecting: "[db] closing MongoDB connection",
 	},
 
 	// ── api ────────────────────────────────────────────────────────────

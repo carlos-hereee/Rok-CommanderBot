@@ -217,6 +217,19 @@ export const generalEventsCopy: IPluginCopy = {
 			"Once that is done I will build the home channels and start posting reminders for any events you configure.",
 	},
 
+	// ── pairing claim code DM (FUTURE_PLANS item 63) ──
+	// Same role as the rok-commander pairingCode, in plain streamer voice.
+	// Names the code, the 15 minute expiry, where to paste it, and that
+	// re-inviting the bot issues a fresh code.
+	pairingCode: {
+		title: "🔑 Connect this server",
+		description: (code: string) =>
+			"Use this code to connect this server to your dashboard:\n\n" +
+			`**\`${code}\`**\n\n` +
+			"Open the plugin panel on your Company Uno dashboard at companyuno.com and paste it in.\n\n" +
+			"The code expires in **15 minutes**. Re-invite the bot to get a fresh code.",
+	},
+
 	setup: {
 		// Universal category name across packs. Decision 2026-05-22: the category
 		// name is the first field that goes universal across packs (the rest of

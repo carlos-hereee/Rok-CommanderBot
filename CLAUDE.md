@@ -112,7 +112,8 @@ Outbound requests (Future A: bot → server) reuse the same secret and same cano
 Env vars:
 - `DASHBOARD_API_KEY` — legacy shared secret for `x-api-key`
 - `DASHBOARD_SIGNING_SECRET` — HMAC secret. Used in both directions (verify inbound, sign outbound). When unset, inbound verification transparently falls back to plain api key auth so the rollout can land one side at a time; outbound calls fail with `ServerNotConfiguredError`.
-- `NEXIOUS_BASE_URL` — Heroku URL of the platform server. Required when `USE_REMOTE_EVENTS=true`.
+- `REQUIRE_SIGNED_REQUESTS` — strict mode. When true, `verifySignature` rejects any unsigned `/api/*` request (no fallback to plain api-key auth). OFF by default so the rollout can land one side at a time. Flip on AFTER both sides sign every request — it closes the last path by which a caller holding only the shared api key could pass an arbitrary `?guildId=`.
+- `SERVER_BASE_URL` (alias `NEXIOUS_BASE_URL`) — Heroku URL of the platform server. Required when `USE_REMOTE_EVENTS=true`. `serverApi` reads `SERVER_BASE_URL` first, then falls back to `NEXIOUS_BASE_URL`, so either name works; set one.
 - `USE_REMOTE_EVENTS` — feature flag. When true, `eventStore` routes reads/writes through `serverApi` instead of local Mongo. Off by default; flip on AFTER the F4 migration script has copied existing events into the platform DB.
 
 ## Operational Dependencies (Future A)

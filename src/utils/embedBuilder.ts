@@ -376,3 +376,14 @@ export function arrivalEmbed(guildName: string, ownerId: string): EmbedBuilder {
 	const c = embedContent.arrival;
 	return base().setTitle(c.title).setDescription(c.description(guildName, ownerId)).setColor(embedContent.COLORS.ARRIVAL);
 }
+
+// ── pairing code DM embed (FUTURE_PLANS item 63) ──
+// Mirrors arrivalEmbed: pulls copy from the static embedContent (the
+// rok-commander pack re-export) because the DM fires on guildCreate, before
+// the guild has selected a plugin pack, so the ROK voice is the de facto
+// default exactly as it is for the arrival embed. Reuses the ARRIVAL color so
+// the claim code reads as part of the same welcome moment.
+export function pairingCodeEmbed(code: string): EmbedBuilder {
+	const c = embedContent.pairingCode;
+	return base().setTitle(c.title).setDescription(c.description(code)).setColor(embedContent.COLORS.ARRIVAL);
+}

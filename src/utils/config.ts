@@ -1,6 +1,10 @@
 import "dotenv/config.js";
 
-const isDev = process.env.NODE_ENV === "dev";
+// Accept both "development" (what the `npm run development` script sets) and
+// the shorthand "dev". The previous check only matched "dev", so isDev was
+// always false in the documented dev workflow — a latent trap for any future
+// branch that keys off it.
+const isDev = process.env.NODE_ENV === "development" || process.env.NODE_ENV === "dev";
 const isProduction = process.env.NODE_ENV === "production";
 const dbEnv = process.env.DB_ENV || "development";
 
@@ -85,6 +89,25 @@ const dashboardApiKey = process.env.DASHBOARD_API_KEY || "";
 // Reused for the reverse direction (bot → server) by serverApi.ts.
 const dashboardSigningSecret = process.env.DASHBOARD_SIGNING_SECRET || "";
 
+// ── require signed requests (strict mode) ──
+// What: when true, verifySignature rejects any /api/* request that is not
+//   HMAC-signed, instead of falling back to plain x-api-key auth.
+// Who: read by api/middleware/verifySignature.ts.
+// When: OFF by default so the signing rollout can land one side at a time
+//   (the fallback to apiKeyAuth keeps the API reachable while only one side
+//   signs). Flip to true AFTER both the server and bot are signing every
+//   request — at that point the static-api-key fallback is the last path by
+//   which a caller could pass an arbitrary ?guildId= with only the shared key,
+//   so closing it is the bot-side hardening for audit item C2.
+// Where: pairs with dashboardSigningSecret. Strict mode with no secret set is
+//   a misconfiguration and fails closed (the middleware cannot verify anything
+//   without the secret).
+// How: any non-empty truthy string turns it on; empty/unset = off.
+const requireSignedRequests = (() => {
+	const raw = (process.env.REQUIRE_SIGNED_REQUESTS ?? "").toLowerCase().trim();
+	return raw === "1" || raw === "true" || raw === "yes";
+})();
+
 // ── Future-A remote events flag ──
 // What: when true, eventStore reads/writes route through the nexious-server's
 //   /api/events surface instead of this bot's local Mongo `Event` collection.
@@ -143,6 +166,7 @@ export {
 	uri,
 	dashboardApiKey,
 	dashboardSigningSecret,
+	requireSignedRequests,
 	dashboardOrigin,
 	useRemoteEvents,
 };
