@@ -18,8 +18,6 @@ import { gateOwnerOrAdmin } from "@utils/permissions.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { refreshLeaderboard } from "@features/leaderboard/LeaderboardBoard.js";
-import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
-import { pauseAllGuildEvents, resumeAllGuildEvents, IBulkScheduleResult } from "@features/schedule/scheduleBulkControls.js";
 
 // ── Channel power-ups (v1.6 Phase 5, item 36) ──────────────────────────
 // Each homebase channel carries a pinned "power-up" panel: an embed + a row of
@@ -37,11 +35,12 @@ import { pauseAllGuildEvents, resumeAllGuildEvents, IBulkScheduleResult } from "
 //    persisting message ids on GuildConfig.powerUpMessageIds, the same way
 //    ScheduleBoard and the intro embeds are kept alive across restarts.
 //
-// This first increment ships the two owner/admin panels that reuse existing
-// logic: the leaderboard "Refresh standings" (Phase 2 refreshLeaderboard) and
-// the schedule "Pause all / Resume all" (scheduleBulkControls). The intro
-// "Post intro template" and announcements "Subscribe to ping list" member-
-// facing panels slot into POWERUP_DEFINITIONS next without schema changes.
+// Panels shipped here: leaderboard "Refresh standings" (admin, Phase 2
+// refreshLeaderboard), intro "Post intro template" (any member), and
+// announcements "Toggle announcement pings" (any member). The schedule channel
+// is deliberately NOT a power-up panel: its controls (Go Live + a phase-gated
+// Pause/Resume toggle) live on the schedule board itself, owned by
+// ScheduleControls, so the board's refresh-on-event-change keeps them current.
 
 const POWERUP_PREFIX = "powerup";
 
@@ -90,17 +89,6 @@ const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
 		description: "Refresh the standings board on demand. Admins only.",
 		color: embedContent.COLORS.LEADERBOARD,
 		actions: [{ action: "refresh", label: "Refresh standings", emoji: "🔄", style: ButtonStyle.Primary, adminOnly: true }],
-	},
-	{
-		kind: "schedule",
-		channelField: "scheduleChannelId",
-		title: "📅 Schedule controls",
-		description: "Pause or resume reminders for every schedule on this server. Admins only.",
-		color: embedContent.COLORS.SCHEDULE,
-		actions: [
-			{ action: "pause", label: "Pause all", emoji: "⏸️", style: ButtonStyle.Secondary, adminOnly: true },
-			{ action: "continue", label: "Resume all", emoji: "▶️", style: ButtonStyle.Success, adminOnly: true },
-		],
 	},
 	{
 		kind: "intro",
@@ -157,12 +145,6 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 		case "leaderboard:refresh":
 			await runLeaderboardRefresh(interaction, guildId);
 			return;
-		case "schedule:pause":
-			await runBulkSchedule(interaction, guildId, "paused");
-			return;
-		case "schedule:continue":
-			await runBulkSchedule(interaction, guildId, "resumed");
-			return;
 		case "intro:template":
 			await runPostIntroTemplate(interaction);
 			return;
@@ -185,26 +167,6 @@ async function runLeaderboardRefresh(interaction: ButtonInteraction, guildId: st
 	// it so the board is updated before we ack, then confirm generically.
 	await refreshLeaderboard(interaction.client, guildId);
 	await interaction.editReply({ content: "🔄 Standings refreshed." });
-}
-
-async function runBulkSchedule(interaction: ButtonInteraction, guildId: string, action: "paused" | "resumed"): Promise<void> {
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-	const result = action === "paused" ? await pauseAllGuildEvents(guildId) : await resumeAllGuildEvents(guildId);
-	// Update the schedule board's paused tags. Fire-and-forget — the DB writes
-	// are the source of truth and the next refresh tick reconciles regardless.
-	refreshSchedule(interaction.client, guildId).catch((err) => console.error(`[powerup] schedule refresh after ${action} failed`, err));
-	await interaction.editReply({ content: summarizeBulk(result, action) });
-}
-
-function summarizeBulk(result: IBulkScheduleResult, action: "paused" | "resumed"): string {
-	if (result.total === 0) return "There are no schedules on this server yet.";
-	if (result.changed === 0) {
-		return action === "paused" ? "Every schedule was already paused." : "Nothing was paused, so there is nothing to resume.";
-	}
-	const verb = action === "paused" ? "⏸️ Paused" : "▶️ Resumed";
-	const noun = result.changed === 1 ? "schedule" : "schedules";
-	const tail = result.failed > 0 ? ` (${result.failed} could not be updated — check the bot's logs)` : "";
-	return `${verb} ${result.changed} ${noun}${tail}.`;
 }
 
 async function runPostIntroTemplate(interaction: ButtonInteraction): Promise<void> {

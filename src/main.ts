@@ -28,7 +28,7 @@ import { registerDecreeEditHandlers } from "@features/schedule/decreeEditHandler
 import { registerLeaderboardChannelHandlers } from "@features/leaderboard/leaderboardChannelHandlers.js";
 import { refreshAllNextUp } from "@features/schedule/NextUpBoard.js";
 import { refreshAllLeaderboards } from "@features/leaderboard/LeaderboardBoard.js";
-import { ensureGoLiveButtonOnScheduleBoard, registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
+import { registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
 import { registerSuggestionBoxHandlers } from "@features/suggestion-box/SuggestionBox.js";
 import { registerPollHandlers, dispatchPolls, logPollTallies } from "@features/polls/PollDispatcher.js";
 import { registerPowerUpHandlers, ensureAllPowerUps } from "@features/power-ups/PowerUps.js";
@@ -465,19 +465,9 @@ process.on("uncaughtException", (err) => {
 					console.warn(`[main] onboarding compat check failed for guild ${guild.id}`, onboardingError);
 				}
 
-				// ── Schedule board Go Live Now button (FUTURE_PLANS item 36 partial) ─
-				// Defensive check: if the schedule board message already
-				// carries the button, no-op. Otherwise attach. Covers
-				// guilds whose schedule message was posted before this
-				// feature shipped. refreshAllSchedules below ALSO re-
-				// attaches components via ScheduleBoard's edit path, so
-				// this helper is belt-and-suspenders rather than load-
-				// bearing. Cheap (one fetch per guild), idempotent.
-				try {
-					await ensureGoLiveButtonOnScheduleBoard(client, guild);
-				} catch (controlError) {
-					console.warn(`[main] schedule board button ensure failed for guild ${guild.id}`, controlError);
-				}
+				// Schedule board control row (Go Live + phase-gated Pause/Resume
+				// toggle) is rebuilt by refreshAllSchedules below on every boot, so
+				// no separate boot-time attach step is needed anymore.
 
 				// ── intro embed refresh ───────────────────────────────
 				// What: after ensureHomebase has confirmed (or rebuilt) the

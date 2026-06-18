@@ -320,7 +320,7 @@ export const rokCommanderCopy = {
 			// Where: sits beside 📢announcements in the homebase
 			//        category; readable by mortals, writable only by
 			//        the bot via category level overwrites.
-			nextDecree: "🛡️next-decree",
+			nextDecree: "🔜upcoming-events",
 		},
 	},
 
@@ -474,12 +474,13 @@ export const rokCommanderCopy = {
 		// Where: posted once by populateChannels on first setup; edited in
 		//        place on every boot via refreshIntroEmbeds.
 		nextDecree: {
-			title: "🛡️ The Next Decree",
+			// Intentionally neutral (not kingdom voice) per the owner: this channel
+			// reads as "upcoming events" for every audience.
+			title: "🔜 Upcoming Events",
 			description:
-				"Herald of what comes next.\n\n" +
-				"As each event nears within the next day, a fresh decree shall appear here — " +
-				"its hour, its trial, and the preparations demanded of the worthy.\n\n" +
-				"*These scrolls remain forever. Scroll back to prove your alliance was warned.*",
+				"A heads-up for what is coming next.\n\n" +
+				"As each event moves within the next day, a fresh post appears here with its time and any prep notes.\n\n" +
+				"*Posts stay so you can scroll back to confirm what was announced.*",
 		},
 
 		adminWelcome: {

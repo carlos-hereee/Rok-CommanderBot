@@ -6,7 +6,7 @@ import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js
 import { IGameEvent } from "@features/events/event.types.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
-import { buildGoLiveNowButtonRow } from "@features/schedule/ScheduleControls.js";
+import { buildScheduleControlRow } from "@features/schedule/ScheduleControls.js";
 
 // ── ScheduleBoard ─────────────────────────────────────────────────────
 // Owns a single pinned message per guild that lives in the event-schedule
@@ -90,7 +90,14 @@ export async function refreshSchedule(client: Client, guildId: string): Promise<
 
 		const embed = scheduleBoardEmbed(fields, config.announcementsChannelId ?? null, { seasonEnded, guildSeasonEndTs });
 
-		await postOrEdit(channel, config.scheduleMessageId ?? null, embed, guildId);
+		// Phase-gated control row: Go Live always, plus Set-up (no events) /
+		// Pause (some active) / Resume (all paused). Computed from the events
+		// already loaded above so the toggle reflects live state on every refresh.
+		const hasEvents = events.length > 0;
+		const allPaused = hasEvents && events.every((event) => event.paused === true);
+		const controlRow = buildScheduleControlRow({ hasEvents, allPaused });
+
+		await postOrEdit(channel, config.scheduleMessageId ?? null, embed, guildId, controlRow);
 	} catch (error) {
 		console.error(LOG_MESSAGES.schedule.unexpectedError(guildId), error);
 	}
@@ -162,7 +169,8 @@ async function postOrEdit(
 	channel: TextChannel,
 	existingMessageId: string | null,
 	embed: ReturnType<typeof scheduleBoardEmbed>,
-	guildId: string
+	guildId: string,
+	controlRow: ReturnType<typeof buildScheduleControlRow>
 ): Promise<void> {
 	// resolve our own bot id up front so the stale data guards below can
 	// compare authors cheaply without hitting Discord twice.
@@ -191,13 +199,13 @@ async function postOrEdit(
 			if (selfId && existing.author.id !== selfId) {
 				staleAuthor = true;
 			} else {
-				// Components reapplied on every edit so the Go Live Now
-				// button persists. Without this, an edit that omitted
+				// Components reapplied on every edit so the control row
+				// persists. Without this, an edit that omitted
 				// components would still preserve them (Discord.js
 				// default), but reapplying makes the contract explicit
 				// at every call site and covers the case where the
 				// button row shape changes between releases.
-				await existing.edit({ embeds: [embed], components: [buildGoLiveNowButtonRow()] });
+				await existing.edit({ embeds: [embed], components: [controlRow] });
 				return;
 			}
 		} catch (error) {
@@ -244,10 +252,10 @@ async function postOrEdit(
 	// recovery path (or first post ever): send a new message, pin it, persist the id.
 	let message: Message;
 	try {
-		// Send the schedule board with the channel-control button row.
-		// Same buildGoLiveNowButtonRow used by the edit path above so a
-		// fresh post and an in-place refresh produce identical surfaces.
-		message = await channel.send({ embeds: [embed], components: [buildGoLiveNowButtonRow()] });
+		// Send the schedule board with the same dynamic control row the edit
+		// path uses, so a fresh post and an in-place refresh produce identical
+		// surfaces (caller passes the row built from live schedule state).
+		message = await channel.send({ embeds: [embed], components: [controlRow] });
 	} catch (error) {
 		console.error(LOG_MESSAGES.schedule.postFailed(guildId), error);
 		return;

@@ -193,7 +193,7 @@ async function tryPostDecree(
 	const fireTs = Math.floor(renderedTime.getTime() / 1000);
 
 	const embed = new EmbedBuilder()
-		.setTitle(`📜 Upcoming decree: ${renderedTitle}`)
+		.setTitle(`📅 Upcoming event: ${renderedTitle}`)
 		.setDescription(renderedDescription || "_(no description)_")
 		.addFields(
 			{ name: "Fires", value: `<t:${fireTs}:F> · <t:${fireTs}:R>`, inline: false },
@@ -219,7 +219,7 @@ async function tryPostDecree(
 				  ]
 				: [])
 		)
-		.setFooter({ text: "Click Edit below to adjust this decree (admins only)." });
+		.setFooter({ text: "Click Edit below to adjust this event (admins only)." });
 
 	// Large banner: this event's image, then the guild default. Guard so null is
 	// a clean no-op and a legacy decree with no image posts exactly as before.

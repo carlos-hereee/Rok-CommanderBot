@@ -37,6 +37,15 @@ export const generalEventsCopy: IPluginCopy = {
 	// pack — see that pack's FOOTER comment.
 	FOOTER: "Company Uno",
 
+	// Embed author. Same value as rok-commander: the bot presents as Dero in
+	// every pack, so the author name and icon do not vary by voice. Required by
+	// the shared IPluginCopy shape derived from the rok-commander pack. The icon
+	// 404s gracefully to name-only until the web app deploys the PNG.
+	AUTHOR: {
+		name: "Dero",
+		iconURL: "https://www.companyuno.com/dero/dero-icon-128.png",
+	},
+
 	// Same palette as rok-commander. Color is neutral by design — the kingdom
 	// vs streamer split happens in words, not in chrome. Keeping the same
 	// keys means embed builders that read `c.COLORS.REMINDER` work without a
@@ -54,6 +63,11 @@ export const generalEventsCopy: IPluginCopy = {
 		ANNOUNCEMENTS: "DarkRed",
 		ADMIN: "DarkPurple",
 		NEXT_DECREE: "DarkNavy",
+		// Dero's brand-indigo accent. Same value as rok-commander: the bot
+		// presents as Dero in every pack, so the brand color does not vary by
+		// voice. Required by the shared IPluginCopy shape derived from the
+		// rok-commander pack.
+		DERO: "#4f46e5",
 	} satisfies Record<string, ColorResolvable>,
 
 	listEvents: {
@@ -256,7 +270,7 @@ export const generalEventsCopy: IPluginCopy = {
 			schedule: "📅event-schedule",
 			announcements: "📢announcements",
 			admin: "🔒admin",
-			nextDecree: "🛡️up-next",
+			nextDecree: "🔜upcoming-events",
 		},
 	},
 
@@ -347,11 +361,11 @@ export const generalEventsCopy: IPluginCopy = {
 		},
 
 		nextDecree: {
-			title: "🛡️ Up Next",
+			title: "🔜 Upcoming Events",
 			description:
-				"A heads-up for the next event on the schedule.\n\n" +
-				"As each event nears within the next day, a fresh post appears here with the time and any prep notes.\n\n" +
-				"*Posts stay around so you can scroll back to confirm what was announced.*",
+				"A heads-up for what is coming next.\n\n" +
+				"As each event moves within the next day, a fresh post appears here with its time and any prep notes.\n\n" +
+				"*Posts stay so you can scroll back to confirm what was announced.*",
 		},
 
 		adminWelcome: {

@@ -1,182 +1,189 @@
-import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	Client,
-	Guild,
-	MessageFlags,
-	TextChannel,
-	type ButtonInteraction,
-} from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, type ButtonInteraction } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { registerButton } from "@handlers/interactionRegistry.js";
+import { gateOwnerOrAdmin } from "@utils/permissions.js";
 import { errorEmbed } from "@utils/embedBuilder.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { postGoLiveAnnouncement } from "@features/schedule/postGoLiveAnnouncement.js";
+import { pauseAllGuildEvents, resumeAllGuildEvents, IBulkScheduleResult } from "@features/schedule/scheduleBulkControls.js";
+import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 
-// ── Schedule channel controls (FUTURE_PLANS item 36, partial) ──────
-// Owns the channel-level action buttons attached to the pinned
-// schedule board message in the event-schedule channel. Today: one
-// button (Go Live Now). Future item 36 work layers Pause Schedule,
-// Continue Schedule, etc onto the same row.
+// ── Schedule channel controls (item 36) ────────────────────────────────
+// The pinned schedule board carries ONE dynamic, phase-gated control row,
+// rebuilt by ScheduleBoard.refreshSchedule on every refresh (so it tracks the
+// live state without a second pinned message):
 //
-// Architecture: the buttons live on the SAME message as the schedule
-// board (managed by ScheduleBoard). ScheduleBoard.refreshSchedule
-// includes the row from buildGoLiveNowButtonRow() in its send + edit
-// calls so the buttons persist across every refresh. This avoids a
-// second pinned message in the channel.
+//   - Go Live Now — ALWAYS present. Streamers announce going live whether or
+//     not a recurring schedule exists, so this never hides.
+//   - then exactly one state button:
+//       • no events configured        → "Set up your schedule" (how-to reply)
+//       • events, at least one active → "Pause reminders"  (pauses all)
+//       • events, all paused          → "Resume reminders" (resumes all)
 //
-// Note on Discord.js edit semantics: message.edit({ embeds: [...] })
-// without a components key preserves the existing components row. So
-// in steady state we could pass components only on initial send and
-// rely on subsequent embed-only edits to preserve them. ScheduleBoard
-// passes them on every send + edit anyway, which is idempotent and
-// makes the contract explicit at every call site.
+// Pause/Resume is a single toggle: clicking it flips every event, then the
+// board refresh re-reads state and swaps the button to its opposite. This
+// replaces the old two-button (Pause all + Resume all) panel, where one button
+// was always a no-op, and the standalone power-up panel for the schedule
+// channel (those controls now live here on the board).
+//
+// All four actions are owner/admin gated via gateOwnerOrAdmin. discord.js note:
+// message.edit must pass embeds AND components or the buttons drop — ScheduleBoard
+// passes both on every send and edit.
+//
+// Note: this module imports refreshSchedule from ScheduleBoard while ScheduleBoard
+// imports buildScheduleControlRow from here. The cycle is safe: both are hoisted
+// function declarations used only at call time (refresh on click, row build on
+// refresh), never during module init.
 
-// customId prefix for buttons that live on the schedule board control
-// row. Prefix-based dispatch in interactionRegistry slices on the
-// first ":" so this prefix can host multiple buttons (eg
-// "schedule_controls:pause_schedule" when item 36 expands).
 const BUTTON_PREFIX = "schedule_controls";
 const GO_LIVE_NOW_CUSTOM_ID = `${BUTTON_PREFIX}:go_live_now`;
+const CONFIGURE_CUSTOM_ID = `${BUTTON_PREFIX}:configure`;
+const PAUSE_ALL_CUSTOM_ID = `${BUTTON_PREFIX}:pause_all`;
+const RESUME_ALL_CUSTOM_ID = `${BUTTON_PREFIX}:resume_all`;
 
-// Build the action row that hosts the channel-control buttons.
-// Exported so ScheduleBoard can include it in every send and edit of
-// the pinned schedule message. Single source of truth — adding a
-// button means editing this function and shipping; ScheduleBoard
-// automatically picks up the new shape on its next refresh.
-export function buildGoLiveNowButtonRow(): ActionRowBuilder<ButtonBuilder> {
-	const goLiveButton = new ButtonBuilder()
+export interface IScheduleControlState {
+	// the guild has at least one stored event (the active-flag set, which can
+	// include an already-fired one-time event the platform has not closed yet)
+	hasEvents: boolean;
+	// every event in that set is currently paused
+	allPaused: boolean;
+}
+
+/**
+ * Build the schedule board's control row from the live schedule state. Called by
+ * ScheduleBoard.refreshSchedule (which computes the state from the events it
+ * already loaded) on every send + edit, so the phase button is always current.
+ */
+export function buildScheduleControlRow(state: IScheduleControlState): ActionRowBuilder<ButtonBuilder> {
+	const goLive = new ButtonBuilder()
 		.setCustomId(GO_LIVE_NOW_CUSTOM_ID)
 		.setLabel("Go Live Now")
 		.setEmoji("📺")
-		// Success (green) reads as "go", matches the verb. Avoids the
-		// emergency-notice framing that Danger (red) would carry, which
-		// is the wrong vibe for a celebratory "I am live" action.
+		// Success (green) reads as "go"; avoids the emergency framing of Danger.
 		.setStyle(ButtonStyle.Success);
 
-	return new ActionRowBuilder<ButtonBuilder>().addComponents(goLiveButton);
+	let stateButton: ButtonBuilder;
+	if (!state.hasEvents) {
+		// No schedule yet — a pause/resume control would be meaningless, so offer
+		// the how-to instead.
+		stateButton = new ButtonBuilder()
+			.setCustomId(CONFIGURE_CUSTOM_ID)
+			.setLabel("Set up your schedule")
+			.setEmoji("🗓️")
+			.setStyle(ButtonStyle.Primary);
+	} else if (state.allPaused) {
+		// Everything is paused → the only sensible next action is resume.
+		stateButton = new ButtonBuilder()
+			.setCustomId(RESUME_ALL_CUSTOM_ID)
+			.setLabel("Resume reminders")
+			.setEmoji("▶️")
+			.setStyle(ButtonStyle.Success);
+	} else {
+		// At least one event is still firing → offer pause-all.
+		stateButton = new ButtonBuilder()
+			.setCustomId(PAUSE_ALL_CUSTOM_ID)
+			.setLabel("Pause reminders")
+			.setEmoji("⏸️")
+			.setStyle(ButtonStyle.Secondary);
+	}
+
+	return new ActionRowBuilder<ButtonBuilder>().addComponents(goLive, stateButton);
 }
 
-// Button handler for "Go Live Now". Registered at boot via
-// registerScheduleControlHandlers below.
-//
-// Permission gate: server owner OR a member of the configured admin
-// role. Same model as the ADMIN_COMMANDS gate in main.ts so the rules
-// stay consistent across slash commands and buttons.
-//
-// On authorized click: fires the equivalent of `/go-live-soon when:now`
-// with no note and the default member role as the mention target. The
-// shared postGoLiveAnnouncement helper handles all the channel /
-// embed / allowed-mentions work; this handler only deals with the
-// interaction acking.
-async function handleGoLiveNowButton(interaction: ButtonInteraction): Promise<void> {
+// ── handler ─────────────────────────────────────────────────────────────
+
+async function handleScheduleControl(interaction: ButtonInteraction): Promise<void> {
 	const guildId = interaction.guildId;
 	if (!guildId || !interaction.guild) {
-		await interaction.reply({
-			embeds: [errorEmbed("This button only works inside a server.")],
-			flags: MessageFlags.Ephemeral,
-		});
+		await interaction.reply({ embeds: [errorEmbed("This button only works inside a server.")], flags: MessageFlags.Ephemeral });
 		return;
 	}
 
-	// Load config for the admin role check. If the guild has not
-	// completed Phase 2 of setup yet, adminRoleId is null and only the
-	// server owner can fire the button.
+	// Every schedule control is owner/admin only. Persistent buttons cannot rely
+	// on a slash command's permission filter, so re-verify the clicker here.
 	const config = await guildConfigStore.findByGuildId(guildId);
-	const isOwner = interaction.user.id === interaction.guild.ownerId;
-	// Cache-first, fetch-fallback: the members cache can be cold (large guild,
-	// fresh restart), and a miss would wrongly deny a legitimate admin. Only
-	// fetch when there is a role to check and the actor is not the owner.
-	let member = interaction.guild.members.cache.get(interaction.user.id) ?? null;
-	if (!member && !isOwner && config?.adminRoleId) {
-		member = (await interaction.guild.members.fetch(interaction.user.id).catch(() => null)) ?? null;
-	}
-	const hasAdminRole = (config?.adminRoleId && member?.roles.cache.has(config.adminRoleId)) ?? false;
-
-	if (!isOwner && !hasAdminRole) {
-		await interaction.reply({
-			embeds: [errorEmbed(embedContent.responses.noWizardPowers)],
-			flags: MessageFlags.Ephemeral,
-		});
+	const allowed = await gateOwnerOrAdmin(interaction, config);
+	if (!allowed) {
+		await interaction.reply({ embeds: [errorEmbed(embedContent.responses.noWizardPowers)], flags: MessageFlags.Ephemeral });
 		return;
 	}
 
-	// Authorized. Fire the announcement via the shared helper. Note +
-	// role override are intentionally null: the button is the panic-
-	// button shortcut, the slash command remains the path for richer
-	// inputs.
-	const result = await postGoLiveAnnouncement(interaction.client, guildId, "now", null, null);
+	const action = interaction.customId.split(":")[1];
+	switch (action) {
+		case "go_live_now":
+			await runGoLiveNow(interaction, guildId);
+			return;
+		case "configure":
+			await runConfigureHowTo(interaction);
+			return;
+		case "pause_all":
+			await runBulkSchedule(interaction, guildId, "paused");
+			return;
+		case "resume_all":
+			await runBulkSchedule(interaction, guildId, "resumed");
+			return;
+		default:
+			// Stale button from an older board (customId no longer recognized).
+			await interaction.reply({ content: "This control is no longer available.", flags: MessageFlags.Ephemeral });
+	}
+}
 
+async function runGoLiveNow(interaction: ButtonInteraction, guildId: string): Promise<void> {
+	// Fire the equivalent of /go-live-soon when:now via the shared helper. Note +
+	// role override are null — the button is the one-tap shortcut; the slash
+	// command remains the path for richer inputs.
+	const result = await postGoLiveAnnouncement(interaction.client, guildId, "now", null, null);
 	const c = embedContent.goLiveSoon;
 	if (result.ok) {
 		await interaction.reply({ content: c.posted, flags: MessageFlags.Ephemeral });
 		return;
 	}
-
 	const errorMsg =
-		result.reason === "setup-required"
-			? c.setupRequired
-			: result.reason === "invalid-lead-time"
-				? c.invalidLeadTime
-				: c.postFailed;
+		result.reason === "setup-required" ? c.setupRequired : result.reason === "invalid-lead-time" ? c.invalidLeadTime : c.postFailed;
+	await interaction.reply({ embeds: [errorEmbed(errorMsg)], flags: MessageFlags.Ephemeral });
+}
 
+async function runConfigureHowTo(interaction: ButtonInteraction): Promise<void> {
+	// A button cannot launch a slash command, so the "set up your schedule"
+	// affordance points the admin at the commands that do.
 	await interaction.reply({
-		embeds: [errorEmbed(errorMsg)],
+		content: [
+			"**Set up your schedule with one of these:**",
+			"• `/configure-stream-schedule` for a recurring stream or event",
+			"• `/announce-stream` for a one-off event at a specific date and time",
+			"• `/configure-kvk-season` for a full KvK season of events",
+			"",
+			"Once at least one schedule exists, this button becomes a Pause/Resume toggle.",
+		].join("\n"),
 		flags: MessageFlags.Ephemeral,
 	});
 }
 
-// Register the persistent button handler. Called once at boot from
-// main.ts before the InteractionCreate listener installs. Mirrors the
-// registerDecreeEditHandlers / registerLeaderboardChannelHandlers
-// pattern so the registry is populated synchronously at module load.
-export function registerScheduleControlHandlers(): void {
-	registerButton(BUTTON_PREFIX, handleGoLiveNowButton);
+async function runBulkSchedule(interaction: ButtonInteraction, guildId: string, action: "paused" | "resumed"): Promise<void> {
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	const result = action === "paused" ? await pauseAllGuildEvents(guildId) : await resumeAllGuildEvents(guildId);
+	// Refresh the board so the toggle flips to its opposite and paused tags
+	// update. Fire-and-forget — the DB writes are the source of truth and the
+	// next refresh tick reconciles regardless.
+	refreshSchedule(interaction.client, guildId).catch((err) => console.error(`[schedule-controls] refresh after ${action} failed`, err));
+	await interaction.editReply({ content: summarizeBulk(result, action) });
 }
 
-// Boot-time recovery: check whether the stored schedule message
-// already has the Go Live Now button attached, and add it if not.
-// Covers existing guilds whose schedule board was posted BEFORE this
-// feature shipped — those messages have embeds but no components, so
-// ScheduleBoard's edit path (which now reapplies components) cannot
-// retroactively add them without a triggering refresh. This helper
-// forces the attach on boot so the button shows up immediately
-// instead of waiting for the next event create / reminder fire.
-//
-// Idempotent: if the button is already present (any future boot
-// after the first), the customId match short-circuits without an
-// edit. One Discord round trip to fetch the message; one more only
-// if the button needs adding.
-export async function ensureGoLiveButtonOnScheduleBoard(client: Client, guild: Guild): Promise<void> {
-	const config = await guildConfigStore.findByGuildId(guild.id);
-	if (!config?.scheduleChannelId || !config.scheduleMessageId) return;
-
-	const channel = await client.channels.fetch(config.scheduleChannelId).catch(() => null);
-	if (!channel || !(channel instanceof TextChannel)) return;
-
-	const message = await channel.messages.fetch(config.scheduleMessageId).catch(() => null);
-	if (!message) return;
-
-	// Walk existing components for our button's customId. Discord.js
-	// returns components as an array of action rows; each row carries
-	// an array of message components. Buttons expose customId; non-
-	// button components (select menus etc) do not, so we narrow via
-	// the property check. Match by exact id so a future button on the
-	// same row (item 36 expansion) does not produce a false positive
-	// when only some buttons are present.
-	const alreadyHasButton = message.components.some((row) => {
-		const components = (row as unknown as { components?: Array<{ customId?: string }> }).components ?? [];
-		return components.some((c) => c.customId === GO_LIVE_NOW_CUSTOM_ID);
-	});
-	if (alreadyHasButton) return;
-
-	// No button. Attach. Preserve the existing embeds so the schedule
-	// board content stays untouched — only the components row changes.
-	try {
-		await message.edit({ embeds: message.embeds, components: [buildGoLiveNowButtonRow()] });
-		console.log(`[ScheduleControls] attached Go Live Now button to existing schedule board in guild ${guild.id}`);
-	} catch (error) {
-		console.warn(`[ScheduleControls] failed to attach Go Live Now button in guild ${guild.id}`, error);
+function summarizeBulk(result: IBulkScheduleResult, action: "paused" | "resumed"): string {
+	if (result.total === 0) return "There are no schedules on this server yet.";
+	if (result.changed === 0) {
+		return action === "paused" ? "Every schedule was already paused." : "Nothing was paused, so there is nothing to resume.";
 	}
+	const verb = action === "paused" ? "⏸️ Paused" : "▶️ Resumed";
+	const noun = result.changed === 1 ? "schedule" : "schedules";
+	const tail = result.failed > 0 ? ` (${result.failed} could not be updated, check the bot's logs)` : "";
+	return `${verb} ${result.changed} ${noun}${tail}.`;
+}
+
+/**
+ * Register the schedule control handler. Called once at boot from main.ts before
+ * the InteractionCreate listener installs.
+ */
+export function registerScheduleControlHandlers(): void {
+	registerButton(BUTTON_PREFIX, handleScheduleControl);
 }

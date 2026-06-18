@@ -49,7 +49,7 @@ const SLOT_LABELS: ReadonlyArray<{ label: string; configField: string }> = [
 	{ label: "Schedule board", configField: "scheduleChannelId" },
 	{ label: "Announcements", configField: "announcementsChannelId" },
 	{ label: "Admin / inner sanctum", configField: "adminChannelId" },
-	{ label: "Next-up board", configField: "nextDecreeChannelId" },
+	{ label: "Upcoming events", configField: "nextDecreeChannelId" },
 ];
 const VALID_SLOTS = new Set(SLOT_LABELS.map((s) => s.configField));
 

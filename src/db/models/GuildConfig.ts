@@ -45,10 +45,10 @@ const guildConfigSchema = new Schema(
 		// keeps up to date. null until autoSetup finishes posting the intro,
 		// at which point this is populated and every subsequent refresh edits
 		// that one message in place so the channel never accumulates clutter.
-		// As of FUTURE_PLANS item 36 (partial, 2026-05-22) this same message
-		// also hosts the Go Live Now button row; ScheduleBoard attaches the
-		// components on send + edit via buildGoLiveNowButtonRow in
-		// ScheduleControls.
+		// As of v1.6 (item 36) this same message also hosts the schedule control
+		// row: Go Live Now plus a phase-gated Set up / Pause / Resume button.
+		// ScheduleBoard attaches the components on send + edit via
+		// buildScheduleControlRow in ScheduleControls.
 		scheduleMessageId: { type: String, required: false, default: null },
 
 		// ── leaderboard board message id (v1.6 Phase 2, item 13, added 2026-06-17) ─
@@ -399,16 +399,16 @@ const guildConfigSchema = new Schema(
 		//        panel message is deleted and reposted). Legacy rows load with
 		//        an empty object and the boot sweep posts fresh panels.
 		// Where: nested object mirroring introMessageIds so adding a panel for
-		//        another channel later is a one-line schema bump. Phase 5's
-		//        first increment populates leaderboard + schedule; intro and
-		//        announcements slots are declared now so the follow-up
-		//        increment needs no migration.
+		//        another channel later is a one-line schema bump. Panels exist for
+		//        the leaderboard, intro, and announcements channels. The schedule
+		//        channel has NO panel — its controls (Go Live + a phase-gated
+		//        Pause/Resume toggle) live on the schedule board itself, owned by
+		//        ScheduleControls, so there is no scheduleChannelId slot here.
 		// How:   nullable per slot, same contract as introMessageIds — null
 		//        means "no panel posted yet, post one".
 		powerUpMessageIds: {
 			type: {
 				leaderboardChannelId: { type: String, required: false, default: null },
-				scheduleChannelId: { type: String, required: false, default: null },
 				introChannelId: { type: String, required: false, default: null },
 				announcementsChannelId: { type: String, required: false, default: null },
 			},

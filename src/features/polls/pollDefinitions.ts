@@ -41,8 +41,12 @@ export const INTRO_AWARENESS_POLL: IPollDefinition = {
 	],
 };
 
-// Polls the dispatcher broadcasts on boot. Add a definition here to ship a new
-// audience poll; remove one once its data is collected. Removing then re-adding
-// is safe: the poll_sent bot-log keys keep already-asked guilds from being
-// re-prompted, so only guilds that never saw it get the poll.
-export const ACTIVE_POLLS: IPollDefinition[] = [INTRO_AWARENESS_POLL];
+// Polls the dispatcher broadcasts on boot. PARKED as of 2026-06-18: the boot-
+// dispatched audience poll is shelved (the owner is reconsidering polls in favor
+// of a future /poll slash command, possibly in a dedicated channel). The
+// dispatcher framework stays in place but dormant — an empty list means
+// dispatchPolls posts nothing and logPollTallies logs nothing. INTRO_AWARENESS_POLL
+// above is retained for reference / reuse when the /poll work resumes. Re-adding a
+// definition here is safe: the poll_sent bot-log keys keep already-asked guilds
+// from being re-prompted.
+export const ACTIVE_POLLS: IPollDefinition[] = [];

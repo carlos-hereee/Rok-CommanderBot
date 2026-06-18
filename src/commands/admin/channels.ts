@@ -30,7 +30,7 @@ const HIDEABLE_CHANNELS = [
 	{ name: "Leaderboard", value: "leaderboardChannelId" },
 	{ name: "Event schedule", value: "scheduleChannelId" },
 	{ name: "Announcements", value: "announcementsChannelId" },
-	{ name: "Next decree", value: "nextDecreeChannelId" },
+	{ name: "Upcoming events", value: "nextDecreeChannelId" },
 ] as const;
 
 type HideableField = (typeof HIDEABLE_CHANNELS)[number]["value"];

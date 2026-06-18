@@ -788,7 +788,7 @@ export class GuildSetupManager {
 			if (existingByName) {
 				// Scan for an existing bot-authored intro embed with a
 				// matching title. Embed titles are stable identifiers
-				// for each intro (nextDecreeIntro → "🛡️ The Next Decree",
+				// for each intro (nextDecreeIntro → "🔜 Upcoming Events",
 				// etc.) so title comparison is the cheapest way to
 				// recognize our own prior post without storing a hash.
 				const selfId = guild.client.user?.id;
