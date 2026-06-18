@@ -24,6 +24,7 @@ type EventLike = {
 	guildId: string;
 	name: string;
 	description: string;
+	imageUrl: string | null;
 	type: "recurring" | "one-time";
 	intervalHours: number;
 	firstOccurrence: Date;
@@ -105,6 +106,7 @@ export const eventStore = {
 		reminderOffsets?: number[];
 		prepSteps?: { id: string; label: string; order: number }[];
 		mentionRoleId?: string | null;
+		imageUrl?: string | null;
 		[key: string]: unknown;
 	}): Promise<EventLike> {
 		if (useRemoteEvents) {

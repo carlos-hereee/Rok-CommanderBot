@@ -84,6 +84,12 @@ export async function postGoLiveAnnouncement(
 		.setColor(embedContent.COLORS.ANNOUNCEMENTS)
 		.setFooter({ text: embedContent.FOOTER });
 
+	// Large banner from the guild's default event image. Go-live is not tied to
+	// a single event, so there is no per-event imageUrl here — the guild default
+	// is the only source. Guard so null is a clean no-op (no image configured).
+	const img = config.defaultEventImageUrl ?? null;
+	if (img) embed.setImage(img);
+
 	const mention = roleId ? `<@&${roleId}>` : "@here";
 
 	try {

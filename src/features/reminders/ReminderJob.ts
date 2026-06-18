@@ -26,8 +26,11 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 		return;
 	}
 
-	// ② build the embed
-	const embed = reminderEmbed(event, occurrence, offsetMinutes);
+	// ② build the embed. Resolve the event image with the guild default as the
+	// fallback (media attachments). null when neither is set, in which case
+	// reminderEmbed renders no thumbnail and the embed is unchanged from before.
+	const img = event.imageUrl ?? config.defaultEventImageUrl ?? null;
+	const embed = reminderEmbed(event, occurrence, offsetMinutes, img);
 
 	// ③ compose the mention. precedence is event override → guild member
 	// role → @here. The per-event override (event.mentionRoleId) lets a

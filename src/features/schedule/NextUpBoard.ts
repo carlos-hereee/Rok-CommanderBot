@@ -119,7 +119,7 @@ export async function refreshNextUp(client: Client, guildId: string): Promise<vo
 			if (postedDecrees.has(key)) continue;
 
 			try {
-				await tryPostDecree(channel, event, occurrence);
+				await tryPostDecree(channel, event, occurrence, config.defaultEventImageUrl ?? null);
 				postedDecrees.add(key);
 			} catch (error) {
 				console.error("[nextUp] post failed", { guildId, eventId: event.eventId, occurrenceMs }, error);
@@ -171,7 +171,12 @@ async function seedDedupFromChannel(channel: TextChannel, guildId: string): Prom
 	}
 }
 
-async function tryPostDecree(channel: TextChannel, event: IGameEvent, occurrence: Date): Promise<void> {
+async function tryPostDecree(
+	channel: TextChannel,
+	event: IGameEvent,
+	occurrence: Date,
+	defaultImageUrl: string | null
+): Promise<void> {
 	// Merge overrides on top of the event payload before rendering so
 	// the post reflects edits applied through the modal flow. Apply-once
 	// overrides are keyed on the original occurrence; this lookup runs
@@ -215,6 +220,11 @@ async function tryPostDecree(channel: TextChannel, event: IGameEvent, occurrence
 				: [])
 		)
 		.setFooter({ text: "Click Edit below to adjust this decree (admins only)." });
+
+	// Large banner: this event's image, then the guild default. Guard so null is
+	// a clean no-op and a legacy decree with no image posts exactly as before.
+	const img = event.imageUrl ?? defaultImageUrl ?? null;
+	if (img) embed.setImage(img);
 
 	// occurrence (not renderedTime) is the original anchor — that's the
 	// key the modal handler uses when looking up + writing overrides, so

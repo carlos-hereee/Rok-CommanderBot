@@ -82,9 +82,14 @@ function base(): EmbedBuilder {
 }
 
 // ── public ────────────────────────────────────────────────────
-export function reminderEmbed(event: IGameEvent, occurrence: Date, offsetMinutes: number): EmbedBuilder {
+export function reminderEmbed(
+	event: IGameEvent,
+	occurrence: Date,
+	offsetMinutes: number,
+	imageUrl: string | null = null
+): EmbedBuilder {
 	const c = embedContent.reminder;
-	return base()
+	const embed = base()
 		.setTitle(c.title(event.name, offsetMinutes))
 		.setDescription(c.description)
 		.setColor(embedContent.COLORS.REMINDER)
@@ -101,6 +106,11 @@ export function reminderEmbed(event: IGameEvent, occurrence: Date, offsetMinutes
 				value: `<t:${Math.floor(occurrence.getTime() / 1000)}:F>`,
 			}
 		);
+	// Reminders use a small corner thumbnail (the large banner is reserved for
+	// go-live and decree posts). Guard so a null image is a clean no-op and an
+	// event with no image and no guild default posts exactly as before.
+	if (imageUrl) embed.setThumbnail(imageUrl);
+	return embed;
 }
 // ── test reminder embed ──
 // dispatched from the admin dashboard as a drill.

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { scheduleBoardEmbed, IScheduleField } from "./embedBuilder.js";
+import { scheduleBoardEmbed, reminderEmbed, IScheduleField } from "./embedBuilder.js";
+import type { IGameEvent } from "../features/events/event.types.js";
 // Relative path to dodge a vitest+vite-tsconfig-paths bug where `@`-aliased
 // imports in TEST files fail with "Cannot find package" even though the
 // same imports resolve fine in source files. Pre-existing project config
@@ -142,5 +143,34 @@ describe("scheduleBoardEmbed layout", () => {
 
 		expect(json.description).toBe(embedContent.scheduleBoard.seasonEnded);
 		expect(json.fields ?? []).toHaveLength(0);
+	});
+});
+
+describe("reminderEmbed image", () => {
+	// Minimal event — reminderEmbed only reads name + prepSteps. Cast keeps the
+	// fixture small without spelling out every IGameEvent field.
+	const event = {
+		name: "Ancient Ruins",
+		prepSteps: [{ id: "1", label: "Activate stats token", order: 1 }],
+	} as IGameEvent;
+	const occurrence = new Date("2026-06-20T12:00:00Z");
+
+	it("sets a corner thumbnail (not a banner image) when an image url is provided", () => {
+		const url = "https://cdn.example.com/ruins.png";
+		const json = reminderEmbed(event, occurrence, 30, url).toJSON() as EmbedJSON;
+		expect(json.thumbnail?.url).toBe(url);
+		// Reminders deliberately use the small thumbnail slot, never the large
+		// banner image (which is reserved for go-live and decree posts).
+		expect(json.image).toBeUndefined();
+	});
+
+	it("renders no thumbnail when the image url is null", () => {
+		const json = reminderEmbed(event, occurrence, 30, null).toJSON() as EmbedJSON;
+		expect(json.thumbnail).toBeUndefined();
+	});
+
+	it("renders no thumbnail when the image url is omitted (legacy callers)", () => {
+		const json = reminderEmbed(event, occurrence, 30).toJSON() as EmbedJSON;
+		expect(json.thumbnail).toBeUndefined();
 	});
 });

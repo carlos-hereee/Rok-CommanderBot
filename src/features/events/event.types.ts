@@ -7,6 +7,12 @@ export interface IGameEvent {
 	type: "recurring" | "one-time";
 	intervalHours: number;
 	firstOccurrence: Date;
+	// Optional public https image URL rendered in this event's embeds (a banner
+	// on go-live + decree, a thumbnail on reminders). Same `?` + `| null` shape
+	// as seasonEnd / mentionRoleId: Mongoose marks `required:false, default:null`
+	// fields as truly optional in the inferred document type, and every read site
+	// treats undefined and null identically as "no image".
+	imageUrl?: string | null;
 	// nullable AND optional: KvK events have a season anchor (inherited
 	// from GuildConfig.kvkSeasonEnd at create time), regular announcements
 	// leave it null and never auto archive. ReminderScheduler and

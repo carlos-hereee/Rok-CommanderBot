@@ -314,6 +314,21 @@ const guildConfigSchema = new Schema(
 		//        backfill.
 		weekStart: { type: String, enum: ["sunday", "monday"], default: "sunday" },
 
+		// ── default event image (v1.6 Phase 4, media attachments) ───────
+		// What:  per-guild fallback image URL used by event embeds when an
+		//        event has no imageUrl of its own. Resolution at each embed site
+		//        is `event.imageUrl ?? guildConfig.defaultEventImageUrl ?? null`,
+		//        so a guild can give every event a house banner without setting
+		//        one per event. The go-live announcement (not tied to a single
+		//        event) uses this value directly.
+		// Who:   read by ReminderJob, NextUpBoard, and postGoLiveAnnouncement at
+		//        embed-build time. Set by the dashboard (server/client half).
+		// When:  optional. null on legacy rows, so embeds stay text-only until a
+		//        guild opts in. Never empty by contract once set — it is the
+		//        last-resort image so the embed always has something to render.
+		// How:   plain nullable String, same trust model as Event.imageUrl.
+		defaultEventImageUrl: { type: String, required: false, default: null },
+
 		// ── hidden channels (v1.5.1 item 4, added 2026-05-12) ──────────
 		// Tracks which optional bot-managed channels the admin has chosen
 		// to hide from members. Hiding applies @everyone deny ViewChannel
