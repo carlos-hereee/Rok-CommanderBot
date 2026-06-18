@@ -116,6 +116,12 @@ export const generalEventsCopy: IPluginCopy = {
 		row: (medal: string, username: string, score: number, events: number, acknowledged: number) =>
 			`${medal} **${username}**\n` + `Score: ${score} | ` + `Events: ${events} | ` + `Reminders acknowledged: ${acknowledged}`,
 		medals: ["🥇", "🥈", "🥉"],
+		// Shown on the pinned LeaderboardBoard when no member has earned a
+		// standing in the current window yet. Neutral streamer voice; points
+		// members at the two ways to climb so an empty board reads as an
+		// invitation rather than a dead feature.
+		boardEmptyState:
+			"No standings yet this week. React ✅ to event reminders and hop in voice during events to climb the board.",
 	},
 
 	// Public schedule board pinned in the schedule channel. Title

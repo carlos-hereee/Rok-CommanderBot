@@ -308,14 +308,19 @@ export function leaderboardEmbed(
 	}[]
 ): EmbedBuilder {
 	const c = embedContent.leaderboard;
+	// Empty standings only happen for the pinned LeaderboardBoard (the command
+	// short-circuits with an ephemeral "no activity" reply before it ever calls
+	// this builder), so an empty `ranked` renders the board's empty-state copy
+	// rather than an embed with a blank description.
+	const description = ranked.length
+		? ranked
+				.map((p, i) => c.row(c.medals[i] ?? `**${i + 1}.**`, p.username, p.totalScore, p.eventsAttended, p.totalAcknowledged))
+				.join("\n\n")
+		: c.boardEmptyState;
 	return base()
 		.setTitle(c.title(eventName))
 		.setColor(embedContent.COLORS.LEADERBOARD)
-		.setDescription(
-			ranked
-				.map((p, i) => c.row(c.medals[i] ?? `**${i + 1}.**`, p.username, p.totalScore, p.eventsAttended, p.totalAcknowledged))
-				.join("\n\n")
-		)
+		.setDescription(description)
 		.setFooter({ text: c.footer });
 }
 // ── KvK configuration confirmation embed ──

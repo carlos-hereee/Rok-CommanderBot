@@ -51,6 +51,19 @@ const guildConfigSchema = new Schema(
 		// ScheduleControls.
 		scheduleMessageId: { type: String, required: false, default: null },
 
+		// ── leaderboard board message id (v1.6 Phase 2, item 13, added 2026-06-17) ─
+		// What:  id of the pinned message inside leaderboardChannelId that
+		//        LeaderboardBoard keeps up to date with the week's standings.
+		// Who:   written by LeaderboardBoard.postOrEdit on first post; read on
+		//        every refresh so subsequent updates edit that one message in
+		//        place rather than spamming the channel. Mirrors scheduleMessageId.
+		// When:  null until the first refresh posts the board (boot sweep, a
+		//        reminder fire, or debounced activity). Repopulated when an admin
+		//        deletes the message and the next refresh reposts.
+		// How:   nullable so legacy guilds load cleanly; the post path treats
+		//        null as "never posted, send a fresh one and persist the id".
+		leaderboardMessageId: { type: String, required: false, default: null },
+
 		// ── KvK season end ─────────────────────────────────────────────
 		// What:  the configured end date of the guild's current KvK season.
 		//        Single canonical date per guild. Events created with

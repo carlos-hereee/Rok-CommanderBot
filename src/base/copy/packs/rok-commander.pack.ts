@@ -142,6 +142,11 @@ export const rokCommanderCopy = {
 		row: (medal: string, username: string, score: number, events: number, acknowledged: number) =>
 			`${medal} **${username}**\n` + `Score: ${score} | ` + `Events: ${events} | ` + `Reminders acknowledged: ${acknowledged}`,
 		medals: ["🥇", "🥈", "🥉"],
+		// Shown on the pinned LeaderboardBoard when no warrior has earned a
+		// standing in the current window yet. Points Mortals at the two ways to
+		// climb so an empty board reads as an invitation, not a dead feature.
+		boardEmptyState:
+			"No deeds recorded yet this week. React ✅ to event reminders and join the call during events to claim your place on the board.",
 	},
 
 	// ── schedule board (public, lives in the event-schedule channel) ──

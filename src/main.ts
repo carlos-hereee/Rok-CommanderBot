@@ -27,6 +27,7 @@ import { dispatchButton, dispatchModal } from "@handlers/interactionRegistry.js"
 import { registerDecreeEditHandlers } from "@features/schedule/decreeEditHandlers.js";
 import { registerLeaderboardChannelHandlers } from "@features/leaderboard/leaderboardChannelHandlers.js";
 import { refreshAllNextUp } from "@features/schedule/NextUpBoard.js";
+import { refreshAllLeaderboards } from "@features/leaderboard/LeaderboardBoard.js";
 import { ensureGoLiveButtonOnScheduleBoard, registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
 import { registerSuggestionBoxHandlers } from "@features/suggestion-box/SuggestionBox.js";
 
@@ -551,6 +552,17 @@ process.on("uncaughtException", (err) => {
 		// How:  iterates client.guilds.cache sequentially (alphabetical by
 		//       guild id) so errors on one guild cannot stall the rest.
 		await refreshAllSchedules(client);
+
+		// ── startup rehydration of the leaderboard board ──
+		// What: refresh every guild's pinned leaderboard message so this week's
+		//       standings are current after any downtime, and so the weekly
+		//       window reflects the right week on boot (a bot that was offline
+		//       across a week rollover would otherwise show last week until the
+		//       next activity or reminder fire).
+		// Where: mirrors refreshAllSchedules above. Per-guild errors are logged
+		//        and swallowed inside refreshLeaderboard so one bad guild cannot
+		//        stall the rest.
+		await refreshAllLeaderboards(client);
 
 		// ── startup sweep of next-decree boards ──
 		// What: posts every upcoming decree in the next 24h horizon to each

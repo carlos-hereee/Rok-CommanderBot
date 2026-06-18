@@ -63,6 +63,13 @@ export const BOT_CONSTANTS = {
 	// rate limit so a jumpy admin cannot spam their alliance channel
 	TEST_REMINDER_COOLDOWN_MS: 60_000, // one test per event per 60 seconds
 
+	// ── leaderboard board refresh debounce (v1.6 Phase 2, item 13) ──
+	// Activity writes (✅ reactions, voice sessions) trigger a LeaderboardBoard
+	// refresh, but a busy event produces a flurry of writes. Collapse them to
+	// one edit per guild per window so the board updates promptly without
+	// hammering Discord with dozens of edits. Read by scheduleLeaderboardRefresh.
+	LEADERBOARD_REFRESH_DEBOUNCE_MS: 60_000, // at most one activity-driven refresh per guild per 60s
+
 	// ── invite URL provenance ─────────────────────────────────────
 	// The actual OAuth install URL is composed in @utils/config as
 	// `botInviteLink` so dev and prod each serve their own client id.

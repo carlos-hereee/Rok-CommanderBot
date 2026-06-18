@@ -5,6 +5,7 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { reminderEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { refreshNextUp } from "@features/schedule/NextUpBoard.js";
+import { refreshLeaderboard } from "@features/leaderboard/LeaderboardBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 export async function fireReminder(client: Client, event: IGameEvent, occurrence: Date, offsetMinutes: number): Promise<void> {
@@ -73,6 +74,12 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 	// the NextUpBoard channel is append-only and a missed post just means
 	// the next refresh trigger (next fire, next boot) catches up.
 	refreshNextUp(client, event.guildId).catch((err) => console.error("[reminder] refreshNextUp failed after fire", err));
+
+	// ⑨ refresh the pinned leaderboard board so this week's standings reflect
+	// the fresh acknowledgement window. Fire-and-forget for the same reason as
+	// the two refreshes above — a Discord hiccup here must not undo the
+	// successful reminder fire.
+	refreshLeaderboard(client, event.guildId).catch((err) => console.error(LOG_MESSAGES.leaderboard.refreshAfterReminderFailed, err));
 }
 
 /*

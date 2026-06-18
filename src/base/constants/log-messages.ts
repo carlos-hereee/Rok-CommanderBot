@@ -40,6 +40,24 @@ export const LOG_MESSAGES = {
 		hourlyRefreshFailed: "[schedule] hourly refreshAllSchedules failed:",
 	},
 
+	// ── leaderboard board ──────────────────────────────────────────────
+	leaderboard: {
+		channelMissing: (channelId: string, guildId: string) =>
+			`[leaderboard] leaderboard channel ${channelId} not found or not a TextChannel for guild ${guildId}`,
+		unexpectedError: (guildId: string) => `[leaderboard] unexpected error refreshing guild ${guildId}:`,
+		storedMessageDeleted: (messageId: string, guildId: string) =>
+			`[leaderboard] stored leaderboardMessageId ${messageId} was deleted for guild ${guildId}. reposting.`,
+		editFailed: (messageId: string, guildId: string) =>
+			`[leaderboard] failed to edit leaderboardMessageId ${messageId} for guild ${guildId}:`,
+		staleAuthor: (messageId: string, guildId: string) =>
+			`[leaderboard] leaderboardMessageId ${messageId} in guild ${guildId} is not authored by this bot. skipping — ScheduleBoard owns homebase recovery.`,
+		postFailed: (guildId: string) => `[leaderboard] failed to post leaderboard message for guild ${guildId}:`,
+		pinFailed: (guildId: string) => `[leaderboard] pin failed for guild ${guildId} (likely missing ManageMessages):`,
+		refreshAfterReminderFailed: "[leaderboard] refresh after fireReminder failed:",
+		refreshAfterActivityFailed: "[leaderboard] debounced refresh after activity failed:",
+		hourlyRefreshFailed: "[leaderboard] hourly refreshAllLeaderboards failed:",
+	},
+
 	// ── reminder firing ────────────────────────────────────────────────
 	reminder: {
 		noAnnouncementsChannel: (guildId: string) =>
