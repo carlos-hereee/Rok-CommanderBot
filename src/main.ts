@@ -30,6 +30,7 @@ import { refreshAllNextUp } from "@features/schedule/NextUpBoard.js";
 import { refreshAllLeaderboards } from "@features/leaderboard/LeaderboardBoard.js";
 import { ensureGoLiveButtonOnScheduleBoard, registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
 import { registerSuggestionBoxHandlers } from "@features/suggestion-box/SuggestionBox.js";
+import { registerPollHandlers, dispatchPolls, logPollTallies } from "@features/polls/PollDispatcher.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -246,6 +247,7 @@ process.on("uncaughtException", (err) => {
 	registerLeaderboardChannelHandlers();
 	registerScheduleControlHandlers();
 	registerSuggestionBoxHandlers();
+	registerPollHandlers();
 
 	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
@@ -590,6 +592,17 @@ process.on("uncaughtException", (err) => {
 		//        guild is isolated so one failure cannot stall others.
 		//        Errors are logged and swallowed inside the helper.
 		await postFeatureAnnouncements(client);
+
+		// ── audience poll broadcast ──────────────────────────────
+		// What: broadcast each active poll to eligible guilds once (idempotent
+		//       per poll via the poll_sent botLog key), then log the cross-guild
+		//       tally so the platform owner can read accumulating results from
+		//       Railway logs.
+		// When: boot tail, after postFeatureAnnouncements, so channel ids in
+		//       GuildConfig are freshest. Same per-guild isolation — one guild's
+		//       failure cannot stall the rest (handled inside dispatchPolls).
+		await dispatchPolls(client);
+		await logPollTallies();
 
 		console.log(LOG_MESSAGES.main.readyBanner(client.user?.tag ?? "unknown"));
 	});

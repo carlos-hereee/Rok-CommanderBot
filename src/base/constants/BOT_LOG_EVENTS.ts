@@ -56,6 +56,20 @@ export const BOT_LOG_EVENTS = {
 	// analytics query that joins the two events on guildId can also slice
 	// by ownerId without translating field names per event type.
 	PAIRING_REDEEMED: "pairing_redeemed",
+	// ── audience poll dispatch idempotency (v1.6 Phase 3, item 34a) ─
+	// What:  per-guild log that a specific audience poll has already been
+	//        broadcast to the guild's announcements channel. The log `event`
+	//        string is composed as `poll_sent:<pollId>` so each poll gets its
+	//        own bucket and a redeploy does not repost a poll the guild has
+	//        already received.
+	// Who:   PollDispatcher reads (skip already-sent) and writes (after a
+	//        successful post). No other caller.
+	// When:  read once per active poll per guild per boot; written once per
+	//        successful poll post.
+	// How:   prefix constant + template helper below, same pattern as the
+	//        feature-announcement key, so call sites stay symmetric and the
+	//        pollId rides in the event string without a new schema field.
+	POLL_SENT_PREFIX: "poll_sent",
 	// add more here as needed
 } as const;
 
@@ -64,3 +78,7 @@ export const BOT_LOG_EVENTS = {
 // lands in one place.
 export const featureAnnouncedEvent = (version: string): string =>
 	`${BOT_LOG_EVENTS.FEATURE_ANNOUNCED_PREFIX}:${version}`;
+
+// Compose the per-poll dispatch event key. Mirrors featureAnnouncedEvent so the
+// idempotency model stays consistent across broadcast features.
+export const pollSentEvent = (pollId: string): string => `${BOT_LOG_EVENTS.POLL_SENT_PREFIX}:${pollId}`;
