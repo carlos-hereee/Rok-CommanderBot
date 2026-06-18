@@ -285,6 +285,22 @@ const guildConfigSchema = new Schema(
 		//        admin action and should be its own command if/when needed.
 		leaderboardTrackingEnabled: { type: Boolean, required: false, default: true },
 
+		// ── leaderboard week start (v1.6 Phase 1, item 17, added 2026-06-17) ─
+		// What:  which weekday anchors the leaderboard's "this week" window.
+		//        "sunday" (default) runs Sun to Sat; "monday" runs Mon to Sun.
+		// Who:   read by /leaderboard's thisWeekRange to compute the [from, to]
+		//        window and by its embed title so the boundary is explicit, and
+		//        by Phase 2's LeaderboardBoard which reuses the same window math.
+		// When:  read on every "This week" leaderboard render. Written when an
+		//        admin changes the preference.
+		// Where: per guild, not per user. The per-user timezone preference this
+		//        was once coupled to (FUTURE_PLANS item 16) does not exist, and
+		//        per guild is the right scope for a community bot.
+		// How:   enum-constrained string. Default "sunday" preserves the prior
+		//        hardcoded behavior so legacy rows render identically with no
+		//        backfill.
+		weekStart: { type: String, enum: ["sunday", "monday"], default: "sunday" },
+
 		// ── hidden channels (v1.5.1 item 4, added 2026-05-12) ──────────
 		// Tracks which optional bot-managed channels the admin has chosen
 		// to hide from members. Hiding applies @everyone deny ViewChannel
