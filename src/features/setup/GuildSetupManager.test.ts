@@ -218,12 +218,26 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		expect(autoSetupSpy).toHaveBeenCalledWith(guild, { guildId: "guild-1", ownerId: "owner-1" }, { force: true });
 	});
 
-	it("rebuilds when the stored schedule message cannot be fetched", async () => {
-		guildConfigMock.findByGuildId
-			.mockResolvedValueOnce(makeStoredConfig())
-			.mockResolvedValueOnce(makeStoredConfig({ adminChannelId: "ch-admin-new" }));
+	it("does NOT rebuild when the stored schedule message is missing (10008) — repairs in place", async () => {
+		// Regression (auto-heal duplicate-homebase bug): a deleted/unfetchable
+		// schedule message is NOT proof the homebase is foreign. The ownership
+		// probe returns "unknown", so ensureHomebase keeps the category and
+		// repairs in place (the schedule board reposts its message on the next
+		// refresh) instead of building a duplicate homebase.
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
 
-		const guild = makeGuild({ categoryId: { id: "cat-1" } });
+		const intact = { id: "intact" };
+		const guild = makeGuild({
+			categoryId: { id: "cat-1" },
+			channelFetchMap: {
+				"ch-intro": intact,
+				"ch-commands": intact,
+				"ch-leaderboard": intact,
+				"ch-schedule": intact,
+				"ch-announcements": intact,
+				"ch-admin": intact,
+			},
+		});
 		const scheduleChannel = makeScheduleChannel(async () => {
 			const err = Object.create(DiscordAPIError.prototype);
 			Object.assign(err, { code: 10008, message: "Unknown Message" });
@@ -236,7 +250,8 @@ describe("GuildSetupManager.ensureHomebase", () => {
 
 		const result = await GuildSetupManager.ensureHomebase(client, guild);
 
-		expect(result).toEqual({ action: "rebuilt", repairedChannels: [] });
+		expect(result).toEqual({ action: "skipped", repairedChannels: [] });
+		expect(autoSetupSpy).not.toHaveBeenCalled();
 	});
 
 	it("skips when the stored homebase exists, is ours, and every channel is intact", async () => {
@@ -461,27 +476,32 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		expect(adminChannel.send).toHaveBeenCalledTimes(2);
 	});
 
-	it("rebuilds when the stored scheduleMessageId is null", async () => {
-		// a legacy row could exist with scheduleMessageId still null (the
-		// schema permits it). without an anchor message there is no way to
-		// prove ownership, so treat it as not ours.
-		guildConfigMock.findByGuildId
-			.mockResolvedValueOnce(makeStoredConfig({ scheduleMessageId: null }))
-			.mockResolvedValueOnce(makeStoredConfig({ adminChannelId: "ch-admin-new" }));
+	it("does NOT rebuild when the stored scheduleMessageId is null — repairs in place", async () => {
+		// Regression (auto-heal duplicate-homebase bug): a legacy/blank
+		// scheduleMessageId is not proof of a foreign homebase either. The probe
+		// returns "unknown" (no anchor to check), so we keep the category and
+		// repair in place rather than building a duplicate.
+		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig({ scheduleMessageId: null }));
 
-		const guild = makeGuild({ categoryId: { id: "cat-1" } });
-		const adminChannel = makeAdminChannel("ch-admin-new");
-		const client = makeClient({
-			selfId: "bot-1",
-			fetchChannel: async (id) => (id === "ch-admin-new" ? adminChannel : null),
+		const intact = { id: "intact" };
+		const guild = makeGuild({
+			categoryId: { id: "cat-1" },
+			channelFetchMap: {
+				"ch-intro": intact,
+				"ch-commands": intact,
+				"ch-leaderboard": intact,
+				"ch-schedule": intact,
+				"ch-announcements": intact,
+				"ch-admin": intact,
+			},
 		});
+		const client = makeClient({ selfId: "bot-1" });
 
 		const result = await GuildSetupManager.ensureHomebase(client, guild);
 
-		expect(result).toEqual({ action: "rebuilt", repairedChannels: [] });
-		// same shared-cluster invariant: never delete, only force-rebuild.
+		expect(result).toEqual({ action: "skipped", repairedChannels: [] });
+		expect(autoSetupSpy).not.toHaveBeenCalled();
 		expect(guildConfigMock.deleteByGuildId).not.toHaveBeenCalled();
-		expect(autoSetupSpy).toHaveBeenCalledWith(guild, { guildId: "guild-1", ownerId: "owner-1" }, { force: true });
 	});
 });
 

@@ -152,11 +152,12 @@ export function registerChannelDeleteWatcher(client: Client): void {
 				return;
 			}
 
-			// ⑥ ownership probe. if the homebase is not ours (shared guild,
-			//    foreign rows, rotated bot account) we refuse to rebuild
-			//    anything. same rule as the boot sweep.
-			const ownedByUs = await GuildSetupManager.isHomebaseOwnedByThisBot(client, guild.id, stored);
-			if (!ownedByUs) {
+			// ⑥ ownership probe. Refuse repair ONLY when the homebase is positively
+			//    foreign (anchor authored by a different bot). "unknown" (missing or
+			//    deleted anchor) proceeds to repair — same rule as the boot sweep, so
+			//    a deleted schedule message never blocks a legitimate channel repair.
+			const ownership = await GuildSetupManager.isHomebaseOwnedByThisBot(client, guild.id, stored);
+			if (ownership === "foreign") {
 				console.warn(LOG_MESSAGES.setup.realtimeRepairForeignHomebase(guild.id));
 				return;
 			}

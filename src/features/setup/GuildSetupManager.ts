@@ -476,8 +476,14 @@ export class GuildSetupManager {
 		//    stored scheduleMessageId and compare authors. Every autoSetup
 		//    posts exactly this message, so it is a reliable provenance
 		//    marker for the whole homebase.
-		const ownedByUs = await GuildSetupManager.isHomebaseOwnedByThisBot(client, guild.id, stored);
-		if (!ownedByUs) {
+		const ownership = await GuildSetupManager.isHomebaseOwnedByThisBot(client, guild.id, stored);
+		// Rebuild ONLY when the homebase is positively foreign (anchor exists,
+		// authored by a different bot). "unknown" (missing/deleted anchor) falls
+		// through to repair-in-place: rebuilding there would duplicate our OWN
+		// homebase on a benign missing schedule message, and clobber any
+		// /rename-channel names (the rebuild path uses pack defaults). The schedule
+		// board reposts its missing message on the next refresh.
+		if (ownership === "foreign") {
 			console.warn(LOG_MESSAGES.setup.homebaseNotOwned(guild.id));
 			await GuildSetupManager.rebuildFromStaleConfig(guild);
 			await GuildSetupManager.postCastleRebuiltNotice(client, guild.id);
@@ -1163,33 +1169,46 @@ export class GuildSetupManager {
 	// How:  bail early on any missing piece. Swallow 10008 / 10003 /
 	//       cache misses as "not ours" so a single bad fetch does not crash
 	//       the ready sweep for every other guild.
+	// Tri-state ownership probe. "owned" = the schedule anchor exists and this bot
+	// authored it. "foreign" = the anchor exists but a DIFFERENT bot authored it
+	// (the only positive signal of someone else's homebase). "unknown" = we cannot
+	// check (no anchor stored, the message was deleted, or a fetch failed).
+	//
+	// Callers MUST rebuild only on "foreign" and repair-in-place on "unknown".
+	// Treating "unknown" as "rebuild" was the auto-heal duplicate-homebase bug: a
+	// benign missing/deleted schedule message looked identical to a foreign one,
+	// so a deleted pinned message triggered a full rebuild (new duplicate category
+	// + fresh channels, losing /rename-channel overrides). A missing anchor is not
+	// evidence the homebase is someone else's; ScheduleBoard reposts the message on
+	// its next refresh.
 	static async isHomebaseOwnedByThisBot(
 		client: Client,
 		guildId: string,
 		stored: { scheduleChannelId: string; scheduleMessageId?: string | null }
-	): Promise<boolean> {
+	): Promise<"owned" | "foreign" | "unknown"> {
 		const selfId = client.user?.id;
-		// without our own bot id we cannot compare. treat as not owned so
-		// the caller rebuilds rather than falsely adopting the config.
-		if (!selfId) return false;
-		if (!stored.scheduleMessageId) return false;
+		// No self id or no stored anchor → cannot disprove ownership. "unknown" so
+		// the caller repairs in place instead of doing a destructive rebuild.
+		if (!selfId) return "unknown";
+		if (!stored.scheduleMessageId) return "unknown";
 
 		const channel = await client.channels.fetch(stored.scheduleChannelId).catch(() => null);
-		if (!channel || !(channel instanceof TextChannel)) return false;
+		if (!channel || !(channel instanceof TextChannel)) return "unknown";
 
 		try {
 			const message = await channel.messages.fetch(stored.scheduleMessageId);
-			return message.author.id === selfId;
+			return message.author.id === selfId ? "owned" : "foreign";
 		} catch (error) {
-			// 10008 Unknown Message, 10003 Unknown Channel → stored anchor is
-			// gone. Any other Discord error also means we cannot confirm
-			// ownership, so err on the side of rebuilding.
+			// 10008 Unknown Message / 10003 Unknown Channel → the anchor is gone.
+			// We cannot confirm OR disprove ownership, so "unknown" (repair in
+			// place), NOT a rebuild. A deleted schedule message must never
+			// duplicate the homebase.
 			if (error instanceof DiscordAPIError) {
 				console.warn(LOG_MESSAGES.setup.homebaseOwnershipProbeFailed(guildId, error.code));
 			} else {
 				console.warn(LOG_MESSAGES.setup.homebaseOwnershipProbeFailed(guildId, "unknown"));
 			}
-			return false;
+			return "unknown";
 		}
 	}
 
