@@ -31,6 +31,7 @@ import { refreshAllLeaderboards } from "@features/leaderboard/LeaderboardBoard.j
 import { ensureGoLiveButtonOnScheduleBoard, registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
 import { registerSuggestionBoxHandlers } from "@features/suggestion-box/SuggestionBox.js";
 import { registerPollHandlers, dispatchPolls, logPollTallies } from "@features/polls/PollDispatcher.js";
+import { registerPowerUpHandlers, ensureAllPowerUps } from "@features/power-ups/PowerUps.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -248,6 +249,7 @@ process.on("uncaughtException", (err) => {
 	registerScheduleControlHandlers();
 	registerSuggestionBoxHandlers();
 	registerPollHandlers();
+	registerPowerUpHandlers();
 
 	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
@@ -577,6 +579,16 @@ process.on("uncaughtException", (err) => {
 		// Where: failures per-guild are logged and swallowed inside
 		//        refreshAllNextUp; one bad guild does not stall the others.
 		await refreshAllNextUp(client);
+
+		// ── channel power-up panels (item 36) ─────────────────────
+		// What: post or repair each homebase channel's pinned button panel
+		//       (refresh standings, pause/resume schedules, ...). Separate
+		//       pinned messages from the boards they complement.
+		// When: after the homebase sweep + board refreshes so the channels and
+		//       their boards already exist. Per-guild failures are logged and
+		//       swallowed inside ensureAllPowerUps; one bad guild cannot stall
+		//       the rest.
+		await ensureAllPowerUps(client);
 
 		// ── feature announcement sweep ─────────────────────────────
 		// What: once-per-version broadcast to every setup-complete guild.

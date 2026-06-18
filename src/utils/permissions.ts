@@ -1,4 +1,4 @@
-import type { GuildMember } from "discord.js";
+import type { ButtonInteraction, GuildMember } from "discord.js";
 
 // ── permissions ─────────────────────────────────────────────────────
 // Centralized authorization helpers. Today only the decree-edit flow
@@ -37,7 +37,47 @@ interface IGuildConfigPermissionShape {
  *        (legacy config), only the server owner is authorized.
  */
 export function canEditDecree(member: GuildMember, config: IGuildConfigPermissionShape): boolean {
+	return isOwnerOrAdmin(member, config);
+}
+
+/**
+ * isOwnerOrAdmin
+ *
+ * The generic owner-or-admin gate: the server owner always passes; otherwise
+ * the member must hold the configured admin role. A legacy config with no
+ * adminRoleId restricts the action to the owner alone. This is the same rule
+ * the slash-command admin gate applies in main.ts; canEditDecree above is a
+ * named alias so the decree-edit call sites read intentionally.
+ */
+export function isOwnerOrAdmin(member: GuildMember, config: IGuildConfigPermissionShape): boolean {
 	if (member.id === member.guild.ownerId) return true;
 	if (config.adminRoleId && member.roles.cache.has(config.adminRoleId)) return true;
 	return false;
+}
+
+/**
+ * gateOwnerOrAdmin
+ *
+ * Button-interaction wrapper around the owner-or-admin gate. Persistent button
+ * handlers cannot lean on a slash command's setDefaultMemberPermissions, so
+ * they must re-verify the clicker. ButtonInteraction.member can be a partial
+ * API member with no populated roles cache, and the guild cache can be cold
+ * after a restart, so we resolve cache-first then fetch — a miss would wrongly
+ * deny a real admin. Returns false (deny) when there is no guild context or the
+ * member cannot be resolved.
+ *
+ * Note: ScheduleControls and the main.ts command gate still inline this same
+ * resolution; they could adopt this helper on a future cleanup pass.
+ */
+export async function gateOwnerOrAdmin(
+	interaction: ButtonInteraction,
+	config: IGuildConfigPermissionShape | null | undefined
+): Promise<boolean> {
+	if (!interaction.guild) return false;
+	if (interaction.user.id === interaction.guild.ownerId) return true;
+	const adminRoleId = config?.adminRoleId ?? null;
+	if (!adminRoleId) return false; // no admin role configured → owner-only
+	let member = interaction.guild.members.cache.get(interaction.user.id) ?? null;
+	if (!member) member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+	return member ? member.roles.cache.has(adminRoleId) : false;
 }
