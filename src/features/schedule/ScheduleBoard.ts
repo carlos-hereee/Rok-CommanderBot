@@ -32,6 +32,8 @@ import { buildScheduleControlRow } from "@features/schedule/ScheduleControls.js"
 export async function refreshSchedule(client: Client, guildId: string): Promise<void> {
 	try {
 		const config = await guildConfigStore.findByGuildId(guildId);
+		// self-destructed guild: homebase channels are gone, nothing to refresh.
+		if (config?.homebaseDestroyed) return;
 		if (!config?.scheduleChannelId) {
 			// guild has not finished its home base build yet. silent bail is
 			// correct — autoSetup will take care of this state transition.

@@ -255,6 +255,12 @@ export function startScheduler(client: Client): void {
 			// events flow through this tick.
 			const eventsByGuild: IGameEvent[][] = [];
 			for (const { guildId, events: guildEvents, config } of guildDataByGuild) {
+				// Skip self-destructed guilds entirely. Their homebase channels are
+				// gone, so every fire would throw fetching the deleted announcements
+				// channel and log a failure each tick (tripping the F5 alarm). Mirrors
+				// the ensureHomebase / ChannelDeleteWatcher gates; cleared by /setup.
+				if ((config as unknown as { homebaseDestroyed?: boolean } | null)?.homebaseDestroyed) continue;
+
 				const schedulePaused = (config as unknown as { schedulePaused?: { paused?: boolean; pausedUntil?: Date | null } } | null)?.schedulePaused;
 				if (schedulePaused?.paused) {
 					const pausedUntil = schedulePaused.pausedUntil;

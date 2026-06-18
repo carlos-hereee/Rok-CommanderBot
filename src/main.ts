@@ -31,6 +31,7 @@ import { refreshAllLeaderboards } from "@features/leaderboard/LeaderboardBoard.j
 import { registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
 import { registerSuggestionBoxHandlers } from "@features/suggestion-box/SuggestionBox.js";
 import { registerPollHandlers, dispatchPolls, logPollTallies } from "@features/polls/PollDispatcher.js";
+import { registerSelfDestructHandlers } from "@features/setup/selfDestruct.js";
 import { registerPowerUpHandlers, ensureAllPowerUps } from "@features/power-ups/PowerUps.js";
 
 // paths
@@ -249,6 +250,7 @@ process.on("uncaughtException", (err) => {
 	registerScheduleControlHandlers();
 	registerSuggestionBoxHandlers();
 	registerPollHandlers();
+	registerSelfDestructHandlers();
 	registerPowerUpHandlers();
 
 	// then register the interaction  listerner

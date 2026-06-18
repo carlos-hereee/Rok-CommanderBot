@@ -69,6 +69,8 @@ export async function refreshAllNextUp(client: Client): Promise<void> {
 
 export async function refreshNextUp(client: Client, guildId: string): Promise<void> {
 	const config = await guildConfigStore.findByGuildId(guildId);
+	// self-destructed guild: homebase channels are gone, nothing to refresh.
+	if (config?.homebaseDestroyed) return;
 	if (!config?.nextDecreeChannelId) {
 		// Legacy guilds (those that ran /setup before nextDecreeChannelId
 		// was added to the schema) load without the channel id. Silent

@@ -444,6 +444,14 @@ export class GuildSetupManager {
 
 		const stored = await guildConfigStore.findByGuildId(guild.id);
 
+		// ⓪ self-destructed → the owner demolished this homebase and it must stay
+		//    gone until /setup rebuilds it. Skip all build/repair so the boot
+		//    sweep does not resurrect what was deliberately torn down.
+		if (stored?.homebaseDestroyed) {
+			console.log(`[ensureHomebase] guild ${guild.id} homebase is self-destructed; skipping (run /setup to rebuild)`);
+			return { action: "skipped", repairedChannels: [] };
+		}
+
 		// ① no config at all → never built for this guild. build fresh.
 		if (!stored) {
 			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });

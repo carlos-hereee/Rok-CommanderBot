@@ -84,6 +84,17 @@ export function registerChannelDeleteWatcher(client: Client): void {
 				return;
 			}
 
+			// self-destruct gate. demolishHomebase sets homebaseDestroyed=true
+			// BEFORE deleting any channel, so this fires for every channel it
+			// removes — skip rebuild so the teardown is not undone mid-demolish.
+			// Run /setup to rebuild. The boot sweep honors the same flag.
+			if (stored.homebaseDestroyed) {
+				console.log(
+					`[realtime-repair] skipped channel delete in guild ${guild.id} because the homebase was self-destructed; run /setup to rebuild.`
+				);
+				return;
+			}
+
 			// ③ match the deleted channel id to one of the six homebase fields.
 			//    also short circuit if the deleted channel IS the category —
 			//    that is a full rebuild case and we leave it to the boot sweep

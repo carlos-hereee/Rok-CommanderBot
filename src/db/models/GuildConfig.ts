@@ -411,6 +411,7 @@ const guildConfigSchema = new Schema(
 				leaderboardChannelId: { type: String, required: false, default: null },
 				introChannelId: { type: String, required: false, default: null },
 				announcementsChannelId: { type: String, required: false, default: null },
+				adminChannelId: { type: String, required: false, default: null },
 			},
 			required: false,
 			default: () => ({}),
@@ -429,6 +430,21 @@ const guildConfigSchema = new Schema(
 		// Where: flat string array mirroring hiddenChannels / userRemovedChannels.
 		// How:   empty default so no member is pinged until they explicitly opt in.
 		pingSubscribers: { type: [String], required: false, default: () => [] as string[] },
+
+		// ── homebase self-destruct flag (v1.6, 2026-06-18) ─────────────
+		// What:  set true when the server owner runs /self-destruct (or the
+		//        danger-zone panel button). While true, the homebase has been
+		//        demolished and MUST stay gone: ensureHomebase (boot sweep) and
+		//        ChannelDeleteWatcher (realtime repair) both short-circuit on it
+		//        so nothing rebuilds the category/channels.
+		// Who:   written true by selfDestruct.demolishHomebase BEFORE it deletes
+		//        any channel (so the realtime watcher does not race the teardown
+		//        and resurrect channels); cleared (false) by /setup, which
+		//        rebuilds the homebase and re-assigns roles.
+		// When:  read on every ensureHomebase pass and every channelDelete event.
+		// How:   plain Boolean, default false so every existing/legacy row loads
+		//        as "not destroyed" and behaves exactly as before.
+		homebaseDestroyed: { type: Boolean, required: false, default: false },
 	},
 	{ timestamps: true }
 );

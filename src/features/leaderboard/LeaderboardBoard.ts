@@ -42,6 +42,8 @@ import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 export async function refreshLeaderboard(client: Client, guildId: string): Promise<void> {
 	try {
 		const config = await guildConfigStore.findByGuildId(guildId);
+		// self-destructed guild: homebase channels are gone, nothing to refresh.
+		if (config?.homebaseDestroyed) return;
 		if (!config?.leaderboardChannelId) {
 			// guild has not finished its home base build yet. silent bail is
 			// correct — autoSetup / ensureHomebase will take care of this state.
