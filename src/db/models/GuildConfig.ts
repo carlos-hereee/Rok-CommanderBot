@@ -416,19 +416,20 @@ const guildConfigSchema = new Schema(
 			default: () => ({}),
 		},
 
-		// ── announcement ping subscribers (v1.6 Phase 5, item 36) ───────
-		// What:  Discord user ids of members who opted in (via the
-		//        announcements-channel power-up) to be @mentioned on future
-		//        announcements. The button is a toggle, so the same control
-		//        both adds and removes an id.
-		// Who:   written by the announcements power-up button handler; read by
-		//        future announcement flows that want to ping opted-in members
-		//        (collecting the list is this increment's scope, consuming it
-		//        is later).
-		// When:  on each toggle click. Legacy rows load with an empty array.
-		// Where: flat string array mirroring hiddenChannels / userRemovedChannels.
-		// How:   empty default so no member is pinged until they explicitly opt in.
-		pingSubscribers: { type: [String], required: false, default: () => [] as string[] },
+		// ── announcement notifications role (v1.6, 2026-06-18) ──────────
+		// What:  id of a mentionable role members self-assign via the
+		//        announcements power-up to opt into announcement pings. Replaces
+		//        the old pingSubscribers array: a real role can actually be
+		//        @mentioned by a future announcement flow, and Discord shows who
+		//        holds it. A Discord button label cannot be per-user, so the
+		//        toggle conveys state through its ephemeral reply, not its label.
+		// Who:   written by the announcements power-up toggle handler, which
+		//        lazily creates the role on first use (and recreates it if an
+		//        admin deletes it) and stores the id here.
+		// When:  set on first opt-in toggle in a guild. null until then.
+		// How:   nullable string. null means the role has not been created yet;
+		//        the toggle handler creates it on demand.
+		notificationsRoleId: { type: String, required: false, default: null },
 
 		// ── homebase self-destruct flag (v1.6, 2026-06-18) ─────────────
 		// What:  set true when the server owner runs /self-destruct (or the

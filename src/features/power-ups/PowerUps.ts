@@ -149,7 +149,7 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 			await runPostIntroTemplate(interaction);
 			return;
 		case "announcements:subscribe":
-			await runTogglePingSubscription(interaction, guildId);
+			await runToggleNotificationRole(interaction, guildId);
 			return;
 		default:
 			// Defined in the panel but not yet wired to logic — should not happen
@@ -175,34 +175,53 @@ async function runPostIntroTemplate(interaction: ButtonInteraction): Promise<voi
 	await interaction.reply({ content: INTRO_TEMPLATE, flags: MessageFlags.Ephemeral });
 }
 
-async function runTogglePingSubscription(interaction: ButtonInteraction, guildId: string): Promise<void> {
+async function runToggleNotificationRole(interaction: ButtonInteraction, guildId: string): Promise<void> {
+	if (!interaction.guild) {
+		await interaction.reply({ embeds: [errorEmbed("This only works inside a server.")], flags: MessageFlags.Ephemeral });
+		return;
+	}
 	const config = await guildConfigStore.findByGuildId(guildId);
 	if (!config) {
 		await interaction.reply({ embeds: [errorEmbed("This server is not set up yet.")], flags: MessageFlags.Ephemeral });
 		return;
 	}
 
-	// Toggle: the same button opts a member in and out. pingSubscribers is read
-	// through a cast because it is a plain string-array field Mongoose's inferred
-	// type does not always surface cleanly (same pattern as userRemovedChannels).
-	const subscribers = new Set<string>((config as unknown as { pingSubscribers?: string[] }).pingSubscribers ?? []);
-	const userId = interaction.user.id;
-	const nowSubscribed = !subscribers.has(userId);
-	if (nowSubscribed) subscribers.add(userId);
-	else subscribers.delete(userId);
-
 	try {
-		await guildConfigStore.update(guildId, { pingSubscribers: Array.from(subscribers) });
-		await interaction.reply({
-			content: nowSubscribed
-				? "🔔 You're on the announcement ping list. Tap again to opt out."
-				: "🔕 You're off the announcement ping list.",
-			flags: MessageFlags.Ephemeral,
-		});
+		// Resolve the notifications role, creating it lazily on first use (and
+		// recreating it if an admin deleted it). Mentionable so a future
+		// announcement flow can @ping opted-in members; a freshly created role
+		// lands at the bottom of the list, below the bot, so it stays assignable.
+		const storedRoleId = (config as unknown as { notificationsRoleId?: string | null }).notificationsRoleId ?? null;
+		let role =
+			(storedRoleId ? interaction.guild.roles.cache.get(storedRoleId) : null) ??
+			(storedRoleId ? await interaction.guild.roles.fetch(storedRoleId).catch(() => null) : null);
+		if (!role) {
+			role = await interaction.guild.roles.create({ name: "🔔 Announcements", mentionable: true, reason: "Announcement ping opt-in role" });
+			await guildConfigStore.update(guildId, { notificationsRoleId: role.id });
+		}
+
+		// Resolve the clicking member cache-first, fetch fallback (the cache can be
+		// cold on a fresh restart).
+		let member = interaction.guild.members.cache.get(interaction.user.id) ?? null;
+		if (!member) member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+		if (!member) {
+			await interaction.reply({ embeds: [errorEmbed("Could not resolve your membership. Try again in a moment.")], flags: MessageFlags.Ephemeral });
+			return;
+		}
+
+		// Toggle: state is conveyed through this ephemeral reply, not the button
+		// label (a shared button label cannot be per-user).
+		if (member.roles.cache.has(role.id)) {
+			await member.roles.remove(role.id, "Announcement ping opt-out");
+			await interaction.reply({ content: "🔕 You're off the announcement ping list.", flags: MessageFlags.Ephemeral });
+		} else {
+			await member.roles.add(role.id, "Announcement ping opt-in");
+			await interaction.reply({ content: "🔔 You're on the announcement ping list. Tap again to opt out.", flags: MessageFlags.Ephemeral });
+		}
 	} catch (err) {
-		console.error(`[powerup] toggle ping subscription failed in guild ${guildId}`, err);
+		console.error(`[powerup] toggle notification role failed in guild ${guildId}`, err);
 		await interaction.reply({
-			embeds: [errorEmbed("Could not update your subscription. Try again in a moment.")],
+			embeds: [errorEmbed("Could not update your notifications. The bot may be missing the Manage Roles permission. Try again in a moment.")],
 			flags: MessageFlags.Ephemeral,
 		});
 	}
