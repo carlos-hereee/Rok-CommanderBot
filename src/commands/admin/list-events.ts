@@ -63,7 +63,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	});
 
 	await interaction.reply({
-		embeds: [listEventsEmbed(fields, announcementsChannelId)],
+		embeds: [listEventsEmbed(fields, announcementsChannelId, config)],
 		flags: MessageFlags.Ephemeral,
 	});
 }

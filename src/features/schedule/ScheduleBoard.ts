@@ -90,7 +90,7 @@ export async function refreshSchedule(client: Client, guildId: string): Promise<
 				return a.nextOccurrenceTs - b.nextOccurrenceTs;
 			});
 
-		const embed = scheduleBoardEmbed(fields, config.announcementsChannelId ?? null, { seasonEnded, guildSeasonEndTs });
+		const embed = scheduleBoardEmbed(fields, config.announcementsChannelId ?? null, { seasonEnded, guildSeasonEndTs }, config);
 
 		// Phase-gated control row: Go Live always, plus Set-up (no events) /
 		// Pause (some active) / Resume (all paused). Computed from the events

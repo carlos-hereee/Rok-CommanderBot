@@ -80,7 +80,7 @@ export async function refreshLeaderboard(client: Client, guildId: string): Promi
 			})
 		);
 
-		const embed = leaderboardEmbed(weekBoundaryTitle(weekStart), ranked);
+		const embed = leaderboardEmbed(weekBoundaryTitle(weekStart), ranked, config);
 
 		await postOrEdit(channel, config.leaderboardMessageId ?? null, embed, guildId);
 	} catch (error) {

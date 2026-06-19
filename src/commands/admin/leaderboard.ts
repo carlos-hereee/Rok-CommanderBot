@@ -95,6 +95,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	const eventValue = interaction.options.getString("event", true);
 	const isPublic = interaction.options.getBoolean("public") ?? false;
 
+	// Loaded once for both the weekStart window and pack-aware embed rendering.
+	// A null config (guild not set up) falls back to defaults / rok-commander.
+	const config = await guildConfigStore.findByGuildId(guildId);
+
 	// ── guild-wide branches (all time / this month / this week) ──
 	// Three views share the same aggregation primitive; the difference is
 	// the optional dateRange filter. Each view pulls every event in the
@@ -120,7 +124,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			// A null config (guild has not run /setup) or any unexpected value
 			// falls back to Sunday, matching the pre-config hardcoded behavior so
 			// existing guilds render identically.
-			const config = await guildConfigStore.findByGuildId(guildId);
 			const weekStart: WeekStart = config?.weekStart === "monday" ? "monday" : "sunday";
 			dateRange = thisWeekRange(weekStart);
 			// State the boundary in the title so "this week" is never ambiguous.
@@ -145,7 +148,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 				totalAcknowledged: r.totalAcknowledged,
 			})
 		);
-		const embed = leaderboardEmbed(title, ranked);
+		const embed = leaderboardEmbed(title, ranked, config);
 		await interaction.reply({
 			embeds: [embed],
 			flags: isPublic ? undefined : MessageFlags.Ephemeral,
@@ -184,7 +187,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		})
 	);
 
-	const embed = leaderboardEmbed(event.name, ranked);
+	const embed = leaderboardEmbed(event.name, ranked, config);
 
 	await interaction.reply({
 		embeds: [embed],
