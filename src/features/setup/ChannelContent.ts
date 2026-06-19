@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { getPluginCopy, type ICopyConfig } from "@base/copy/getCopy.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
 // botInviteLink is composed in @utils/config from the env-driven
 // clientId, so a dev process serves the dev install URL and a prod
@@ -9,11 +9,30 @@ import { infoEmbed } from "@utils/embedBuilder.js";
 // risk.
 import { botInviteLink } from "@utils/config.js";
 
-const cc = embedContent.channelContent;
-
+// ── ChannelContent ───────────────────────────────────────────────────────
+// What:  builders for the pinned intro embeds + self-heal notices the bot
+//        posts in each homebase channel. Every method that renders pack copy
+//        takes an optional `guildConfig` so the words track the guild's
+//        plugin pack (kingdom voice for rok-commander, neutral for
+//        general-events).
+// Who:   GuildSetupManager. populateChannels passes nothing on first build;
+//        repairOneChannel / refreshIntroEmbeds / applyAdminRole and the
+//        notice posters pass the loaded GuildConfig so a non-ROK guild
+//        renders neutral copy.
+// When:  a null/undefined config resolves to the rok-commander default via
+//        getPluginCopy. That preserves the historical behavior of every
+//        existing guild AND is the correct voice for a brand-new guild whose
+//        pluginId is not yet known (set later via pairing/install).
+// Where: copy resolves through getPluginCopy(guildConfig) from @base/copy.
+//        Each method resolves the pack once and reads its title/description,
+//        responses, and COLORS off that single source. COLORS are byte
+//        identical across packs but read from the resolved pack too so a
+//        method never mixes copy sources.
 export const ChannelContent = {
-	introduction(): EmbedBuilder {
-		return infoEmbed(cc.introduction.title, cc.introduction.description, embedContent.COLORS.INTRODUCTION);
+	introduction(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.introduction.title, cc.introduction.description, copy.COLORS.INTRODUCTION);
 	},
 
 	// ── introduction invite button row ──────────────────────────────
@@ -38,8 +57,12 @@ export const ChannelContent = {
 	//        track the running environment automatically. Permissions
 	//        breakdown comment lives next to botInviteLink in config.ts;
 	//        BOT_CONSTANTS.MIN_PERMISSIONS_DOCS holds the audit-friendly
-	//        list for install docs. Label is in the godly voice — the
-	//        button is essentially a CTA written by the bot itself.
+	//        list for install docs.
+	// NOTE:  the label + emoji are hardcoded kingdom voice and are NOT yet
+	//        pack-aware (there is no channelContent.introduction button copy
+	//        in either pack). A general-events guild would see this ROK-voiced
+	//        label until a pack field is added. Deferred deliberately — adding
+	//        the field is a copy-authoring decision, tracked outside this pass.
 	introductionComponents(): ActionRowBuilder<ButtonBuilder> {
 		return new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder()
@@ -50,8 +73,10 @@ export const ChannelContent = {
 		);
 	},
 
-	commandGuide(): EmbedBuilder {
-		return infoEmbed(cc.commandGuide.title, cc.commandGuide.description, embedContent.COLORS.COMMANDS).addFields(
+	commandGuide(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.commandGuide.title, cc.commandGuide.description, copy.COLORS.COMMANDS).addFields(
 			...cc.commandGuide.fields
 		);
 	},
@@ -64,35 +89,48 @@ export const ChannelContent = {
 	// command list evolves. ADMIN color matches the rest of the inner
 	// sanctum surface so visual identity stays consistent with the
 	// welcome embed above it.
-	adminCommandGuide(): EmbedBuilder {
-		return infoEmbed(cc.adminCommandGuide.title, cc.adminCommandGuide.description, embedContent.COLORS.ADMIN).addFields(
+	adminCommandGuide(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.adminCommandGuide.title, cc.adminCommandGuide.description, copy.COLORS.ADMIN).addFields(
 			...cc.adminCommandGuide.fields
 		);
 	},
-	adminPending(): EmbedBuilder {
-		return infoEmbed(cc.adminWelcome.title, embedContent.responses.adminRolePending, embedContent.COLORS.ADMIN);
+	adminPending(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		return infoEmbed(copy.channelContent.adminWelcome.title, copy.responses.adminRolePending, copy.COLORS.ADMIN);
 	},
-	scheduleIntro(): EmbedBuilder {
-		return infoEmbed(cc.schedule.title, cc.schedule.description, embedContent.COLORS.SCHEDULE);
+	scheduleIntro(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.schedule.title, cc.schedule.description, copy.COLORS.SCHEDULE);
 	},
 
-	leaderboardIntro(): EmbedBuilder {
-		return infoEmbed(cc.leaderboard.title, cc.leaderboard.description, embedContent.COLORS.LEADERBOARD);
+	leaderboardIntro(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.leaderboard.title, cc.leaderboard.description, copy.COLORS.LEADERBOARD);
 	},
 
-	announcementsIntro(): EmbedBuilder {
-		return infoEmbed(cc.announcements.title, cc.announcements.description, embedContent.COLORS.ANNOUNCEMENTS);
+	announcementsIntro(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.announcements.title, cc.announcements.description, copy.COLORS.ANNOUNCEMENTS);
 	},
 
 	// Pinned intro above the NextUpBoard posts. Tells mortals that this
 	// channel grows over time on purpose (each upcoming event creates a
 	// permanent post) so they stop asking why it is not being "cleaned up".
-	nextDecreeIntro(): EmbedBuilder {
-		return infoEmbed(cc.nextDecree.title, cc.nextDecree.description, embedContent.COLORS.NEXT_DECREE);
+	nextDecreeIntro(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.nextDecree.title, cc.nextDecree.description, copy.COLORS.NEXT_DECREE);
 	},
 
-	adminWelcome(ownerId: string, adminRoleId: string): EmbedBuilder {
-		return infoEmbed(cc.adminWelcome.title, cc.adminWelcome.description(ownerId, adminRoleId), embedContent.COLORS.ADMIN);
+	adminWelcome(ownerId: string, adminRoleId: string, guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.adminWelcome.title, cc.adminWelcome.description(ownerId, adminRoleId), copy.COLORS.ADMIN);
 	},
 
 	// ── self heal notices ─────────────────────────────────────
@@ -101,12 +139,10 @@ export const ChannelContent = {
 	// notices fire for single channel restores; the castle rebuilt notice
 	// fires once after a full category reconstruction. both use the ADMIN
 	// color so they visually match the rest of the inner sanctum surface.
-	channelRepairNotice(channelName: string): EmbedBuilder {
-		return infoEmbed(
-			cc.channelRepairNotice.title,
-			cc.channelRepairNotice.description(channelName),
-			embedContent.COLORS.ADMIN
-		);
+	channelRepairNotice(channelName: string, guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.channelRepairNotice.title, cc.channelRepairNotice.description(channelName), copy.COLORS.ADMIN);
 	},
 	// Single summary embed when multiple channels are restored in one
 	// sweep. Replaces the "one embed per channel" spam previously emitted
@@ -117,12 +153,16 @@ export const ChannelContent = {
 	// channels were touched, not see N copies of the same warning
 	// paragraph. Reuses the existing repair-notice copy template via
 	// the locale's summaryTitle / summaryBody keys.
-	channelsRestoredSummary(channelNames: string[]): EmbedBuilder {
+	channelsRestoredSummary(channelNames: string[], guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
 		const list = channelNames.map((n) => `• ${n}`).join("\n");
 		const description = `${cc.channelRepairNotice.summaryBody(channelNames.length)}\n\n${list}`;
-		return infoEmbed(cc.channelRepairNotice.summaryTitle, description, embedContent.COLORS.ADMIN);
+		return infoEmbed(cc.channelRepairNotice.summaryTitle, description, copy.COLORS.ADMIN);
 	},
-	castleRebuiltNotice(): EmbedBuilder {
-		return infoEmbed(cc.castleRebuiltNotice.title, cc.castleRebuiltNotice.description, embedContent.COLORS.ADMIN);
+	castleRebuiltNotice(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.castleRebuiltNotice.title, cc.castleRebuiltNotice.description, copy.COLORS.ADMIN);
 	},
 };

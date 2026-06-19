@@ -16,6 +16,7 @@ import {
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { ISetupConfig, IAdminRoleConfig, ICreatedChannels, IChannelObjects, IEnsureHomebaseResult } from "./setup.types.js";
 import { ChannelContent } from "./ChannelContent.js";
+import type { ICopyConfig } from "@base/copy/getCopy.js";
 import { buildSuggestionBoxButtonRow } from "@features/suggestion-box/SuggestionBox.js";
 import { buildSelfDestructButtonRow } from "@features/setup/selfDestruct.js";
 import { embedContent } from "@base/constants/embed-content.js";
@@ -587,29 +588,35 @@ export class GuildSetupManager {
 	private static resolveIntroEmbed(
 		field: (typeof GuildSetupManager.CHANNEL_FIELDS)[number],
 		guild: Guild,
-		adminRoleId: string | null
+		adminRoleId: string | null,
+		// Pack selector. Callers that have the loaded GuildConfig (repairOneChannel,
+		// refreshIntroEmbeds) pass it so a non-ROK guild renders neutral intros;
+		// undefined falls back to the rok-commander default (correct on first build).
+		guildConfig?: ICopyConfig | null
 	): EmbedBuilder {
 		switch (field) {
 			case "introChannelId":
-				return ChannelContent.introduction();
+				return ChannelContent.introduction(guildConfig);
 			case "commandsChannelId":
-				return ChannelContent.commandGuide();
+				return ChannelContent.commandGuide(guildConfig);
 			case "leaderboardChannelId":
-				return ChannelContent.leaderboardIntro();
+				return ChannelContent.leaderboardIntro(guildConfig);
 			case "scheduleChannelId":
-				return ChannelContent.scheduleIntro();
+				return ChannelContent.scheduleIntro(guildConfig);
 			case "announcementsChannelId":
-				return ChannelContent.announcementsIntro();
+				return ChannelContent.announcementsIntro(guildConfig);
 			case "adminChannelId":
 				// after Phase 2 the admin channel's intro is the populated
 				// adminWelcome with the real adminRoleId. before Phase 2 it is
 				// the "role pending" placeholder.
-				return adminRoleId ? ChannelContent.adminWelcome(guild.ownerId, adminRoleId) : ChannelContent.adminPending();
+				return adminRoleId
+					? ChannelContent.adminWelcome(guild.ownerId, adminRoleId, guildConfig)
+					: ChannelContent.adminPending(guildConfig);
 			case "nextDecreeChannelId":
 				// pinned header above the NextUpBoard audit trail posts.
 				// Does not depend on adminRoleId because this is a public
 				// channel — mortals read, bot writes.
-				return ChannelContent.nextDecreeIntro();
+				return ChannelContent.nextDecreeIntro(guildConfig);
 		}
 	}
 
@@ -796,7 +803,7 @@ export class GuildSetupManager {
 		// branch have NO messages (the channel was just created but
 		// never had its id persisted).
 		let introMessageId: string | null = null;
-		const introEmbed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null);
+		const introEmbed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null, stored as unknown as ICopyConfig);
 		const introComponents = GuildSetupManager.resolveIntroComponents(spec.configField);
 
 		try {
@@ -1118,6 +1125,11 @@ export class GuildSetupManager {
 		try {
 			const channel = await client.channels.fetch(adminChannelId).catch(() => null);
 			if (!channel || !(channel instanceof TextChannel)) return;
+			// Resolve the repair-notice copy in the guild's pack voice. Self-contained
+			// load (mirrors postCastleRebuiltNotice) so both callers — the boot repair
+			// sweep and ChannelDeleteWatcher — get neutral copy on a non-ROK guild
+			// without threading config through every call site. Null → rok default.
+			const config = await guildConfigStore.findByGuildId(guildId);
 			// Single summary embed instead of one-per-channel. When the bot
 			// rebuilds several channels in a single sweep (eg after a
 			// toggle clears userRemovedChannels and auto-heal restores
@@ -1125,7 +1137,7 @@ export class GuildSetupManager {
 			// audit signal without flooding the channel. Single-channel
 			// repairs keep the same shape — the summary template handles
 			// the count===1 case gracefully via singular/plural copy.
-			await channel.send({ embeds: [ChannelContent.channelsRestoredSummary(repairedChannelNames)] });
+			await channel.send({ embeds: [ChannelContent.channelsRestoredSummary(repairedChannelNames, config)] });
 		} catch (error) {
 			console.warn(LOG_MESSAGES.setup.repairNoticePostFailed(guildId), error);
 		}
@@ -1149,7 +1161,7 @@ export class GuildSetupManager {
 			if (!fresh?.adminChannelId) return;
 			const channel = await client.channels.fetch(fresh.adminChannelId).catch(() => null);
 			if (!channel || !(channel instanceof TextChannel)) return;
-			await channel.send({ embeds: [ChannelContent.castleRebuiltNotice()] });
+			await channel.send({ embeds: [ChannelContent.castleRebuiltNotice(fresh)] });
 		} catch (error) {
 			console.warn(LOG_MESSAGES.setup.castleRebuiltNoticePostFailed(guildId), error);
 		}
@@ -1279,7 +1291,7 @@ export class GuildSetupManager {
 
 		// post the real welcome message now that the role is known
 		if (adminChannel?.isTextBased()) {
-			await adminChannel.send({ embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId)] });
+			await adminChannel.send({ embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId, stored)] });
 		}
 
 		await guildConfigStore.update(config.guildId, {
@@ -1646,7 +1658,7 @@ export class GuildSetupManager {
 				continue;
 			}
 
-			const embed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null);
+			const embed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null, stored as unknown as ICopyConfig);
 			// Components (eg. the introductions channel's invite button)
 			// must be passed explicitly on send — omitting them would
 			// silently strip the invite button on every repost.
@@ -1834,7 +1846,7 @@ export class GuildSetupManager {
 		if (adminChannelId) {
 			const adminChannel = await client.channels.fetch(adminChannelId).catch(() => null);
 			if (adminChannel instanceof TextChannel) {
-				const adminGuideEmbed = ChannelContent.adminCommandGuide();
+				const adminGuideEmbed = ChannelContent.adminCommandGuide(stored as unknown as ICopyConfig);
 				const storedAdminGuideId = nextIntroIds.adminCommandGuideId;
 
 				// Fetch the stored message (if any) so we can diff against
