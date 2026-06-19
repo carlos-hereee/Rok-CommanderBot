@@ -68,7 +68,7 @@ Recovery: if the stored message was deleted by an admin, the next refresh repost
 ## Conventions and rules for working on this codebase
 
 1. Never use dashes in chat replies (the owner's preference).
-2. Do NOT run `npx tsc --noEmit`, `npm run build`, or anything that triggers `tsc`. The owner builds manually before deploy. `npm install` does run `tsc` via postinstall — prefer writing files and asking the owner to run the install.
+2. `npx tsc --noEmit` (type-check only, no emit) IS the standard verification in code mode: run it to catch compile errors before ending a session and fix what it reports. Do NOT run `npm run build`, `tsc-alias`, or anything that EMITS a build artifact or deploys (Railway, `npm run deploy`) — the owner does those manually before deploy. `npm install` runs `tsc` via postinstall, so prefer writing files and asking the owner to install rather than running install yourself.
 3. Comment complicated logic. Every non trivial branch, algorithm, invariant, or workaround should have an inline comment. Complex comments must answer the relevant 5Ws (Who, What, When, Where, How) adapted to code:
    - What: what this block does in one line
    - Who: which callers or downstream consumers are affected
