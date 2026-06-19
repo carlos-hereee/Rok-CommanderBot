@@ -1,6 +1,16 @@
 import { EmbedBuilder, ColorResolvable } from "discord.js";
 import { IGameEvent, IPrepStep } from "@features/events/event.types.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { getPluginCopy, type ICopyConfig } from "@base/copy/getCopy.js";
+import type { IPluginCopy } from "@base/copy/types.js";
+
+// ── plugin-aware copy ─────────────────────────────────────────────────
+// Every builder takes an optional `guildConfig` and resolves its copy through
+// getPluginCopy(guildConfig): non-ROK guilds (pluginId !== "rok-commander")
+// render the neutral general-events pack, ROK guilds keep the kingdom voice.
+// guildConfig is optional and defaults to undefined, which getPluginCopy
+// resolves to the rok-commander pack — so a caller that has not been threaded
+// yet behaves exactly as it did when this file imported the static
+// `embedContent` (the rok-commander re-export).
 
 interface IListEventField {
 	name: string;
@@ -23,13 +33,18 @@ interface IListEventField {
 	pausedUntilTs?: number | null;
 }
 
-export function listEventsEmbed(fields: IListEventField[], announcementsChannelId: string | null = null): EmbedBuilder {
-	const c = embedContent.listEvents;
+export function listEventsEmbed(
+	fields: IListEventField[],
+	announcementsChannelId: string | null = null,
+	guildConfig?: ICopyConfig | null
+): EmbedBuilder {
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.listEvents;
 	// the destination channel is the same for every event in the guild, so it
 	// renders once in the embed description instead of being repeated per row.
 	// an unset value (guild has not finished /setup) is treated as a soft warning.
 	const description = announcementsChannelId ? c.postedToHeader(announcementsChannelId) : c.postedToHeaderUnset;
-	const embed = base().setTitle(c.title).setDescription(description).setColor(embedContent.COLORS.SCHEDULE);
+	const embed = base(guildConfig).setTitle(c.title).setDescription(description).setColor(copy.COLORS.SCHEDULE);
 
 	for (const field of fields) {
 		const lines: string[] = [];
@@ -71,14 +86,17 @@ export function listEventsEmbed(fields: IListEventField[], announcementsChannelI
 }
 
 // ── private ───────────────────────────────────────────────────
-function base(): EmbedBuilder {
+function base(guildConfig?: ICopyConfig | null): EmbedBuilder {
 	// Dero as the author brands every embed at once (the single chokepoint all
 	// embed builders flow through). The icon 404s gracefully to name-only until
-	// the web app deploys the PNG, so this is safe to ship ahead of that.
+	// the web app deploys the PNG, so this is safe to ship ahead of that. AUTHOR
+	// and FOOTER are identical across packs today, but resolving through the
+	// pack keeps the chokepoint honest if a pack ever diverges.
+	const copy = getPluginCopy(guildConfig);
 	return new EmbedBuilder()
 		.setTimestamp()
-		.setAuthor({ name: embedContent.AUTHOR.name, iconURL: embedContent.AUTHOR.iconURL })
-		.setFooter({ text: embedContent.FOOTER });
+		.setAuthor({ name: copy.AUTHOR.name, iconURL: copy.AUTHOR.iconURL })
+		.setFooter({ text: copy.FOOTER });
 }
 
 // ── public ────────────────────────────────────────────────────
@@ -86,13 +104,15 @@ export function reminderEmbed(
 	event: IGameEvent,
 	occurrence: Date,
 	offsetMinutes: number,
-	imageUrl: string | null = null
+	imageUrl: string | null = null,
+	guildConfig?: ICopyConfig | null
 ): EmbedBuilder {
-	const c = embedContent.reminder;
-	const embed = base()
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.reminder;
+	const embed = base(guildConfig)
 		.setTitle(c.title(event.name, offsetMinutes))
 		.setDescription(c.description)
-		.setColor(embedContent.COLORS.REMINDER)
+		.setColor(copy.COLORS.REMINDER)
 		.addFields(
 			{
 				name: c.checklistField,
@@ -117,12 +137,13 @@ export function reminderEmbed(
 // renders the same checklist + time fields as reminderEmbed so admins can
 // verify prep step formatting end to end, but prefixes the title with [TEST]
 // so Mortals instantly know it is not a real alert.
-export function testReminderEmbed(event: IGameEvent, nextOccurrence: Date): EmbedBuilder {
-	const c = embedContent.testReminder;
-	return base()
+export function testReminderEmbed(event: IGameEvent, nextOccurrence: Date, guildConfig?: ICopyConfig | null): EmbedBuilder {
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.testReminder;
+	return base(guildConfig)
 		.setTitle(c.title(event.name))
 		.setDescription(c.description)
-		.setColor(embedContent.COLORS.REMINDER)
+		.setColor(copy.COLORS.REMINDER)
 		.addFields(
 			{
 				name: c.checklistField,
@@ -139,9 +160,10 @@ export function testReminderEmbed(event: IGameEvent, nextOccurrence: Date): Embe
 }
 
 // ── season end embed ──
-export function seasonEndEmbed(): EmbedBuilder {
-	const c = embedContent.seasonEnd;
-	return base().setTitle(c.title).setDescription(c.description).setColor(embedContent.COLORS.SEASON_END);
+export function seasonEndEmbed(guildConfig?: ICopyConfig | null): EmbedBuilder {
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.seasonEnd;
+	return base(guildConfig).setTitle(c.title).setDescription(c.description).setColor(copy.COLORS.SEASON_END);
 }
 
 // ── schedule board embed ──
@@ -184,13 +206,15 @@ export interface IScheduleField {
 export function scheduleBoardEmbed(
 	fields: IScheduleField[],
 	announcementsChannelId: string | null,
-	options: { seasonEnded?: boolean; guildSeasonEndTs?: number | null } = {}
+	options: { seasonEnded?: boolean; guildSeasonEndTs?: number | null } = {},
+	guildConfig?: ICopyConfig | null
 ): EmbedBuilder {
-	const c = embedContent.scheduleBoard;
-	const embed = base().setTitle(c.title).setColor(embedContent.COLORS.SCHEDULE).setFooter({ text: c.footer });
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.scheduleBoard;
+	const embed = base(guildConfig).setTitle(c.title).setColor(copy.COLORS.SCHEDULE).setFooter({ text: c.footer });
 
 	if (options.seasonEnded) {
-		return embed.setDescription(c.seasonEnded).setColor(embedContent.COLORS.SEASON_END);
+		return embed.setDescription(c.seasonEnded).setColor(copy.COLORS.SEASON_END);
 	}
 
 	if (fields.length === 0) {
@@ -270,7 +294,7 @@ export function scheduleBoardEmbed(
 
 // ── private: scheduleBoardEmbed row builders ──
 
-function buildActiveField(field: IScheduleField, c: typeof embedContent.scheduleBoard): { name: string; value: string; inline: false } {
+function buildActiveField(field: IScheduleField, c: IPluginCopy["scheduleBoard"]): { name: string; value: string; inline: false } {
 	const lines: string[] = [];
 	const occurrenceLabel = field.type === "recurring" ? c.nextOccurrenceLabel : c.scheduledDateLabel;
 
@@ -298,7 +322,7 @@ function buildActiveField(field: IScheduleField, c: typeof embedContent.schedule
 	return { name: headerName, value: lines.join("\n"), inline: false };
 }
 
-function buildCompletedLine(field: IScheduleField, c: typeof embedContent.scheduleBoard): string {
+function buildCompletedLine(field: IScheduleField, c: IPluginCopy["scheduleBoard"]): string {
 	// Completed entries render inside a SINGLE field's value (see
 	// scheduleBoardEmbed for the rationale on why we no longer give
 	// each completed event its own field). The auto-bold that field
@@ -315,9 +339,11 @@ export function leaderboardEmbed(
 		totalScore: number;
 		eventsAttended: number;
 		totalAcknowledged: number;
-	}[]
+	}[],
+	guildConfig?: ICopyConfig | null
 ): EmbedBuilder {
-	const c = embedContent.leaderboard;
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.leaderboard;
 	// Empty standings only happen for the pinned LeaderboardBoard (the command
 	// short-circuits with an ephemeral "no activity" reply before it ever calls
 	// this builder), so an empty `ranked` renders the board's empty-state copy
@@ -327,30 +353,34 @@ export function leaderboardEmbed(
 				.map((p, i) => c.row(c.medals[i] ?? `**${i + 1}.**`, p.username, p.totalScore, p.eventsAttended, p.totalAcknowledged))
 				.join("\n\n")
 		: c.boardEmptyState;
-	return base()
+	return base(guildConfig)
 		.setTitle(c.title(eventName))
-		.setColor(embedContent.COLORS.LEADERBOARD)
+		.setColor(copy.COLORS.LEADERBOARD)
 		.setDescription(description)
 		.setFooter({ text: c.footer });
 }
 // ── KvK configuration confirmation embed ──
-export function kvkConfirmationEmbed(dates: {
-	seasonEnd: Date;
-	ruinsFirst: Date;
-	altarFirst: Date;
-	kauEasy: Date;
-	kauNormal: Date;
-	kauHard: Date;
-	kauNightmare: Date;
-	channelId: string;
-}): EmbedBuilder {
-	const c = embedContent.kvkConfirmation;
+export function kvkConfirmationEmbed(
+	dates: {
+		seasonEnd: Date;
+		ruinsFirst: Date;
+		altarFirst: Date;
+		kauEasy: Date;
+		kauNormal: Date;
+		kauHard: Date;
+		kauNightmare: Date;
+		channelId: string;
+	},
+	guildConfig?: ICopyConfig | null
+): EmbedBuilder {
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.kvkConfirmation;
 	const t = (date: Date) => `<t:${Math.floor(date.getTime() / 1000)}:F>`;
 
-	return base()
+	return base(guildConfig)
 		.setTitle(c.title)
 		.setDescription(c.description)
-		.setColor(embedContent.COLORS.CONFIRMATION)
+		.setColor(copy.COLORS.CONFIRMATION)
 		.addFields(
 			{
 				name: c.fields.seasonEnd,
@@ -385,26 +415,28 @@ export function kvkConfirmationEmbed(dates: {
 		);
 }
 
-export function errorEmbed(message: string): EmbedBuilder {
-	return base().setTitle(embedContent.error.title).setDescription(message).setColor(embedContent.COLORS.ERROR);
+export function errorEmbed(message: string, guildConfig?: ICopyConfig | null): EmbedBuilder {
+	const copy = getPluginCopy(guildConfig);
+	return base(guildConfig).setTitle(copy.error.title).setDescription(message).setColor(copy.COLORS.ERROR);
 }
 
-export function infoEmbed(title: string, description: string, color: ColorResolvable = "Blurple"): EmbedBuilder {
-	return base().setTitle(title).setDescription(description).setColor(color);
+export function infoEmbed(title: string, description: string, color: ColorResolvable = "Blurple", guildConfig?: ICopyConfig | null): EmbedBuilder {
+	return base(guildConfig).setTitle(title).setDescription(description).setColor(color);
 }
 
-export function arrivalEmbed(guildName: string, ownerId: string): EmbedBuilder {
-	const c = embedContent.arrival;
-	return base().setTitle(c.title).setDescription(c.description(guildName, ownerId)).setColor(embedContent.COLORS.ARRIVAL);
+export function arrivalEmbed(guildName: string, ownerId: string, guildConfig?: ICopyConfig | null): EmbedBuilder {
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.arrival;
+	return base(guildConfig).setTitle(c.title).setDescription(c.description(guildName, ownerId)).setColor(copy.COLORS.ARRIVAL);
 }
 
 // ── pairing code DM embed (FUTURE_PLANS item 63) ──
-// Mirrors arrivalEmbed: pulls copy from the static embedContent (the
-// rok-commander pack re-export) because the DM fires on guildCreate, before
-// the guild has selected a plugin pack, so the ROK voice is the de facto
-// default exactly as it is for the arrival embed. Reuses the ARRIVAL color so
+// Fires on guildCreate, before the guild has selected a plugin pack, so the
+// rok-commander default (via getPluginCopy with no config) is the de facto
+// voice exactly as it is for the arrival embed. Reuses the ARRIVAL color so
 // the claim code reads as part of the same welcome moment.
-export function pairingCodeEmbed(code: string): EmbedBuilder {
-	const c = embedContent.pairingCode;
-	return base().setTitle(c.title).setDescription(c.description(code)).setColor(embedContent.COLORS.ARRIVAL);
+export function pairingCodeEmbed(code: string, guildConfig?: ICopyConfig | null): EmbedBuilder {
+	const copy = getPluginCopy(guildConfig);
+	const c = copy.pairingCode;
+	return base(guildConfig).setTitle(c.title).setDescription(c.description(code)).setColor(copy.COLORS.ARRIVAL);
 }
