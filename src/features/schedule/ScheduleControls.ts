@@ -3,7 +3,7 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { registerButton } from "@handlers/interactionRegistry.js";
 import { gateOwnerOrAdmin } from "@utils/permissions.js";
 import { errorEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { postGoLiveAnnouncement } from "@features/schedule/postGoLiveAnnouncement.js";
 import { pauseAllGuildEvents, resumeAllGuildEvents, IBulkScheduleResult } from "@features/schedule/scheduleBulkControls.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
@@ -104,7 +104,7 @@ async function handleScheduleControl(interaction: ButtonInteraction): Promise<vo
 	const config = await guildConfigStore.findByGuildId(guildId);
 	const allowed = await gateOwnerOrAdmin(interaction, config);
 	if (!allowed) {
-		await interaction.reply({ embeds: [errorEmbed(embedContent.responses.noWizardPowers)], flags: MessageFlags.Ephemeral });
+		await interaction.reply({ embeds: [errorEmbed(rokCommanderCopy.responses.noWizardPowers)], flags: MessageFlags.Ephemeral });
 		return;
 	}
 
@@ -133,7 +133,7 @@ async function runGoLiveNow(interaction: ButtonInteraction, guildId: string): Pr
 	// role override are null — the button is the one-tap shortcut; the slash
 	// command remains the path for richer inputs.
 	const result = await postGoLiveAnnouncement(interaction.client, guildId, "now", null, null);
-	const c = embedContent.goLiveSoon;
+	const c = rokCommanderCopy.goLiveSoon;
 	if (result.ok) {
 		await interaction.reply({ content: c.posted, flags: MessageFlags.Ephemeral });
 		return;

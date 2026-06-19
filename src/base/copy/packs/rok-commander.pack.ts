@@ -1,5 +1,5 @@
-import { ColorResolvable } from "discord.js";
 import type { IEmbedField } from "../types.js";
+import { COLORS, FOOTER, AUTHOR } from "../brand.js";
 
 // ── ROK Commander copy pack ───────────────────────────────────────────────
 // What:  the canonical "kingdom voice" copy for the original ROK Commander
@@ -7,11 +7,11 @@ import type { IEmbedField } from "../types.js";
 //        guild whose `GuildConfig.pluginId === "rok-commander"` (or null,
 //        which the lookup treats as the back-compat default) is sourced
 //        from this object.
-// Who:   the legacy `embedContent` export at `@base/constants/embed-content`
-//        is a thin re-export of this file so the 96 existing import sites
-//        keep working without a touch. New code SHOULD prefer
-//        `getPluginCopy(guildConfig)` from `@base/copy/getCopy` because it
-//        honors `pluginId` and routes the right pack at runtime.
+// Who:   the legacy `embedContent` shim has been retired. Call sites now
+//        resolve copy through `getPluginCopy(guildConfig)` from
+//        `@base/copy/getCopy` (which honors `pluginId` and routes the right
+//        pack at runtime), or import `rokCommanderCopy` / the brand constants
+//        from `@base/copy/brand` directly when they need this pack specifically.
 // When:  every embed, slash command response, and channel intro that has
 //        ROK-flavored copy reads from this object. Per-guild owner overrides
 //        (Phase 3 of the streamer plugin spec) layer on top via
@@ -24,44 +24,13 @@ import type { IEmbedField } from "../types.js";
 //        words shipped to mortals are unchanged so this can land without
 //        any visual diff in Discord.
 export const rokCommanderCopy = {
-	// Platform brand, not bot brand. Survives item 32's Herald rename
-	// and any future pack-name changes. Also reinforces companyuno.com
-	// recognition across every embed the bot posts.
-	FOOTER: "Company Uno",
-
-	// Dero, the Company Uno mascot, is the bot's visual identity. Set as the
-	// embed author in embedBuilder.base() so every embed the bot posts carries
-	// his name and icon at once. iconURL points at the PNG deployed with the web
-	// app (nexious-client/public/dero); Discord shows the name alone and skips a
-	// 404 icon gracefully, so this is safe to ship before that deploy lands.
-	// Confirm the production domain before relying on the icon rendering.
-	AUTHOR: {
-		name: "Dero",
-		iconURL: "https://www.companyuno.com/dero/dero-icon-128.png",
-	},
-
-	COLORS: {
-		REMINDER: "Red",
-		SEASON_END: "DarkGrey",
-		LEADERBOARD: "Gold",
-		CONFIRMATION: "Yellow",
-		ERROR: "DarkRed",
-		ARRIVAL: "DarkGold",
-		INTRODUCTION: "DarkGold",
-		COMMANDS: "DarkBlue",
-		SCHEDULE: "DarkGreen",
-		ANNOUNCEMENTS: "DarkRed",
-		ADMIN: "DarkPurple",
-		// NextUpBoard posts + 🛡️next-decree channel intro. Navy Blue
-		// reads as "shield" without colliding with SCHEDULE (DarkGreen)
-		// or ANNOUNCEMENTS (DarkRed) in the sidebar.
-		NEXT_DECREE: "DarkNavy",
-		// Dero's brand-indigo accent (matches the web --main-brand-color).
-		// Decision 11: the bot identity pairs the "Dero" author + icon with a
-		// brand indigo bar. Available for Dero-led or default embeds; the
-		// per-type colors above keep their meaning and are unchanged.
-		DERO: "#4f46e5",
-	} satisfies Record<string, ColorResolvable>,
+	// Brand identity (footer wordmark, Dero author, color palette) is shared
+	// across every pack — see @base/copy/brand. Referenced here so
+	// getPluginCopy(config).FOOTER / .AUTHOR / .COLORS keep resolving off the
+	// pack, and so IPluginCopy (= typeof rokCommanderCopy) still carries them.
+	FOOTER,
+	AUTHOR,
+	COLORS,
 
 	listEvents: {
 		title: "📅 Active KvK Events",
@@ -590,7 +559,7 @@ export const rokCommanderCopy = {
 	},
 
 	// ── streamer / general schedule copy ──────────────────────────
-	// Copy lives on this same constants file (same audit point as the
+	// Copy lives in this same copy pack (same audit point as the
 	// kingdom voice) but speaks plainly. Streamers want a working
 	// schedule, not a roleplay. Voice still leans casual gamer — Discord
 	// communities skew that way and the streamer who first asked for the

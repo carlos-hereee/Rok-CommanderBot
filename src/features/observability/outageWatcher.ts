@@ -1,7 +1,7 @@
 import { Client, EmbedBuilder } from "discord.js";
 import { getServerReachabilityState } from "@utils/serverApi.js";
 import { creatorId } from "@utils/config.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS, FOOTER } from "@base/copy/brand.js";
 
 // ── outageWatcher ──
 // What: polls serverApi's reachability state on a 60-second tick. When the bot
@@ -68,8 +68,8 @@ const outageEmbed = (failureDurationMinutes: number): EmbedBuilder =>
 				"This DM fires once per outage. You will get a recovery DM when the server becomes reachable again.",
 			].join("\n")
 		)
-		.setColor(embedContent.COLORS.ERROR)
-		.setFooter({ text: embedContent.FOOTER });
+		.setColor(COLORS.ERROR)
+		.setFooter({ text: FOOTER });
 
 const recoveryEmbed = (outageDurationMinutes: number): EmbedBuilder =>
 	new EmbedBuilder()
@@ -83,8 +83,8 @@ const recoveryEmbed = (outageDurationMinutes: number): EmbedBuilder =>
 				"If you saw user-visible reminder failures during the outage window, check the bot logs for `ServerUnreachableError` to confirm the timing.",
 			].join("\n")
 		)
-		.setColor(embedContent.COLORS.SCHEDULE)
-		.setFooter({ text: embedContent.FOOTER });
+		.setColor(COLORS.SCHEDULE)
+		.setFooter({ text: FOOTER });
 
 const dmOwner = async (client: Client, embed: EmbedBuilder): Promise<void> => {
 	if (!creatorId) {

@@ -23,7 +23,7 @@ import { botLogStore } from "@db/stores/botLogStore.js";
 import { canEditDecree } from "@utils/permissions.js";
 import { errorEmbed } from "@utils/embedBuilder.js";
 import { parseFlexibleTime, isValidTimezone, localTimeToUtc, dateInTimezone } from "@utils/tzParser.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import type { Client } from "discord.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 
@@ -324,7 +324,7 @@ function proposedChangesEmbed(
 	return new EmbedBuilder()
 		.setTitle("📜 Proposed decree edit")
 		.setDescription(lines.join("\n").trim() || "_(no changes)_")
-		.setColor(embedContent.COLORS.CONFIRMATION);
+		.setColor(rokCommanderCopy.COLORS.CONFIRMATION);
 }
 
 // ── audit-log helper ────────────────────────────────────────────────
@@ -381,7 +381,7 @@ async function handleEditButton(interaction: ButtonInteraction): Promise<void> {
 	const config = await guildConfigStore.findByGuildId(interaction.guildId);
 	if (!config) {
 		await interaction.reply({
-			embeds: [errorEmbed(embedContent.responses.setupRequired)],
+			embeds: [errorEmbed(rokCommanderCopy.responses.setupRequired)],
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -390,7 +390,7 @@ async function handleEditButton(interaction: ButtonInteraction): Promise<void> {
 	const member = interaction.member as GuildMember | null;
 	if (!member || !canEditDecree(member, config)) {
 		await interaction.reply({
-			embeds: [errorEmbed(embedContent.responses.noWizardPowers)],
+			embeds: [errorEmbed(rokCommanderCopy.responses.noWizardPowers)],
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -485,7 +485,7 @@ async function handleEditModalSubmit(submission: ModalSubmitInteraction): Promis
 	const config = await guildConfigStore.findByGuildId(submission.guildId);
 	if (!config) {
 		await submission.reply({
-			embeds: [errorEmbed(embedContent.responses.setupRequired)],
+			embeds: [errorEmbed(rokCommanderCopy.responses.setupRequired)],
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -497,7 +497,7 @@ async function handleEditModalSubmit(submission: ModalSubmitInteraction): Promis
 	const member = submission.member as GuildMember | null;
 	if (!member || !canEditDecree(member, config)) {
 		await submission.reply({
-			embeds: [errorEmbed(embedContent.responses.noWizardPowers)],
+			embeds: [errorEmbed(rokCommanderCopy.responses.noWizardPowers)],
 			flags: MessageFlags.Ephemeral,
 		});
 		return;

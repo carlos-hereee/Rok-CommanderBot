@@ -12,7 +12,7 @@ import {
 } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { errorEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
@@ -59,7 +59,7 @@ import {
 //     pre-2026-04-25 behavior for any docs that say "all times are
 //     UTC".
 
-const c = embedContent.streamSchedule;
+const c = rokCommanderCopy.streamSchedule;
 
 // Day-of-week parsing. Accept full names; the option already constrains
 // the choice list so this is a defensive map (case-insensitive in case
@@ -261,7 +261,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	const confirmEmbed = new EmbedBuilder()
 		.setTitle(c.confirm.title)
 		.setDescription(previewLines.join("\n"))
-		.setColor(embedContent.COLORS.SCHEDULE);
+		.setColor(rokCommanderCopy.COLORS.SCHEDULE);
 
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder().setCustomId("stream_confirm").setLabel(c.confirm.confirmButtonLabel).setStyle(ButtonStyle.Success),
@@ -310,7 +310,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 			});
 
 			await press.update({
-				embeds: [new EmbedBuilder().setDescription(c.saved(name)).setColor(embedContent.COLORS.SCHEDULE)],
+				embeds: [new EmbedBuilder().setDescription(c.saved(name)).setColor(rokCommanderCopy.COLORS.SCHEDULE)],
 				components: [],
 			});
 

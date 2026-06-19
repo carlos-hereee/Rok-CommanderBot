@@ -4,7 +4,7 @@ import { eventStore } from "@db/stores/eventStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import rokEvents from "@base/constants/rok-events.json" with { type: "json" };
 import { v4 } from "uuid";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
@@ -195,7 +195,7 @@ export class GuildEventManager {
 			}
 
 			await interaction.editReply({
-				content: embedContent.responses.kvkConfigured(
+				content: rokCommanderCopy.responses.kvkConfigured(
 					Math.floor(input.seasonEnd.getTime() / 1000),
 					announcementsChannelId
 				),
@@ -210,7 +210,7 @@ export class GuildEventManager {
 		} catch (error) {
 			console.error(LOG_MESSAGES.guildEvent.configureKvkFailed, error);
 			await interaction.editReply({
-				content: embedContent.responses.kvkConfigureFailed,
+				content: rokCommanderCopy.responses.kvkConfigureFailed,
 			});
 		}
 	}

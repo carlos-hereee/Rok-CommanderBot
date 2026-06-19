@@ -4,8 +4,10 @@
 // Who:   every feature module, every route handler, the bot entry point.
 // When:  caller imports LOG_MESSAGES and passes the function result or
 //        constant to console.*.
-// Where: paired with embedContent for user-facing copy. console output
-//        lives here; Discord-rendered copy lives in embed-content.ts.
+// Where: paired with the copy packs for user-facing copy. console output
+//        lives here; Discord-rendered copy lives in the copy packs
+//        (@base/copy/packs), resolved per guild via getPluginCopy
+//        (@base/copy/getCopy).
 // How:   strings with no interpolation are exported as string constants.
 //        strings that take runtime values are exported as arrow functions
 //        so the tag prefix and phrasing stay consistent per namespace.
@@ -191,7 +193,8 @@ export const LOG_MESSAGES = {
 		// ── intro embed refresh (boot) ─────────────────────────────────
 		// What: GuildSetupManager.refreshIntroEmbeds sweeps the six stored
 		//       intro messages per guild on boot and edits them in place to
-		//       reflect the current embed-content.ts copy. Ships new wording
+		//       reflect the current copy from the copy packs
+		//       (@base/copy/packs). Ships new wording
 		//       without forcing admins to nuke and rebuild the homebase.
 		// Why separate namespace from ensureHomebase? the refresh runs after
 		//       the sweep and can fail independently of channel integrity —

@@ -19,7 +19,7 @@ import { ChannelContent } from "./ChannelContent.js";
 import type { ICopyConfig } from "@base/copy/getCopy.js";
 import { buildSuggestionBoxButtonRow } from "@features/suggestion-box/SuggestionBox.js";
 import { buildSelfDestructButtonRow } from "@features/setup/selfDestruct.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
@@ -33,7 +33,7 @@ import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 const AUTO_LEAVE_GRACE_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const { channels } = embedContent.setup;
+const { channels } = rokCommanderCopy.setup;
 
 // What: compose the home base category name, appending the dev suffix
 //       when NODE_ENV === "development".
@@ -41,16 +41,16 @@ const { channels } = embedContent.setup;
 //       prod creates a visually distinct category instead of colliding.
 // When: once per autoSetup call. evaluated at runtime, not module load,
 //       so env changes between runs are respected.
-// Where: embed-content.ts owns the base name and suffix string. this
-//        helper owns the env branching so the constants file stays free
+// Where: the copy packs (@base/copy/packs) own the base name and suffix
+//        string. this helper owns the env branching so the pack stays free
 //        of environment logic.
 // How:   plain string concat. devSuffix is an empty string in prod or any
 //        non-development value, so we could always concat, but the env
 //        check keeps the production name pristine.
 function resolveCategoryName(): string {
 	return process.env.NODE_ENV === "development"
-		? embedContent.setup.categoryName + embedContent.setup.devSuffix
-		: embedContent.setup.categoryName;
+		? rokCommanderCopy.setup.categoryName + rokCommanderCopy.setup.devSuffix
+		: rokCommanderCopy.setup.categoryName;
 }
 
 export class GuildSetupManager {
@@ -243,7 +243,7 @@ export class GuildSetupManager {
 			scheduleMessageId,
 			// introMessageIds anchors every other intro embed so
 			// refreshIntroEmbeds can edit them in place on subsequent boots
-			// when embed-content.ts copy changes. This is the field that
+			// when the copy packs (@base/copy/packs) change. This is the field that
 			// makes "rebuild the bot copy without nuking the homebase"
 			// possible.
 			introMessageIds,
@@ -826,8 +826,9 @@ export class GuildSetupManager {
 
 				if (existingIntro) {
 					// Adopt the existing intro. Also run an in-place
-					// edit so any copy changes in embed-content.ts since
-					// the prior post land immediately (same contract as
+					// edit so any copy changes in the copy packs
+					// (@base/copy/packs) since the prior post land
+					// immediately (same contract as
 					// refreshIntroEmbeds but scoped to this one message).
 					introMessageId = existingIntro.id;
 					try {
@@ -1571,7 +1572,7 @@ export class GuildSetupManager {
 	// ── intro embed refresh on boot ──────────────────────────────
 	// What:  for each of the six homebase channels, edit the stored intro
 	//        message in place so a restarted bot ships updated copy from
-	//        embed-content.ts without forcing the operator to rebuild the
+	//        the copy packs (@base/copy/packs) without forcing the operator to rebuild the
 	//        homebase. If the stored message is missing, repost a fresh
 	//        intro and persist the new id.
 	// Who:   main.ts calls this inside the Events.ClientReady handler once

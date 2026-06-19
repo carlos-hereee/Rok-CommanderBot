@@ -4,8 +4,9 @@ import type { rokCommanderCopy } from "./packs/rok-commander.pack.js";
 // What:  defines the structural contract every plugin's copy pack must
 //        satisfy and lifts the pre-existing IEmbedField shape (used inside
 //        `commandGuide.fields` and `adminCommandGuide.fields`) into a place
-//        where any pack file can import it without depending on the legacy
-//        `embed-content.ts` location.
+//        where any pack file can import it. The copy itself lives in the
+//        copy packs (@base/copy/packs); brand constants in @base/copy/brand;
+//        the active-pack resolver is getPluginCopy (@base/copy/getCopy).
 // Who:   pack authors (Phase 2's `general-events.pack.ts`, plus any future
 //        neutral / streamer-tone packs) consume `IPluginCopy`. The lookup
 //        helpers in `getCopy.ts` consume `PluginId`.

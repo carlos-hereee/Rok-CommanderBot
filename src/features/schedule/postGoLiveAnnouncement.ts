@@ -1,6 +1,6 @@
 import { Client, TextChannel, EmbedBuilder } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 
 // ── lead-time table ─────────────────────────────────────────────────
 // Shared between /go-live-soon (slash command) and the Go Live Now
@@ -77,12 +77,12 @@ export async function postGoLiveAnnouncement(
 		return { ok: false, reason: "post-failed" };
 	}
 
-	const c = embedContent.goLiveSoon;
+	const c = rokCommanderCopy.goLiveSoon;
 	const embed = new EmbedBuilder()
 		.setTitle(c.announcementTitle)
 		.setDescription(c.announcementBody(lead.label, startUnix, note))
-		.setColor(embedContent.COLORS.ANNOUNCEMENTS)
-		.setFooter({ text: embedContent.FOOTER });
+		.setColor(rokCommanderCopy.COLORS.ANNOUNCEMENTS)
+		.setFooter({ text: rokCommanderCopy.FOOTER });
 
 	// Large banner from the guild's default event image. Go-live is not tied to
 	// a single event, so there is no per-event imageUrl here — the guild default

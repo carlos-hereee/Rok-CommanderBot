@@ -5,9 +5,8 @@ import { COPY_PACKS, DEFAULT_PLUGIN_ID } from "./packs.js";
 // What:  the runtime entry points that resolve "which words should this
 //        guild see?" for a given GuildConfig. Two surfaces:
 //          1. `getPluginCopy(guildConfig)` returns the entire pack object
-//             so a caller can destructure a sub-namespace and use it like
-//             the legacy `embedContent` import (e.g. `const c = ...`,
-//             then `c.scheduleBoard.title`).
+//             so a caller can destructure a sub-namespace and read it
+//             directly (e.g. `const c = ...`, then `c.scheduleBoard.title`).
 //          2. `getCopyOverride(key, guildConfig)` returns the per-guild
 //             owner-authored override for one dotted key, or undefined
 //             when no override is set. Phase 3 of the streamer-plugin
@@ -17,11 +16,12 @@ import { COPY_PACKS, DEFAULT_PLUGIN_ID } from "./packs.js";
 // Who:   embed builders, slash command handlers, ChannelContent.
 // When:  on every render of a user-facing string. Cheap — registry lookup
 //        plus, when overrides are present, a single Map.get.
-// Where: lives at `@base/copy/getCopy`. The legacy `embed-content.ts`
-//        re-exports `rokCommanderCopy` AS `embedContent` so the existing
-//        96 import sites keep working unchanged. New code (and any call
-//        site that wants per-guild overrides honored) should switch to
-//        `getPluginCopy(guildConfig)` instead.
+// Where: lives at `@base/copy/getCopy`. The Discord-rendered copy lives
+//        in the copy packs (`@base/copy/packs`); brand constants (colors,
+//        footer) live in `@base/copy/brand`. The legacy back-compat shim
+//        has been retired, so call sites now use `getPluginCopy(guildConfig)`
+//        (which honors per-guild overrides) or import `rokCommanderCopy` /
+//        the brand constants directly.
 // How:   the override layer reads from a Mongoose-shaped Map. Mongoose
 //        Maps expose a `.get` method at runtime, but TypeScript sees them
 //        as `Map<string, string>` once cast through the Mongoose Document

@@ -12,7 +12,7 @@ import {
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { registerButton } from "@handlers/interactionRegistry.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
 
 // ── Self destruct ──────────────────────────────────────────────────────
 // Server-owner-only homebase teardown. Demolishes the bot's category and every
@@ -76,7 +76,7 @@ export async function showSelfDestructConfirm(interaction: SelfDestructEntry): P
 			"",
 			"It stays gone across restarts until you run `/setup` again. **This cannot be undone.**",
 		].join("\n"),
-		embedContent.COLORS.ERROR
+		COLORS.ERROR
 	);
 
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -106,7 +106,7 @@ async function handleSelfDestruct(interaction: ButtonInteraction): Promise<void>
 
 	if (action === "cancel") {
 		await interaction.update({
-			embeds: [infoEmbed("Cancelled", "The homebase is intact. Nothing was deleted.", embedContent.COLORS.SCHEDULE)],
+			embeds: [infoEmbed("Cancelled", "The homebase is intact. Nothing was deleted.", COLORS.SCHEDULE)],
 			components: [],
 		});
 		return;
@@ -116,7 +116,7 @@ async function handleSelfDestruct(interaction: ButtonInteraction): Promise<void>
 		// Acknowledge first (and drop the buttons) so the click does not error if
 		// the channel it lives in is about to be deleted.
 		await interaction.update({
-			embeds: [infoEmbed("💥 Demolishing", "Tearing down the homebase now.", embedContent.COLORS.ERROR)],
+			embeds: [infoEmbed("💥 Demolishing", "Tearing down the homebase now.", COLORS.ERROR)],
 			components: [],
 		});
 		try {

@@ -12,7 +12,8 @@ import { infoEmbed } from "@utils/embedBuilder.js";
 // What:  once per (guild, version) broadcast posted on bot boot. Two
 //        surfaces per guild: #announcements (public, godly voice) and
 //        #inner-sanctum (admin, plain voice, no ping). Copy lives in
-//        embedContent.featureAnnouncement and is keyed by the bot's
+//        each pack's featureAnnouncement block (resolved per guild via
+//        getPluginCopy) and is keyed by the bot's
 //        current package.json version; idempotency is enforced via
 //        botLogStore with a `feature_announced:<version>` event key
 //        so every new release gets its own bucket.

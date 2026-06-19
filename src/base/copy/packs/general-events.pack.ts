@@ -1,5 +1,5 @@
-import { ColorResolvable } from "discord.js";
 import type { IEmbedField, IPluginCopy } from "../types.js";
+import { COLORS, FOOTER, AUTHOR } from "../brand.js";
 
 // ── general-events copy pack (streamer-plugin spec Phase 2 scaffold) ─────
 // What:  the plain-English / streamer-tone alternative to rok-commander.
@@ -33,42 +33,12 @@ import type { IEmbedField, IPluginCopy } from "../types.js";
 const STUB = "[unused in this plugin]";
 
 export const generalEventsCopy: IPluginCopy = {
-	// Platform brand, not bot brand. Same rationale as rok-commander
-	// pack — see that pack's FOOTER comment.
-	FOOTER: "Company Uno",
-
-	// Embed author. Same value as rok-commander: the bot presents as Dero in
-	// every pack, so the author name and icon do not vary by voice. Required by
-	// the shared IPluginCopy shape derived from the rok-commander pack. The icon
-	// 404s gracefully to name-only until the web app deploys the PNG.
-	AUTHOR: {
-		name: "Dero",
-		iconURL: "https://www.companyuno.com/dero/dero-icon-128.png",
-	},
-
-	// Same palette as rok-commander. Color is neutral by design — the kingdom
-	// vs streamer split happens in words, not in chrome. Keeping the same
-	// keys means embed builders that read `c.COLORS.REMINDER` work without a
-	// branch on plugin id.
-	COLORS: {
-		REMINDER: "Red",
-		SEASON_END: "DarkGrey",
-		LEADERBOARD: "Gold",
-		CONFIRMATION: "Yellow",
-		ERROR: "DarkRed",
-		ARRIVAL: "DarkGold",
-		INTRODUCTION: "DarkGold",
-		COMMANDS: "DarkBlue",
-		SCHEDULE: "DarkGreen",
-		ANNOUNCEMENTS: "DarkRed",
-		ADMIN: "DarkPurple",
-		NEXT_DECREE: "DarkNavy",
-		// Dero's brand-indigo accent. Same value as rok-commander: the bot
-		// presents as Dero in every pack, so the brand color does not vary by
-		// voice. Required by the shared IPluginCopy shape derived from the
-		// rok-commander pack.
-		DERO: "#4f46e5",
-	} satisfies Record<string, ColorResolvable>,
+	// Brand identity (footer, Dero author, color palette) is shared across all
+	// packs — see @base/copy/brand. Identical to every other pack by design
+	// (the kingdom vs neutral split is words, not chrome).
+	FOOTER,
+	AUTHOR,
+	COLORS,
 
 	listEvents: {
 		title: "📅 Active Events",

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { Client, EmbedBuilder, TextChannel } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { requireGuildId } from "../middleware/requireGuildId.js";
 
 // ── /api/events/:eventId/go-live-now ──
@@ -71,7 +71,7 @@ export function createAnnounceRouter(client: Client): Router {
 			if (!lead) {
 				res.status(400).json({
 					error: "Invalid lead time",
-					detail: embedContent.goLiveSoon.invalidLeadTime,
+					detail: rokCommanderCopy.goLiveSoon.invalidLeadTime,
 				});
 				return;
 			}
@@ -82,7 +82,7 @@ export function createAnnounceRouter(client: Client): Router {
 				res.status(409).json({
 					error: "Setup incomplete",
 					reason: "guild_not_configured",
-					detail: embedContent.goLiveSoon.setupRequired,
+					detail: rokCommanderCopy.goLiveSoon.setupRequired,
 				});
 				return;
 			}
@@ -126,7 +126,7 @@ export function createAnnounceRouter(client: Client): Router {
 				res.status(409).json({
 					error: "Channel not reachable",
 					reason: "channel_not_found",
-					detail: embedContent.goLiveSoon.postFailed,
+					detail: rokCommanderCopy.goLiveSoon.postFailed,
 				});
 				return;
 			}
@@ -134,7 +134,7 @@ export function createAnnounceRouter(client: Client): Router {
 				res.status(409).json({
 					error: "Channel is not a text channel",
 					reason: "channel_wrong_type",
-					detail: embedContent.goLiveSoon.postFailed,
+					detail: rokCommanderCopy.goLiveSoon.postFailed,
 				});
 				return;
 			}
@@ -142,10 +142,10 @@ export function createAnnounceRouter(client: Client): Router {
 			// ③ Compose the embed using the EXACT same builder the slash command
 			//    uses so the two surfaces produce visually identical announcements.
 			const embed = new EmbedBuilder()
-				.setTitle(embedContent.goLiveSoon.announcementTitle)
-				.setDescription(embedContent.goLiveSoon.announcementBody(lead.label, startUnix, note))
-				.setColor(embedContent.COLORS.ANNOUNCEMENTS)
-				.setFooter({ text: embedContent.FOOTER });
+				.setTitle(rokCommanderCopy.goLiveSoon.announcementTitle)
+				.setDescription(rokCommanderCopy.goLiveSoon.announcementBody(lead.label, startUnix, note))
+				.setColor(rokCommanderCopy.COLORS.ANNOUNCEMENTS)
+				.setFooter({ text: rokCommanderCopy.FOOTER });
 
 			const mention = mentionRoleId ? `<@&${mentionRoleId}>` : "@here";
 
@@ -204,7 +204,7 @@ export function createStandaloneGoLiveRouter(client: Client): Router {
 			if (!lead) {
 				res.status(400).json({
 					error: "Invalid lead time",
-					detail: embedContent.goLiveSoon.invalidLeadTime,
+					detail: rokCommanderCopy.goLiveSoon.invalidLeadTime,
 				});
 				return;
 			}
@@ -214,7 +214,7 @@ export function createStandaloneGoLiveRouter(client: Client): Router {
 				res.status(409).json({
 					error: "Setup incomplete",
 					reason: "guild_not_configured",
-					detail: embedContent.goLiveSoon.setupRequired,
+					detail: rokCommanderCopy.goLiveSoon.setupRequired,
 				});
 				return;
 			}
@@ -256,7 +256,7 @@ export function createStandaloneGoLiveRouter(client: Client): Router {
 				res.status(409).json({
 					error: "Channel not reachable",
 					reason: "channel_not_found",
-					detail: embedContent.goLiveSoon.postFailed,
+					detail: rokCommanderCopy.goLiveSoon.postFailed,
 				});
 				return;
 			}
@@ -264,16 +264,16 @@ export function createStandaloneGoLiveRouter(client: Client): Router {
 				res.status(409).json({
 					error: "Channel is not a text channel",
 					reason: "channel_wrong_type",
-					detail: embedContent.goLiveSoon.postFailed,
+					detail: rokCommanderCopy.goLiveSoon.postFailed,
 				});
 				return;
 			}
 
 			const embed = new EmbedBuilder()
-				.setTitle(embedContent.goLiveSoon.announcementTitle)
-				.setDescription(embedContent.goLiveSoon.announcementBody(lead.label, startUnix, note))
-				.setColor(embedContent.COLORS.ANNOUNCEMENTS)
-				.setFooter({ text: embedContent.FOOTER });
+				.setTitle(rokCommanderCopy.goLiveSoon.announcementTitle)
+				.setDescription(rokCommanderCopy.goLiveSoon.announcementBody(lead.label, startUnix, note))
+				.setColor(rokCommanderCopy.COLORS.ANNOUNCEMENTS)
+				.setFooter({ text: rokCommanderCopy.FOOTER });
 
 			const mention = mentionRoleId ? `<@&${mentionRoleId}>` : "@here";
 

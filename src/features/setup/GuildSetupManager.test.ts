@@ -17,7 +17,7 @@ vi.mock("@db/stores/guildConfigStore.js", () => ({
 
 import { GuildSetupManager } from "./GuildSetupManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 
 const guildConfigMock = guildConfigStore as unknown as {
 	findByGuildId: ReturnType<typeof vi.fn>;
@@ -186,7 +186,7 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		// castle rebuilt embed landed in the new inner sanctum.
 		expect(adminChannel.send).toHaveBeenCalledOnce();
 		const sent = adminChannel.send.mock.calls[0][0] as { embeds: Array<{ data: { title: string } }> };
-		expect(sent.embeds[0].data.title).toBe(embedContent.channelContent.castleRebuiltNotice.title);
+		expect(sent.embeds[0].data.title).toBe(rokCommanderCopy.channelContent.castleRebuiltNotice.title);
 	});
 
 	it("rebuilds when the stored schedule message was authored by another bot", async () => {
@@ -323,7 +323,7 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		const result = await GuildSetupManager.ensureHomebase(client, guild);
 
 		expect(result.action).toBe("repaired");
-		expect(result.repairedChannels).toEqual([embedContent.setup.channels.announcements]);
+		expect(result.repairedChannels).toEqual([rokCommanderCopy.setup.channels.announcements]);
 		// config update ran with the new announcements channel id AND the
 		// new introMessageIds map (announcementsChannelId slot freshly
 		// populated with the reposted intro message id, other slots
@@ -337,7 +337,7 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		// notice embed landed in inner sanctum.
 		expect(adminChannel.send).toHaveBeenCalledOnce();
 		const sent = adminChannel.send.mock.calls[0][0] as { embeds: Array<{ data: { title: string } }> };
-		expect(sent.embeds[0].data.title).toBe(embedContent.channelContent.channelRepairNotice.title);
+		expect(sent.embeds[0].data.title).toBe(rokCommanderCopy.channelContent.channelRepairNotice.title);
 	});
 
 	it("repairs the admin channel itself and posts the notice into the rebuilt admin channel", async () => {
@@ -349,7 +349,7 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		guildConfigMock.findByGuildId.mockResolvedValue(makeStoredConfig());
 
 		const intact = { id: "intact" };
-		const newAdminChannel = makeAdminChannel(`new-${embedContent.setup.channels.admin}`);
+		const newAdminChannel = makeAdminChannel(`new-${rokCommanderCopy.setup.channels.admin}`);
 		const guild = makeGuild({
 			categoryId: { id: "cat-1" },
 			channelFetchMap: {
@@ -385,7 +385,7 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		const result = await GuildSetupManager.ensureHomebase(client, guild);
 
 		expect(result.action).toBe("repaired");
-		expect(result.repairedChannels).toEqual([embedContent.setup.channels.admin]);
+		expect(result.repairedChannels).toEqual([rokCommanderCopy.setup.channels.admin]);
 		// config update with the new admin channel id plus the refreshed
 		// introMessageIds map carrying the new admin intro anchor.
 		expect(guildConfigMock.update).toHaveBeenCalledWith("guild-1", {
@@ -428,7 +428,7 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		const fakeCategory = { id: "cat-1" } as unknown as import("discord.js").CategoryChannel;
 		const repaired = await GuildSetupManager.repairMissingChannels(client, guild, fakeCategory);
 
-		expect(repaired).toEqual([embedContent.setup.channels.schedule]);
+		expect(repaired).toEqual([rokCommanderCopy.setup.channels.schedule]);
 		// the update call for schedule channel carries the new channel id,
 		// the refreshed introMessageIds map, AND scheduleMessageId pointing
 		// at the fresh intro post (which IS the new pinned board anchor).
@@ -471,7 +471,7 @@ describe("GuildSetupManager.ensureHomebase", () => {
 		const result = await GuildSetupManager.ensureHomebase(client, guild);
 
 		expect(result.action).toBe("repaired");
-		expect(result.repairedChannels).toEqual([embedContent.setup.channels.intro, embedContent.setup.channels.leaderboard]);
+		expect(result.repairedChannels).toEqual([rokCommanderCopy.setup.channels.intro, rokCommanderCopy.setup.channels.leaderboard]);
 		// two repair notices posted to inner sanctum.
 		expect(adminChannel.send).toHaveBeenCalledTimes(2);
 	});
@@ -607,13 +607,12 @@ describe("GuildSetupManager.autoSetup persistence", () => {
 
 // ── refreshIntroEmbeds (boot time copy refresh) ─────────────────────────
 // What: edits the six stored intro messages in place on every boot so
-//       embed-content.ts copy changes ship without forcing a rebuild. If
-//       the stored anchor is missing, reposts a fresh intro and persists
-//       the new id. If introMessageIds is absent entirely (legacy row),
-//       reposts all six.
+//       copy-pack changes ship without forcing a rebuild. If the stored
+//       anchor is missing, reposts a fresh intro and persists the new id.
+//       If introMessageIds is absent entirely (legacy row), reposts all six.
 // Who:  main.ts ready handler, after ensureHomebase completes per guild.
 // Where: relies on resolveIntroEmbed to pick the correct embed per spec and
-//        on ChannelContent for the rendered copy.
+//        on the copy packs (@base/copy/packs) for the rendered copy.
 describe("GuildSetupManager.refreshIntroEmbeds", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();

@@ -15,9 +15,9 @@ import { GuildEventManager } from "@features/events/GuildEventManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { kvkConfirmationEmbed, errorEmbed } from "@utils/embedBuilder.js";
 import { addDays, parseEventDate, parseEventDateTime } from "@utils/dateParser.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 
-const { configureReminders } = embedContent;
+const { configureReminders } = rokCommanderCopy;
 
 export const data = new SlashCommandBuilder()
 	.setName("configure-kvk-season")

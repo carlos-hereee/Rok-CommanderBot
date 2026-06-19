@@ -53,7 +53,7 @@ export interface IChannelObjects {
 //   • "repaired" — category was intact and owned by this bot, but one or
 //                  more individual channels were missing and were rebuilt.
 //                  repairedChannels lists the human readable names (same
-//                  strings embedContent.setup.channels exposes). A per
+//                  strings the copy pack's setup.channels exposes). A per
 //                  channel notice is posted to the inner sanctum.
 //   • "skipped"  — stored homebase exists in full and is owned by this bot.
 export interface IEnsureHomebaseResult {

@@ -7,7 +7,7 @@ import {
 } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { getPluginCopy } from "@base/copy/getCopy.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
@@ -30,7 +30,7 @@ import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 //        update the pausedUntil but report "already paused" rather than
 //        re-pausing silently.
 
-const c = embedContent.pauseSchedule;
+const c = rokCommanderCopy.pauseSchedule;
 
 export const data = new SlashCommandBuilder()
 	.setName("pause-schedule")
@@ -118,7 +118,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 			: c.paused(event.name);
 
 		await interaction.reply({
-			embeds: [infoEmbed("⏸️ Schedule paused", successText, embedContent.COLORS.SCHEDULE)],
+			embeds: [infoEmbed("⏸️ Schedule paused", successText, rokCommanderCopy.COLORS.SCHEDULE)],
 			flags: MessageFlags.Ephemeral,
 		});
 

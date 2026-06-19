@@ -9,8 +9,8 @@ import type { IPluginCopy } from "@base/copy/types.js";
 // render the neutral general-events pack, ROK guilds keep the kingdom voice.
 // guildConfig is optional and defaults to undefined, which getPluginCopy
 // resolves to the rok-commander pack — so a caller that has not been threaded
-// yet behaves exactly as it did when this file imported the static
-// `embedContent` (the rok-commander re-export).
+// yet behaves exactly as it did before the plugin-copy migration: the
+// rok-commander default.
 
 interface IListEventField {
 	name: string;

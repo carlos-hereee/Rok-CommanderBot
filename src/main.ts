@@ -11,7 +11,7 @@ import { registerActivityListeners } from "@features/activity-tracking/ActivityT
 import { startApiServer } from "@api/server.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { arrivalEmbed, errorEmbed, pairingCodeEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { registerChannelDeleteWatcher } from "@features/setup/ChannelDeleteWatcher.js";
@@ -284,7 +284,7 @@ process.on("uncaughtException", (err) => {
 				if (!interaction.replied && !interaction.deferred) {
 					await interaction
 						.reply({
-							embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+							embeds: [errorEmbed(rokCommanderCopy.responses.commandExecuteFailure)],
 							flags: MessageFlags.Ephemeral,
 						})
 						.catch(() => undefined);
@@ -306,7 +306,7 @@ process.on("uncaughtException", (err) => {
 				if (!interaction.replied && !interaction.deferred) {
 					await interaction
 						.reply({
-							embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+							embeds: [errorEmbed(rokCommanderCopy.responses.commandExecuteFailure)],
 							flags: MessageFlags.Ephemeral,
 						})
 						.catch(() => undefined);
@@ -332,7 +332,7 @@ process.on("uncaughtException", (err) => {
 				// guild hasn't run /setup yet — no config means no admin role is defined
 				if (!config) {
 					await interaction.reply({
-						embeds: [errorEmbed(embedContent.responses.setupRequired)],
+						embeds: [errorEmbed(rokCommanderCopy.responses.setupRequired)],
 						flags: MessageFlags.Ephemeral,
 					});
 					return;
@@ -353,7 +353,7 @@ process.on("uncaughtException", (err) => {
 
 				if (!isOwner && !hasAdminRole) {
 					await interaction.reply({
-						embeds: [errorEmbed(embedContent.responses.noWizardPowers)],
+						embeds: [errorEmbed(rokCommanderCopy.responses.noWizardPowers)],
 						flags: MessageFlags.Ephemeral,
 					});
 					return;
@@ -369,12 +369,12 @@ process.on("uncaughtException", (err) => {
 			// interaction might already be replied to
 			if (interaction.replied || interaction.deferred) {
 				await interaction.followUp({
-					embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+					embeds: [errorEmbed(rokCommanderCopy.responses.commandExecuteFailure)],
 					flags: MessageFlags.Ephemeral,
 				});
 			} else {
 				await interaction.reply({
-					embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+					embeds: [errorEmbed(rokCommanderCopy.responses.commandExecuteFailure)],
 					flags: MessageFlags.Ephemeral,
 				});
 			}
@@ -475,8 +475,8 @@ process.on("uncaughtException", (err) => {
 				// What: after ensureHomebase has confirmed (or rebuilt) the
 				//       homebase for this guild, sweep the six stored intro
 				//       messages and edit them in place so copy changes in
-				//       embed-content.ts land on the next boot without
-				//       forcing an admin to rebuild.
+				//       the copy packs (@base/copy/packs) land on the next
+				//       boot without forcing an admin to rebuild.
 				// When: only after ensureHomebase finishes so we never edit
 				//       a channel that was just deleted. A fresh "built"
 				//       already wrote the latest copy so this call is a no

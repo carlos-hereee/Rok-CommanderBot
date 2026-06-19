@@ -7,11 +7,12 @@ import {
 	EmbedBuilder,
 } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { creatorId } from "@utils/config.js";
 
-const { responses } = embedContent;
+const { responses } = rokCommanderCopy;
 
 /* /channels — v1.5.1 visibility-toggle command.
    Three subcommands let admins hide or show the five optional homebase
@@ -217,7 +218,7 @@ async function handleHide(interaction: ChatInputCommandInteraction, config: Guil
 			infoEmbed(
 				`Channel hidden`,
 				`Hid <#${channelId}> (${displayName}) from members. The bot still posts there in the background. Run /channels show to make it visible again.`,
-				embedContent.COLORS.ARRIVAL
+				COLORS.ARRIVAL
 			),
 		],
 		ephemeral: true,
@@ -286,7 +287,7 @@ async function handleShow(interaction: ChatInputCommandInteraction, config: Guil
 			infoEmbed(
 				`Channel visible`,
 				`Made <#${channelId}> (${displayName}) visible to members again.`,
-				embedContent.COLORS.ARRIVAL
+				COLORS.ARRIVAL
 			),
 		],
 		ephemeral: true,
@@ -305,7 +306,7 @@ async function handleList(interaction: ChatInputCommandInteraction, config: Guil
 	const embed = new EmbedBuilder()
 		.setTitle("Channel visibility")
 		.setDescription(lines)
-		.setColor(embedContent.COLORS.ARRIVAL)
+		.setColor(COLORS.ARRIVAL)
 		.setFooter({ text: "Hidden channels still receive bot posts; only member visibility is suppressed." });
 
 	await interaction.reply({ embeds: [embed], ephemeral: true });

@@ -14,7 +14,7 @@ import { pollResultStore } from "@db/stores/pollResultStore.js";
 import { pollSentEvent } from "@base/constants/BOT_LOG_EVENTS.js";
 import { registerButton } from "@handlers/interactionRegistry.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
 import { ACTIVE_POLLS, IPollDefinition } from "./pollDefinitions.js";
 
 // ── PollDispatcher ────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ export function registerPollHandlers(): void {
 // ── message building ────────────────────────────────────────────────────
 
 function buildPollEmbed(poll: IPollDefinition): EmbedBuilder {
-	return infoEmbed(POLL_EMBED_TITLE, `${poll.question}\n\n${POLL_INSTRUCTION}`, embedContent.COLORS.ANNOUNCEMENTS);
+	return infoEmbed(POLL_EMBED_TITLE, `${poll.question}\n\n${POLL_INSTRUCTION}`, COLORS.ANNOUNCEMENTS);
 }
 
 function buildPollComponents(poll: IPollDefinition): ActionRowBuilder<ButtonBuilder>[] {

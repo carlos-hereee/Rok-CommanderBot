@@ -8,7 +8,7 @@ import {
 } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
 
 // ── /rename-channel ──────────────────────────────────────────────────
 // What:  rename one of the bot-managed channels AND persist the new name
@@ -186,7 +186,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 				infoEmbed(
 					"Already that name",
 					`The channel is already named **${newName}** and that name is already persisted. No change made.`,
-					embedContent.COLORS.SCHEDULE
+					COLORS.SCHEDULE
 				),
 			],
 			flags: MessageFlags.Ephemeral,
@@ -219,7 +219,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 				infoEmbed(
 					"✏️ Channel renamed",
 					`The channel is now named **${newName}** and the rename is persisted, so it will survive any future auto-heal rebuild.\n\nHeads up: renaming the channel directly in Discord works for the live channel but does NOT update the persisted override. Use /rename-channel again any time you want the new name to stick across rebuilds.`,
-					embedContent.COLORS.SCHEDULE
+					COLORS.SCHEDULE
 				),
 			],
 			flags: MessageFlags.Ephemeral,

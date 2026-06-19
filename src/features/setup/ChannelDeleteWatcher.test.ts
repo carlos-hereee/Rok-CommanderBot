@@ -15,7 +15,7 @@ vi.mock("@db/stores/guildConfigStore.js", () => ({
 import { registerChannelDeleteWatcher, __resetRepairCooldownsForTests } from "./ChannelDeleteWatcher.js";
 import { GuildSetupManager } from "./GuildSetupManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 
 const guildConfigMock = guildConfigStore as unknown as {
 	findByGuildId: ReturnType<typeof vi.fn>;
@@ -238,7 +238,7 @@ describe("ChannelDeleteWatcher", () => {
 		// one repair notice landed in the inner sanctum.
 		expect(adminChannel.send).toHaveBeenCalledOnce();
 		const sent = adminChannel.send.mock.calls[0][0] as { embeds: Array<{ data: { title: string } }> };
-		expect(sent.embeds[0].data.title).toBe(embedContent.channelContent.channelRepairNotice.title);
+		expect(sent.embeds[0].data.title).toBe(rokCommanderCopy.channelContent.channelRepairNotice.title);
 	});
 
 	it("throttles a second repair of the same channel within the 60s cooldown", async () => {

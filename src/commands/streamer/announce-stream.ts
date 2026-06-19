@@ -11,7 +11,7 @@ import {
 } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { errorEmbed } from "@utils/embedBuilder.js";
 import { parseEventDateTimeMinutes } from "@utils/dateParser.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
@@ -38,7 +38,7 @@ import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 //        confirmation embed; ③ on confirm, eventStore.create with
 //        type:"one-time"; ④ kick a schedule board refresh.
 
-const c = embedContent.announceStream;
+const c = rokCommanderCopy.announceStream;
 
 export const data = new SlashCommandBuilder()
 	.setName("announce-stream")
@@ -112,7 +112,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	const confirmEmbed = new EmbedBuilder()
 		.setTitle(c.confirm.title)
 		.setDescription(previewLines.join("\n"))
-		.setColor(embedContent.COLORS.SCHEDULE);
+		.setColor(rokCommanderCopy.COLORS.SCHEDULE);
 
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder().setCustomId("announce_confirm").setLabel(c.confirm.confirmButtonLabel).setStyle(ButtonStyle.Success),
@@ -156,7 +156,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 			});
 
 			await press.update({
-				embeds: [new EmbedBuilder().setDescription(c.saved(title)).setColor(embedContent.COLORS.SCHEDULE)],
+				embeds: [new EmbedBuilder().setDescription(c.saved(title)).setColor(rokCommanderCopy.COLORS.SCHEDULE)],
 				components: [],
 			});
 

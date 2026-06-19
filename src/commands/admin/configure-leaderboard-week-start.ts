@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, MessageFlags } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
 
 // Mirrors the GuildConfig weekStart enum. Local union (zero runtime) so the
 // command, the schema, and /leaderboard's thisWeekRange all speak the same two
@@ -87,7 +87,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 				infoEmbed(
 					"Leaderboard week start already set",
 					`The leaderboard week already starts on ${start === "monday" ? "Monday" : "Sunday"} (weeks run ${BOUNDARY_LABEL[start]}). No change made.`,
-					embedContent.COLORS.SCHEDULE
+					COLORS.SCHEDULE
 				),
 			],
 			flags: MessageFlags.Ephemeral,
@@ -102,7 +102,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 				infoEmbed(
 					"📅 Leaderboard week start updated",
 					`The leaderboard's "This week" view now runs ${BOUNDARY_LABEL[start]}. The boundary is shown in the leaderboard title so members always know the window.`,
-					embedContent.COLORS.SCHEDULE
+					COLORS.SCHEDULE
 				),
 			],
 			flags: MessageFlags.Ephemeral,

@@ -16,7 +16,7 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { registerButton } from "@handlers/interactionRegistry.js";
 import { gateOwnerOrAdmin } from "@utils/permissions.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { refreshLeaderboard } from "@features/leaderboard/LeaderboardBoard.js";
 
 // ── Channel power-ups (v1.6 Phase 5, item 36) ──────────────────────────
@@ -87,7 +87,7 @@ const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
 		channelField: "leaderboardChannelId",
 		title: "🏆 Leaderboard controls",
 		description: "Refresh the standings board on demand. Admins only.",
-		color: embedContent.COLORS.LEADERBOARD,
+		color: rokCommanderCopy.COLORS.LEADERBOARD,
 		actions: [{ action: "refresh", label: "Refresh standings", emoji: "🔄", style: ButtonStyle.Primary, adminOnly: true }],
 	},
 	{
@@ -95,7 +95,7 @@ const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
 		channelField: "introChannelId",
 		title: "👋 Introduce yourself",
 		description: "New here? Tap below for a quick intro template to fill in and post.",
-		color: embedContent.COLORS.ARRIVAL,
+		color: rokCommanderCopy.COLORS.ARRIVAL,
 		actions: [{ action: "template", label: "Post intro template", emoji: "📝", style: ButtonStyle.Primary, adminOnly: false }],
 	},
 	{
@@ -103,7 +103,7 @@ const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
 		channelField: "announcementsChannelId",
 		title: "🔔 Announcement pings",
 		description: "Want a heads-up when this server posts an announcement? Tap to opt in or out.",
-		color: embedContent.COLORS.ANNOUNCEMENTS,
+		color: rokCommanderCopy.COLORS.ANNOUNCEMENTS,
 		actions: [{ action: "subscribe", label: "Toggle announcement pings", emoji: "🔔", style: ButtonStyle.Secondary, adminOnly: false }],
 	},
 ];
@@ -136,7 +136,7 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 		const config = await guildConfigStore.findByGuildId(guildId);
 		const allowed = await gateOwnerOrAdmin(interaction, config);
 		if (!allowed) {
-			await interaction.reply({ embeds: [errorEmbed(embedContent.responses.noWizardPowers)], flags: MessageFlags.Ephemeral });
+			await interaction.reply({ embeds: [errorEmbed(rokCommanderCopy.responses.noWizardPowers)], flags: MessageFlags.Ephemeral });
 			return;
 		}
 	}
