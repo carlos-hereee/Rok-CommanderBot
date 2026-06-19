@@ -18,6 +18,7 @@ import { gateOwnerOrAdmin } from "@utils/permissions.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { refreshLeaderboard } from "@features/leaderboard/LeaderboardBoard.js";
+import { welcomeNewMember } from "@features/greeter/welcomeNewMember.js";
 
 // ── Channel power-ups (v1.6 Phase 5, item 36) ──────────────────────────
 // Each homebase channel carries a pinned "power-up" panel: an embed + a row of
@@ -36,29 +37,14 @@ import { refreshLeaderboard } from "@features/leaderboard/LeaderboardBoard.js";
 //    ScheduleBoard and the intro embeds are kept alive across restarts.
 //
 // Panels shipped here: leaderboard "Refresh standings" (admin, Phase 2
-// refreshLeaderboard), intro "Post intro template" (any member), and
-// announcements "Toggle announcement pings" (any member). The schedule channel
-// is deliberately NOT a power-up panel: its controls (Go Live + a phase-gated
-// Pause/Resume toggle) live on the schedule board itself, owned by
-// ScheduleControls, so the board's refresh-on-event-change keeps them current.
+// refreshLeaderboard), intro "Fire a greeting" (admin, fires the new-member
+// greeter flow on demand via features/greeter), and announcements "Toggle
+// announcement pings" (any member). The schedule channel is deliberately NOT a
+// power-up panel: its controls (Go Live + a phase-gated Pause/Resume toggle)
+// live on the schedule board itself, owned by ScheduleControls, so the board's
+// refresh-on-event-change keeps them current.
 
 const POWERUP_PREFIX = "powerup";
-
-// Neutral, voice-agnostic self-intro scaffold handed to a member (ephemerally)
-// when they tap "Post intro template". Kept inline like the rest of the panel
-// copy; could move to the copy packs later if per-pack voice is wanted. Sent in
-// a code block so the member can copy it cleanly, fill it in, and post it.
-const INTRO_TEMPLATE = [
-	"Here's a quick intro template. Copy it, fill it in, and post it in this channel:",
-	"",
-	"```",
-	"Name / handle:",
-	"Where you're from (a timezone is fine):",
-	"How you found this server:",
-	"What you're into:",
-	"One thing you're hoping to get out of being here:",
-	"```",
-].join("\n");
 
 interface IPowerUpAction {
 	// the <action> segment of the customId; unique within a panel
@@ -93,10 +79,10 @@ const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
 	{
 		kind: "intro",
 		channelField: "introChannelId",
-		title: "👋 Introduce yourself",
-		description: "New here? Tap below for a quick intro template to fill in and post.",
+		title: "👋 Greeter controls",
+		description: "Fire a fresh welcome + random icebreaker into this channel on demand. Admins only.",
 		color: rokCommanderCopy.COLORS.ARRIVAL,
-		actions: [{ action: "template", label: "Post intro template", emoji: "📝", style: ButtonStyle.Primary, adminOnly: false }],
+		actions: [{ action: "greet", label: "Fire a greeting", emoji: "👋", style: ButtonStyle.Primary, adminOnly: true }],
 	},
 	{
 		kind: "announcements",
@@ -145,8 +131,8 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 		case "leaderboard:refresh":
 			await runLeaderboardRefresh(interaction, guildId);
 			return;
-		case "intro:template":
-			await runPostIntroTemplate(interaction);
+		case "intro:greet":
+			await runFireGreeting(interaction);
 			return;
 		case "announcements:subscribe":
 			await runToggleNotificationRole(interaction, guildId);
@@ -169,10 +155,25 @@ async function runLeaderboardRefresh(interaction: ButtonInteraction, guildId: st
 	await interaction.editReply({ content: "🔄 Standings refreshed." });
 }
 
-async function runPostIntroTemplate(interaction: ButtonInteraction): Promise<void> {
-	// Ephemeral so repeated clicks never spam the channel — the member gets a
-	// private copy to fill in and post themselves.
-	await interaction.reply({ content: INTRO_TEMPLATE, flags: MessageFlags.Ephemeral });
+async function runFireGreeting(interaction: ButtonInteraction): Promise<void> {
+	// Fire the real new-member greeting flow for the clicking admin: the same
+	// path a join takes (a pack-voiced welcome framing + a random icebreaker,
+	// posted to the introductions channel pinging the member). Lets an admin
+	// preview the greeter or drop a fresh icebreaker on demand. Reuses
+	// welcomeNewMember so the on-demand fire and the on-join fire never drift.
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	let member = interaction.guild?.members.cache.get(interaction.user.id) ?? null;
+	if (!member) member = (await interaction.guild?.members.fetch(interaction.user.id).catch(() => null)) ?? null;
+	if (!member) {
+		await interaction.editReply({ content: "Could not resolve your membership. Try again in a moment." });
+		return;
+	}
+	const sent = await welcomeNewMember(member);
+	await interaction.editReply({
+		content: sent
+			? "👋 Greeting fired in this channel."
+			: "Could not fire a greeting. Check that the introductions channel exists and the bot can post there.",
+	});
 }
 
 async function runToggleNotificationRole(interaction: ButtonInteraction, guildId: string): Promise<void> {
@@ -295,6 +296,42 @@ async function postOrEditPanel(channel: TextChannel, storedId: string | null, de
 		}
 	}
 
+	// ── adoption guard ───────────────────────────────────────────────────
+	// Before posting a fresh panel, scan recent bot-authored messages for an
+	// existing panel of this kind (a button whose customId starts with
+	// `powerup:<kind>:`, a stable marker). If found, adopt it: refresh its
+	// content and return its id instead of duplicating. Mirrors refreshIntroEmbeds'
+	// idempotency scan so a flaky id round-trip cannot spam the channel with
+	// duplicate panels.
+	const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+	const adoptable = recent?.find(
+		(msg) =>
+			(!selfId || msg.author.id === selfId) &&
+			msg.components.some(
+				(row) =>
+					"components" in row &&
+					row.components.some(
+						(comp) =>
+							"customId" in comp && typeof comp.customId === "string" && comp.customId.startsWith(`${POWERUP_PREFIX}:${def.kind}:`)
+					)
+			)
+	);
+	if (adoptable) {
+		try {
+			await adoptable.edit({ embeds: [embed], components });
+		} catch (error) {
+			console.warn(`[powerup] failed to refresh adopted ${def.kind} panel in guild ${guildId}`, error);
+		}
+		if (!adoptable.pinned) {
+			try {
+				await adoptable.pin();
+			} catch (error) {
+				console.warn(`[powerup] pin failed for adopted ${def.kind} panel in guild ${guildId}`, error);
+			}
+		}
+		return adoptable.id;
+	}
+
 	// First post (or recovery): send, pin best-effort, return the new id.
 	let message: Message;
 	try {
@@ -323,8 +360,17 @@ export async function ensurePowerUps(client: Client, guild: Guild): Promise<void
 	// Dynamic field access: the panel defs key channels by their GuildConfig
 	// field name (e.g. "leaderboardChannelId"). Cast once so the lookup typechecks.
 	const channelIds = config as unknown as Record<string, string | null | undefined>;
-	const existingIds = (config.powerUpMessageIds ?? {}) as unknown as Record<string, string | null>;
-	const nextIds: Record<string, string | null> = { ...existingIds };
+	// Read the stored panel ids EXPLICITLY into a plain object. Spreading the
+	// Mongoose nested subdocument (`{ ...config.powerUpMessageIds }`) did NOT
+	// reliably copy the leaf ids, so the $set below clobbered previously-stored
+	// ids and the panels re-posted every boot. Reading key-by-key mirrors how
+	// refreshIntroEmbeds handles introMessageIds and keeps the write complete.
+	const stored = (config.powerUpMessageIds ?? {}) as unknown as Record<string, string | null | undefined>;
+	const nextIds: Record<string, string | null> = {
+		leaderboardChannelId: stored.leaderboardChannelId ?? null,
+		introChannelId: stored.introChannelId ?? null,
+		announcementsChannelId: stored.announcementsChannelId ?? null,
+	};
 	let changed = false;
 
 	for (const def of POWERUP_DEFINITIONS) {
@@ -334,7 +380,7 @@ export async function ensurePowerUps(client: Client, guild: Guild): Promise<void
 		const channel = await client.channels.fetch(channelId).catch(() => null);
 		if (!(channel instanceof TextChannel)) continue;
 
-		const storedId = existingIds[def.channelField] ?? null;
+		const storedId = nextIds[def.channelField] ?? null;
 		const resultId = await postOrEditPanel(channel, storedId, def, guild.id);
 		if (resultId && resultId !== storedId) {
 			nextIds[def.channelField] = resultId;

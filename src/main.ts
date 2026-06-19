@@ -33,6 +33,7 @@ import { registerSuggestionBoxHandlers } from "@features/suggestion-box/Suggesti
 import { registerPollHandlers, dispatchPolls, logPollTallies } from "@features/polls/PollDispatcher.js";
 import { registerSelfDestructHandlers } from "@features/setup/selfDestruct.js";
 import { registerPowerUpHandlers, ensureAllPowerUps } from "@features/power-ups/PowerUps.js";
+import { registerGreeter, ensureIntroChannelsWritable } from "@features/greeter/welcomeNewMember.js";
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -410,6 +411,14 @@ process.on("uncaughtException", (err) => {
 		// cooldown + ownership probe contract.
 		registerChannelDeleteWatcher(client);
 
+		// ── new-member greeter ────────────────────────────────────
+		// Attach the guildMemberAdd listener so new joins get welcomed (ping +
+		// random icebreaker) in the introductions channel. Needs the GuildMembers
+		// intent, already enabled above. ensureIntroChannelsWritable (after the
+		// homebase sweep) makes existing guilds' intro channels member-writable
+		// so newcomers can actually answer.
+		registerGreeter(client);
+
 		// ── homebase self heal on wake up ──────────────────────────
 		// What: every guild the bot is cached in gets an ensureHomebase pass.
 		//       That method checks category presence + ownership, scans each
@@ -581,6 +590,12 @@ process.on("uncaughtException", (err) => {
 		//       swallowed inside ensureAllPowerUps; one bad guild cannot stall
 		//       the rest.
 		await ensureAllPowerUps(client);
+
+		// ── make existing guilds' introductions channels member-writable ──
+		// New guilds get this from createChannels' introOverwrites; this
+		// idempotent sweep brings guilds set up before the greeter shipped into
+		// line so newcomers can post their answer to the welcome icebreaker.
+		await ensureIntroChannelsWritable(client);
 
 		// ── feature announcement sweep ─────────────────────────────
 		// What: once-per-version broadcast to every setup-complete guild.

@@ -1324,6 +1324,23 @@ export class GuildSetupManager {
 			},
 		];
 
+		// Introductions is the one member-writable homebase channel: it doubles
+		// as a greeter surface where new members answer the welcome icebreaker
+		// (welcomeNewMember) and satisfies a Discord Onboarding gate that requires
+		// posting in a channel before full access. Same as publicOverwrites but
+		// WITHOUT the @everyone SendMessages deny.
+		const introOverwrites = [
+			{
+				id: guild.roles.everyone.id,
+				allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+			},
+			GuildSetupManager.botSelfOverwrite(guild),
+			{
+				id: config.ownerId,
+				allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+			},
+		];
+
 		// admin channel: owner only until Phase 2. botSelfOverwrite
 		// required for the same reason as the category: @everyone deny
 		// ViewChannel hides the channel from the bot otherwise.
@@ -1352,7 +1369,7 @@ export class GuildSetupManager {
 				name: channels.intro,
 				type: ChannelType.GuildText,
 				parent: category.id,
-				permissionOverwrites: publicOverwrites,
+				permissionOverwrites: introOverwrites,
 			}),
 			guild.channels.create({
 				name: channels.commands,
@@ -1519,6 +1536,16 @@ export class GuildSetupManager {
 			// pin requires ManageMessages. if the bot's role lacks it the
 			// board still works, the intro just floats in recent history.
 			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.scheduleChannel.guildId), error);
+		}
+
+		// Pin the introductions welcome embed. The intro channel is now
+		// member-writable (greeter surface), so without a pin the welcome would
+		// get buried under member chatter. refreshIntroEmbeds keeps it pinned on
+		// boot via the shouldBePinned set.
+		try {
+			await introMsg.pin();
+		} catch (error) {
+			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.introChannel.guildId), error);
 		}
 
 		// Pin the next-decree intro as well so mortals who scroll up see
@@ -1720,6 +1747,7 @@ export class GuildSetupManager {
 			// These are the channels where the intro is a permanent
 			// reference a mortal or admin might scroll back to.
 			const shouldBePinned =
+				spec.configField === "introChannelId" ||
 				spec.configField === "commandsChannelId" ||
 				spec.configField === "nextDecreeChannelId";
 

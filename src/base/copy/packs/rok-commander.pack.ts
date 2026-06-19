@@ -32,6 +32,26 @@ export const rokCommanderCopy = {
 	AUTHOR,
 	COLORS,
 
+	// ── new-member greeter (v1.6) ──────────────────────────────────────
+	// Welcome framings posted in the introductions channel when a member joins
+	// (welcomeNewMember). Each takes the member mention AND a randomly chosen
+	// icebreaker (from @features/greeter/icebreakers, a shared neutral bank of
+	// ~500) and weaves them into a kingdom-voiced welcome. Posted as message
+	// CONTENT, not an embed, so the ping actually notifies — Discord does not
+	// fire notifications for mentions inside embed descriptions. The framing
+	// carries the voice; the icebreaker carries the variety (a few framings ×
+	// hundreds of questions = thousands of distinct welcomes).
+	greeter: {
+		framings: [
+			(user: string, q: string) => `⚔️ A new challenger approaches. Welcome, ${user}. First trial: ${q}`,
+			(user: string, q: string) => `🔱 The gates swing open for you, ${user}. Tell the war council: ${q}`,
+			(user: string, q: string) => `🛡️ Hail and welcome, ${user}. Settle one for the realm: ${q}`,
+			(user: string, q: string) => `📜 The realm gains a new soul. Welcome, ${user}. ${q}`,
+			(user: string, q: string) => `🏰 Welcome to the kingdom, ${user}. ${q}`,
+			(user: string, q: string) => `🐉 A fresh face in the ranks. Welcome, ${user}. Most pressing question of the day: ${q}`,
+		] as Array<(user: string, q: string) => string>,
+	},
+
 	listEvents: {
 		title: "📅 Active KvK Events",
 		noEvents:

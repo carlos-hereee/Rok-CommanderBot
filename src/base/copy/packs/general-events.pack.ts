@@ -40,6 +40,22 @@ export const generalEventsCopy: IPluginCopy = {
 	AUTHOR,
 	COLORS,
 
+	// ── new-member greeter (v1.6) ──────────────────────────────────────
+	// Same role as the rok-commander greeter, in neutral voice. Welcome
+	// framings woven with a random icebreaker from the shared bank
+	// (@features/greeter/icebreakers), posted as message content so the ping
+	// notifies. See the rok-commander pack's greeter comment for the rationale.
+	greeter: {
+		framings: [
+			(user: string, q: string) => `👋 Welcome, ${user}! Let's break the ice: ${q}`,
+			(user: string, q: string) => `🎉 New face alert. Welcome ${user}. ${q}`,
+			(user: string, q: string) => `👋 Hey ${user}, welcome in. Quick one: ${q}`,
+			(user: string, q: string) => `✨ Welcome ${user}! ${q}`,
+			(user: string, q: string) => `🙌 Glad you're here, ${user}. ${q}`,
+			(user: string, q: string) => `☕ Welcome aboard, ${user}. ${q}`,
+		] as Array<(user: string, q: string) => string>,
+	},
+
 	listEvents: {
 		title: "📅 Active Events",
 		noEvents:

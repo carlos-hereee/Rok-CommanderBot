@@ -17,8 +17,11 @@ Key domains under `src/features/`:
 | `schedule/` | ScheduleBoard — keeps a pinned message in the event-schedule channel in sync with active events. |
 | `activity-tracking/` | Tracks voice minutes and reaction acks for participation scoring. |
 | `university/` | Commander build lookups (talents, tree guides). |
+| `greeter/` | Welcomes new members in the introductions channel on `guildMemberAdd` (a pack-voiced welcome framing + a random icebreaker from a ~500-question bank in `icebreakers.ts`), pinging the member. The intro power-up panel's admin "Fire a greeting" button reuses the same `welcomeNewMember` flow on demand. |
 
 `src/api/` has middleware, routes, and the Express server. `src/db/` has Mongoose models and thin store wrappers. `src/base/` has constants and types.
+
+**Introductions channel is member-writable.** Unlike the other homebase channels (members are read-only), the introductions channel lets `@everyone` send, so newcomers can answer the greeter's icebreaker (and satisfy a Discord Onboarding gate that requires posting in a channel before full access). New guilds get this from `GuildSetupManager.createChannels` (`introOverwrites`); guilds set up before the greeter shipped are migrated idempotently on boot by `ensureIntroChannelsWritable`. The welcome embed is pinned (intro added to `refreshIntroEmbeds`' `shouldBePinned`) so member chatter does not bury it.
 
 ## Commands and scripts
 
