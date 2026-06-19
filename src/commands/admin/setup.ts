@@ -1,12 +1,10 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { getPluginCopy } from "@base/copy/getCopy.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { creatorId } from "@utils/config.js";
-
-const { responses } = embedContent;
 
 export const data = new SlashCommandBuilder()
 	.setName("setup")
@@ -23,6 +21,13 @@ export const data = new SlashCommandBuilder()
 	);
 
 export async function execute(interaction: ChatInputCommandInteraction) {
+	// Load config first so every response below speaks in the guild's copy
+	// pack. A null config (a guild that never finished setup) resolves to the
+	// rok-commander default inside getPluginCopy, the documented fallback.
+	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
+	const copy = getPluginCopy(config);
+	const { responses } = copy;
+
 	// ── owner / creator only ──────────────────────────────────
 	const isOwner = interaction.user.id === interaction.guild?.ownerId;
 	const isCreator = interaction.user.id === creatorId;
@@ -31,8 +36,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		await interaction.reply({ embeds: [errorEmbed(responses.ownerOnly)], ephemeral: true });
 		return;
 	}
-
-	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
 
 	// ── rebuild after self-destruct ──────────────────────────────────
 	// The homebase was demolished via /self-destruct and flagged to stay gone.
@@ -43,7 +46,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		const adminRole = interaction.options.getRole("admin-role", true);
 		const memberRole = interaction.options.getRole("member-role", true);
 		await interaction.reply({
-			embeds: [infoEmbed(responses.setupPending.title, responses.setupPending.description, embedContent.COLORS.ARRIVAL)],
+			embeds: [infoEmbed(responses.setupPending.title, responses.setupPending.description, copy.COLORS.ARRIVAL)],
 			ephemeral: true,
 		});
 		try {
@@ -85,7 +88,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 					infoEmbed(
 						responses.setupSuccess(adminRole.id).title,
 						responses.setupSuccess(adminRole.id).description,
-						embedContent.COLORS.ARRIVAL
+						copy.COLORS.ARRIVAL
 					),
 				],
 			});
@@ -115,7 +118,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	const memberRole = interaction.options.getRole("member-role", true);
 
 	await interaction.reply({
-		embeds: [infoEmbed(responses.setupPending.title, responses.setupPending.description, embedContent.COLORS.ARRIVAL)],
+		embeds: [infoEmbed(responses.setupPending.title, responses.setupPending.description, copy.COLORS.ARRIVAL)],
 		ephemeral: true,
 	});
 
@@ -132,7 +135,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 				infoEmbed(
 					responses.setupSuccess(adminRole.id).title,
 					responses.setupSuccess(adminRole.id).description,
-					embedContent.COLORS.ARRIVAL
+					copy.COLORS.ARRIVAL
 				),
 			],
 		});

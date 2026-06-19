@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { featureAnnouncedEvent } from "@base/constants/BOT_LOG_EVENTS.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { getPluginCopy } from "@base/copy/getCopy.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
 
 // ── postFeatureAnnouncement ──────────────────────────────────────────
@@ -81,7 +81,6 @@ const VERSION_SHIPPED_AT: Record<string, string> = {
 export async function postFeatureAnnouncements(client: Client): Promise<void> {
 	if (!BOT_VERSION) return;
 
-	const c = embedContent.featureAnnouncement;
 	const eventKey = featureAnnouncedEvent(BOT_VERSION);
 
 	let posted = 0;
@@ -146,6 +145,13 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 				continue;
 			}
 
+			// Resolve copy in this guild's pack voice. The public block diverges
+			// by pack (kingdom vs plain English); the inner-sanctum changelog and
+			// the colors are shared, but reading them from the same resolved pack
+			// keeps a single source per guild.
+			const packCopy = getPluginCopy(config);
+			const c = packCopy.featureAnnouncement;
+
 			// ── ① public announcement ─────────────────────────────
 			// Posted WITHOUT a role ping per the owner's preference for
 			// inner-sanctum-style quiet posts. The embed itself is loud
@@ -156,7 +162,7 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// allowedMentions: { parse: [] } is belt-and-suspenders —
 			// if a future edit ever adds a raw @everyone to the copy,
 			// this prevents accidental mass notifications.
-			const publicEmbed = infoEmbed(c.public.title, c.public.description, embedContent.COLORS.ANNOUNCEMENTS);
+			const publicEmbed = infoEmbed(c.public.title, c.public.description, packCopy.COLORS.ANNOUNCEMENTS);
 			await announcementsChannel.send({
 				embeds: [publicEmbed],
 				allowedMentions: { parse: [] },
@@ -167,7 +173,7 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// AFTER the public one so a failure on the public post does
 			// not leave the admin with a "here's what shipped" while
 			// the community has not seen anything yet.
-			const adminEmbed = infoEmbed(c.innerSanctum.title, c.innerSanctum.description, embedContent.COLORS.ADMIN);
+			const adminEmbed = infoEmbed(c.innerSanctum.title, c.innerSanctum.description, packCopy.COLORS.ADMIN);
 			await adminChannel.send({
 				embeds: [adminEmbed],
 				allowedMentions: { parse: [] },
