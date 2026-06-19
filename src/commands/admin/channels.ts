@@ -8,11 +8,9 @@ import {
 } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { COLORS } from "@base/copy/brand.js";
-import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
+import { getPluginCopy } from "@base/copy/getCopy.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { creatorId } from "@utils/config.js";
-
-const { responses } = rokCommanderCopy;
 
 /* /channels — v1.5.1 visibility-toggle command.
    Three subcommands let admins hide or show the five optional homebase
@@ -101,6 +99,12 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
 }
 
 export async function execute(interaction: ChatInputCommandInteraction) {
+	// Load config first so the owner/setup responses below speak in the guild's
+	// copy pack (ownerOnly + setupChannelsPending diverge between packs). A null
+	// config resolves to the rok-commander default inside getPluginCopy.
+	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
+	const { responses } = getPluginCopy(config);
+
 	const isOwner = interaction.user.id === interaction.guild?.ownerId;
 	const isCreator = interaction.user.id === creatorId;
 
@@ -109,7 +113,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		return;
 	}
 
-	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
 	if (!config?.categoryId) {
 		await interaction.reply({ embeds: [errorEmbed(responses.setupChannelsPending)], ephemeral: true });
 		return;
