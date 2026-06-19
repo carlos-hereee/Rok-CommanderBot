@@ -628,7 +628,7 @@ export const rokCommanderCopy = {
 
 	// ── pause / continue ──────────────────────────────────────────
 	pauseSchedule: {
-		notFound: "No schedule by that name. Use `/event-list` to see what is configured.",
+		notFound: "No schedule by that name. Use `/list-events` to see what is configured.",
 		alreadyPaused: (name: string) => `**${name}** is already paused.`,
 		paused: (name: string) => `⏸️ **${name}** paused. Resume with \`/continue-schedule name:${name}\`.`,
 		pausedUntil: (name: string, untilUnix: number) =>
