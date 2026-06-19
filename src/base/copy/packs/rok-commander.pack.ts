@@ -151,17 +151,20 @@ export const rokCommanderCopy = {
 
 	// ── schedule board (public, lives in the event-schedule channel) ──
 	// this is the content of the pinned message ScheduleBoard keeps fresh.
-	// it is different copy from listEvents (which is an ephemeral admin reply)
-	// because this one is read by every warrior in the alliance, so the voice
-	// leans kingdom flavored and skips the admin only language.
+	// it is different copy from listEvents (which is an ephemeral admin reply).
+	// Voice is kept NEUTRAL here (not kingdom flavored) per the owner: every guild
+	// renders this pack today regardless of pluginId, so ROK-specific wording would
+	// leak into non-ROK servers. seasonEnded stays KvK-specific because that state
+	// only ever fires for KvK guilds.
 	scheduleBoard: {
 		title: "📅 Event Schedule",
 		description: (announcementsChannelId: string | null) =>
 			announcementsChannelId
-				? `⚔️ Reminders will ring out in <#${announcementsChannelId}>. Mortals, stand ready.`
-				: "⚠️ The heralds have no channel to shout from. An admin must finish `/setup` before reminders can fire.",
+				? `📺 Reminders post in <#${announcementsChannelId}>. Keep an eye on this channel.`
+				: "⚠️ No announcements channel configured yet. An admin needs to finish `/setup` before reminders can fire.",
 		noEvents:
-			"📭 No decrees stand. The kingdom rests.\n\n" + "An admin must run `/configure-kvk-season` to summon the season's events.",
+			"📭 No events have been configured for this server yet.\n\n" +
+			"Server administrators can create and manage events by using the available event configuration commands. Once events are configured, upcoming schedules and reminders will automatically appear here.",
 		seasonEnded:
 			"🏁 The KvK season has ended. The kingdom stands down.\n\n" + "Run `/configure-kvk-season` when the next campaign begins.",
 		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
@@ -180,7 +183,7 @@ export const rokCommanderCopy = {
 		// Label rendered alongside the date a one-time event was concluded
 		// (its firstOccurrence timestamp). Lives in completed-block rows.
 		completedDateLabel: "Concluded",
-		footer: "Updated automatically. The scroll refreshes itself.",
+		footer: "Updated automatically.",
 	},
 	// user-facing strings for the /configure-kvk-season command. lives
 	// here so every line the warrior sees in Discord can be audited and
