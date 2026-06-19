@@ -37,8 +37,8 @@ import { welcomeNewMember } from "@features/greeter/welcomeNewMember.js";
 //    ScheduleBoard and the intro embeds are kept alive across restarts.
 //
 // Panels shipped here: leaderboard "Refresh standings" (admin, Phase 2
-// refreshLeaderboard), intro "Fire a greeting" (admin, fires the new-member
-// greeter flow on demand via features/greeter), and announcements "Toggle
+// refreshLeaderboard), intro "Say hello" (admin, fires the new-member greeter
+// flow on demand via features/greeter), and announcements "Toggle
 // announcement pings" (any member). The schedule channel is deliberately NOT a
 // power-up panel: its controls (Go Live + a phase-gated Pause/Resume toggle)
 // live on the schedule board itself, owned by ScheduleControls, so the board's
@@ -82,7 +82,7 @@ const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
 		title: "👋 Greeter controls",
 		description: "Fire a fresh welcome + random icebreaker into this channel on demand. Admins only.",
 		color: rokCommanderCopy.COLORS.ARRIVAL,
-		actions: [{ action: "greet", label: "Fire a greeting", emoji: "👋", style: ButtonStyle.Primary, adminOnly: true }],
+		actions: [{ action: "greet", label: "Say hello", emoji: "👋", style: ButtonStyle.Primary, adminOnly: true }],
 	},
 	{
 		kind: "announcements",
@@ -171,8 +171,8 @@ async function runFireGreeting(interaction: ButtonInteraction): Promise<void> {
 	const sent = await welcomeNewMember(member);
 	await interaction.editReply({
 		content: sent
-			? "👋 Greeting fired in this channel."
-			: "Could not fire a greeting. Check that the introductions channel exists and the bot can post there.",
+			? "👋 Said hello in this channel."
+			: "Could not post a greeting. Check that the introductions channel exists and the bot can post there.",
 	});
 }
 
