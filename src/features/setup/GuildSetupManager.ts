@@ -17,6 +17,7 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { ISetupConfig, IAdminRoleConfig, ICreatedChannels, IChannelObjects, IEnsureHomebaseResult } from "./setup.types.js";
 import { ChannelContent } from "./ChannelContent.js";
 import { buildSuggestionBoxButtonRow } from "@features/suggestion-box/SuggestionBox.js";
+import { buildSelfDestructButtonRow } from "@features/setup/selfDestruct.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
@@ -1493,9 +1494,10 @@ export class GuildSetupManager {
 			// refreshIntroEmbeds edits it in place on every boot.
 			nextDecreeChannel.send({ embeds: [ChannelContent.nextDecreeIntro()] }),
 			// Admin command guide, sibling of adminWelcome in the same
-			// admin channel. Pinning handled below alongside the
+			// admin channel. Carries the owner-only Self destruct button row
+			// (gated in the handler). Pinning handled below alongside the
 			// schedule + next-decree pins.
-			adminChannel.send({ embeds: [ChannelContent.adminCommandGuide()] }),
+			adminChannel.send({ embeds: [ChannelContent.adminCommandGuide()], components: [buildSelfDestructButtonRow()] }),
 		]);
 
 		try {
@@ -1894,7 +1896,9 @@ export class GuildSetupManager {
 						// in channel history as an audit trail of past
 						// command surface.
 						try {
-							const message = await adminChannel.send({ embeds: [adminGuideEmbed] });
+							// Reattach the owner-only Self destruct button on the
+							// fresh post (components must be re-passed or they drop).
+							const message = await adminChannel.send({ embeds: [adminGuideEmbed], components: [buildSelfDestructButtonRow()] });
 							try {
 								await message.pin();
 							} catch (pinError) {

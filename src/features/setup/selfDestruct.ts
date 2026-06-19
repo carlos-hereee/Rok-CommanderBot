@@ -90,10 +90,17 @@ export async function showSelfDestructConfirm(interaction: SelfDestructEntry): P
 async function handleSelfDestruct(interaction: ButtonInteraction): Promise<void> {
 	const action = interaction.customId.split(":")[1];
 
-	// Re-verify owner on every action — the prompt button persists and the
-	// confirm button is the irreversible one.
+	// Re-verify owner on every action — the prompt button lives on the pinned
+	// admin command guide (visible to admins), and the confirm button is the
+	// irreversible one.
 	if (!isServerOwner(interaction)) {
 		await interaction.reply({ embeds: [errorEmbed("Only the server owner can do this.")], flags: MessageFlags.Ephemeral });
+		return;
+	}
+
+	if (action === "prompt") {
+		// The button on the admin command guide → pop the Confirm/Cancel prompt.
+		await showSelfDestructConfirm(interaction);
 		return;
 	}
 
@@ -187,7 +194,19 @@ async function demolishHomebase(client: Client, guild: Guild, actorId: string): 
 }
 
 /**
- * Register the self-destruct confirm/cancel handler. Called once at boot
+ * Owner-only "Self destruct" button row, attached to the pinned admin command
+ * guide. The `self_destruct:prompt` customId routes through handleSelfDestruct,
+ * which gates owner-only and pops the Confirm/Cancel prompt. Visible to admins
+ * but only the server owner can act on it.
+ */
+export function buildSelfDestructButtonRow(): ActionRowBuilder<ButtonBuilder> {
+	return new ActionRowBuilder<ButtonBuilder>().addComponents(
+		new ButtonBuilder().setCustomId(`${PREFIX}:prompt`).setLabel("Self destruct homebase").setEmoji("💥").setStyle(ButtonStyle.Danger)
+	);
+}
+
+/**
+ * Register the self-destruct prompt/confirm/cancel handler. Called once at boot
  * from main.ts before the InteractionCreate listener installs.
  */
 export function registerSelfDestructHandlers(): void {

@@ -411,7 +411,6 @@ const guildConfigSchema = new Schema(
 				leaderboardChannelId: { type: String, required: false, default: null },
 				introChannelId: { type: String, required: false, default: null },
 				announcementsChannelId: { type: String, required: false, default: null },
-				adminChannelId: { type: String, required: false, default: null },
 			},
 			required: false,
 			default: () => ({}),

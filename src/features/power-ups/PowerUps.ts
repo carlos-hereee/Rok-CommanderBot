@@ -18,7 +18,6 @@ import { gateOwnerOrAdmin } from "@utils/permissions.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { embedContent } from "@base/constants/embed-content.js";
 import { refreshLeaderboard } from "@features/leaderboard/LeaderboardBoard.js";
-import { showSelfDestructConfirm } from "@features/setup/selfDestruct.js";
 
 // ── Channel power-ups (v1.6 Phase 5, item 36) ──────────────────────────
 // Each homebase channel carries a pinned "power-up" panel: an embed + a row of
@@ -69,9 +68,6 @@ interface IPowerUpAction {
 	style: ButtonStyle;
 	// owner/admin-gated when true; open to any member when false
 	adminOnly: boolean;
-	// stricter than adminOnly: only the server owner may use it (for destructive
-	// actions like self-destruct). When true, adminOnly is ignored.
-	ownerOnly?: boolean;
 }
 
 interface IPowerUpDefinition {
@@ -110,14 +106,6 @@ const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
 		color: embedContent.COLORS.ANNOUNCEMENTS,
 		actions: [{ action: "subscribe", label: "Toggle announcement pings", emoji: "🔔", style: ButtonStyle.Secondary, adminOnly: false }],
 	},
-	{
-		kind: "admin",
-		channelField: "adminChannelId",
-		title: "⚠️ Danger zone",
-		description: "Server owner only. Self destruct demolishes this server's bot homebase (every channel) and keeps it gone until you run /setup. Use for a clean reset.",
-		color: embedContent.COLORS.ERROR,
-		actions: [{ action: "self_destruct", label: "Self destruct homebase", emoji: "💥", style: ButtonStyle.Danger, adminOnly: false, ownerOnly: true }],
-	},
 ];
 
 // ── button handling ────────────────────────────────────────────────────
@@ -143,14 +131,8 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 	}
 
 	// Per-action gate. Persistent buttons cannot rely on a slash command's
-	// permission filter, so gated actions re-verify the clicker here. ownerOnly
-	// is stricter than adminOnly and takes precedence.
-	if (actionDef.ownerOnly) {
-		if (interaction.user.id !== interaction.guild.ownerId) {
-			await interaction.reply({ embeds: [errorEmbed("Only the server owner can use this control.")], flags: MessageFlags.Ephemeral });
-			return;
-		}
-	} else if (actionDef.adminOnly) {
+	// permission filter, so admin-only actions re-verify the clicker here.
+	if (actionDef.adminOnly) {
 		const config = await guildConfigStore.findByGuildId(guildId);
 		const allowed = await gateOwnerOrAdmin(interaction, config);
 		if (!allowed) {
@@ -168,12 +150,6 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 			return;
 		case "announcements:subscribe":
 			await runTogglePingSubscription(interaction, guildId);
-			return;
-		case "admin:self_destruct":
-			// Owner-gated above. Delegate to the self-destruct module, which pops
-			// the Confirm/Cancel prompt; confirm/cancel route on the "self_destruct"
-			// prefix, not "powerup".
-			await showSelfDestructConfirm(interaction);
 			return;
 		default:
 			// Defined in the panel but not yet wired to logic — should not happen
