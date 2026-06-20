@@ -189,18 +189,28 @@ async function runToggleNotificationRole(interaction: ButtonInteraction, guildId
 		return;
 	}
 
+	// The bot only ever pings the member role the admin chose at /setup
+	// (config.memberRoleId — see fireReminder). So "announcement pings" is just
+	// membership in THAT role; there is no separate ping role to create. Note
+	// this means opting out removes the member role outright (its job here is to
+	// be the pinged role).
+	const memberRoleId = config.memberRoleId;
+	if (!memberRoleId) {
+		await interaction.reply({
+			embeds: [errorEmbed("No member role is configured yet. An admin needs to run `/setup` first.")],
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
 	try {
-		// Resolve the notifications role, creating it lazily on first use (and
-		// recreating it if an admin deleted it). Mentionable so a future
-		// announcement flow can @ping opted-in members; a freshly created role
-		// lands at the bottom of the list, below the bot, so it stays assignable.
-		const storedRoleId = (config as unknown as { notificationsRoleId?: string | null }).notificationsRoleId ?? null;
-		let role =
-			(storedRoleId ? interaction.guild.roles.cache.get(storedRoleId) : null) ??
-			(storedRoleId ? await interaction.guild.roles.fetch(storedRoleId).catch(() => null) : null);
+		const role = interaction.guild.roles.cache.get(memberRoleId) ?? (await interaction.guild.roles.fetch(memberRoleId).catch(() => null));
 		if (!role) {
-			role = await interaction.guild.roles.create({ name: "🔔 Announcements", mentionable: true, reason: "Announcement ping opt-in role" });
-			await guildConfigStore.update(guildId, { notificationsRoleId: role.id });
+			await interaction.reply({
+				embeds: [errorEmbed("The configured member role no longer exists. An admin needs to re-run `/setup`.")],
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
 		}
 
 		// Resolve the clicking member cache-first, fetch fallback (the cache can be
@@ -222,9 +232,13 @@ async function runToggleNotificationRole(interaction: ButtonInteraction, guildId
 			await interaction.reply({ content: "🔔 You're on the announcement ping list. Tap again to opt out.", flags: MessageFlags.Ephemeral });
 		}
 	} catch (err) {
-		console.error(`[powerup] toggle notification role failed in guild ${guildId}`, err);
+		console.error(`[powerup] toggle member role failed in guild ${guildId}`, err);
 		await interaction.reply({
-			embeds: [errorEmbed("Could not update your notifications. The bot may be missing the Manage Roles permission. Try again in a moment.")],
+			embeds: [
+				errorEmbed(
+					"Could not update your notifications. The bot may be missing Manage Roles, or the member role sits above the bot's own role. Try again in a moment."
+				),
+			],
 			flags: MessageFlags.Ephemeral,
 		});
 	}
