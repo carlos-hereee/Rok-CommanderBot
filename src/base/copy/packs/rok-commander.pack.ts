@@ -152,8 +152,9 @@ export const rokCommanderCopy = {
 				? `📺 Reminders post in <#${announcementsChannelId}>. Keep an eye on this channel.`
 				: "⚠️ No announcements channel configured yet. An admin needs to finish `/setup` before reminders can fire.",
 		noEvents:
-			"📭 No events have been configured for this server yet.\n\n" +
-			"Server administrators can create and manage events by using the available event configuration commands. Once events are configured, upcoming schedules and reminders will automatically appear here.",
+			"The future has yet to be written.\n\n" +
+			"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
+			"Admins run the slash command `/configure-kvk-season` to establish the server's schedule.",
 		seasonEnded:
 			"🏁 The KvK season has ended. The kingdom stands down.\n\n" + "Run `/configure-kvk-season` when the next campaign begins.",
 		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
@@ -443,9 +444,9 @@ export const rokCommanderCopy = {
 		schedule: {
 			title: "📅 Event Schedule",
 			description:
-				"Upcoming KvK events will be displayed here once configured.\n\n" +
-				"An admin must run `/configure-kvk-season` " +
-				"to initialize the season schedule.",
+				"The future has yet to be written.\n\n" +
+				"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
+				"Admins run the slash command `/configure-kvk-season` to establish the server's schedule.",
 		},
 
 		leaderboard: {

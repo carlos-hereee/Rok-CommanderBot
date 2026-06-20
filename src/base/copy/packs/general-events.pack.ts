@@ -136,8 +136,9 @@ export const generalEventsCopy: IPluginCopy = {
 				? `📺 Reminders post in <#${announcementsChannelId}>. Keep an eye on this channel.`
 				: "⚠️ No announcements channel configured yet. An admin needs to finish `/setup` before reminders can fire.",
 		noEvents:
-			"📭 No events configured.\n\n" +
-			"An admin can run `/configure-stream-schedule` to set up a recurring stream or `/announce-stream` for a one-off.",
+			"The future has yet to be written.\n\n" +
+			"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
+			"Admins run the slash command `/configure-stream-schedule` to establish the server's schedule.",
 		// `seasonEnded` is reused for general-events as "season ended" wording but
 		// kept as a stub since general-events guilds do not use the season concept.
 		// Code paths that try to render this string are bugs; sentinel surfaces them.
@@ -329,9 +330,9 @@ export const generalEventsCopy: IPluginCopy = {
 		schedule: {
 			title: "📅 Event Schedule",
 			description:
-				"Upcoming events appear here once configured.\n\n" +
-				"An admin can run `/configure-stream-schedule` to add a recurring stream " +
-				"or `/announce-stream` to schedule a one-off.",
+				"The future has yet to be written.\n\n" +
+				"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
+				"Admins run the slash command `/configure-stream-schedule` to establish the server's schedule.",
 		},
 
 		leaderboard: {
