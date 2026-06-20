@@ -408,6 +408,13 @@ const guildConfigSchema = new Schema(
 		//        means "no panel posted yet, post one".
 		powerUpMessageIds: {
 			type: {
+				// Current control panels (relocated 2026-06-19): the admin panel in the
+				// admin channel, the member announcement-ping toggle in the command-center,
+				// so daily channel activity never buries them.
+				adminChannelId: { type: String, required: false, default: null },
+				commandsChannelId: { type: String, required: false, default: null },
+				// Legacy per-channel panels, retired when controls moved; kept so the boot
+				// sweep can find and delete the orphaned messages, then null these.
 				leaderboardChannelId: { type: String, required: false, default: null },
 				introChannelId: { type: String, required: false, default: null },
 				announcementsChannelId: { type: String, required: false, default: null },

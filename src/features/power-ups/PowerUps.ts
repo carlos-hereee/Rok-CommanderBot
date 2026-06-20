@@ -68,25 +68,27 @@ interface IPowerUpDefinition {
 }
 
 const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
+	// Admin controls live in the admin channel (#inner-sanctum): role-gated and
+	// never buried by member activity. The two admin actions share ONE panel so
+	// the channel only carries a single extra pinned message.
 	{
-		kind: "leaderboard",
-		channelField: "leaderboardChannelId",
-		title: "🏆 Leaderboard controls",
-		description: "Refresh the standings board on demand. Admins only.",
-		color: rokCommanderCopy.COLORS.LEADERBOARD,
-		actions: [{ action: "refresh", label: "Refresh standings", emoji: "🔄", style: ButtonStyle.Primary, adminOnly: true }],
+		kind: "admin",
+		channelField: "adminChannelId",
+		title: "🛠️ Admin controls",
+		description:
+			"Admin-only quick actions. Refresh the leaderboard standings board, or drop a fresh welcome + icebreaker into the introductions channel.",
+		color: rokCommanderCopy.COLORS.ADMIN,
+		actions: [
+			{ action: "refresh", label: "Refresh standings", emoji: "🔄", style: ButtonStyle.Primary, adminOnly: true },
+			{ action: "greet", label: "Say hello", emoji: "👋", style: ButtonStyle.Primary, adminOnly: true },
+		],
 	},
-	{
-		kind: "intro",
-		channelField: "introChannelId",
-		title: "👋 Greeter controls",
-		description: "Fire a fresh welcome + random icebreaker into this channel on demand. Admins only.",
-		color: rokCommanderCopy.COLORS.ARRIVAL,
-		actions: [{ action: "greet", label: "Say hello", emoji: "👋", style: ButtonStyle.Primary, adminOnly: true }],
-	},
+	// The member-facing announcement-ping toggle lives in the read-only
+	// command-center (alongside the command guide), where members already look
+	// for controls and daily announcements can't push it out of sight.
 	{
 		kind: "announcements",
-		channelField: "announcementsChannelId",
+		channelField: "commandsChannelId",
 		title: "🔔 Announcement pings",
 		description: "Want a heads-up when this server posts an announcement? Tap to opt in or out.",
 		color: rokCommanderCopy.COLORS.ANNOUNCEMENTS,
@@ -128,10 +130,10 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 	}
 
 	switch (`${def.kind}:${actionDef.action}`) {
-		case "leaderboard:refresh":
+		case "admin:refresh":
 			await runLeaderboardRefresh(interaction, guildId);
 			return;
-		case "intro:greet":
+		case "admin:greet":
 			await runFireGreeting(interaction);
 			return;
 		case "announcements:subscribe":
@@ -383,6 +385,9 @@ export async function ensurePowerUps(client: Client, guild: Guild): Promise<void
 	// refreshIntroEmbeds handles introMessageIds and keeps the write complete.
 	const stored = (config.powerUpMessageIds ?? {}) as unknown as Record<string, string | null | undefined>;
 	const nextIds: Record<string, string | null> = {
+		adminChannelId: stored.adminChannelId ?? null,
+		commandsChannelId: stored.commandsChannelId ?? null,
+		// legacy per-channel panels, retired by the cleanup below
 		leaderboardChannelId: stored.leaderboardChannelId ?? null,
 		introChannelId: stored.introChannelId ?? null,
 		announcementsChannelId: stored.announcementsChannelId ?? null,
@@ -404,7 +409,32 @@ export async function ensurePowerUps(client: Client, guild: Guild): Promise<void
 		}
 	}
 
-	// One write per guild, only when an id actually changed (first post or repost).
+	// ── retire the legacy per-channel panels ──────────────────────────
+	// Controls moved off the leaderboard / intro / announcements channels (where
+	// daily activity buried them) into the admin + command channels. Delete any
+	// old panel still pinned there and clear its id. One-time: once these are
+	// null this block is a no-op.
+	const LEGACY_PANEL_KEYS = ["leaderboardChannelId", "introChannelId", "announcementsChannelId"] as const;
+	for (const legacyKey of LEGACY_PANEL_KEYS) {
+		const panelId = nextIds[legacyKey];
+		if (!panelId) continue;
+		const legacyChannelId = channelIds[legacyKey] ?? null;
+		const legacyChannel = legacyChannelId ? await client.channels.fetch(legacyChannelId).catch(() => null) : null;
+		if (legacyChannel instanceof TextChannel) {
+			const stale = await legacyChannel.messages.fetch(panelId).catch(() => null);
+			if (stale) {
+				try {
+					await stale.delete();
+				} catch (error) {
+					console.warn(`[powerup] failed to delete legacy ${legacyKey} panel in guild ${guild.id}`, error);
+				}
+			}
+		}
+		nextIds[legacyKey] = null;
+		changed = true;
+	}
+
+	// One write per guild, only when an id actually changed (post, repost, or the legacy cleanup above).
 	if (changed) await guildConfigStore.update(guild.id, { powerUpMessageIds: nextIds });
 }
 
