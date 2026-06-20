@@ -654,22 +654,22 @@ export class GuildSetupManager {
 	//        their customIds so PowerUps.handlePowerUpButton still routes them;
 	//        suggestion-box / invite / self-destruct each expose a bare button
 	//        factory so all of a channel's buttons fit in ONE ActionRow.
-	// How:   compose one ActionRow per channel. Returning null means "no buttons."
+	// How:   compose the ActionRow(s) per channel (command-center uses two rows so
+	//        the wide invite button sits on its own line). null means "no buttons."
 	private static resolveIntroComponents(
 		field: (typeof GuildSetupManager.CHANNEL_FIELDS)[number]
 	): ActionRowBuilder<ButtonBuilder>[] | null {
 		switch (field) {
 			case "commandsChannelId":
-				// #command-center guide row (4 buttons): Suggestion Box + the member
-				// controls (announcement-ping toggle, Say hello) + the "Summon me to
-				// your server" invite — moved here from the introductions intro, which
-				// gets buried now that the channel is member-writable.
+				// #command-center guide, two rows so nothing overflows:
+				//   row 1: the member actions — Suggestion Box + Toggle pings + Take
+				//          the trial (pull an icebreaker to answer in #introductions).
+				//   row 2: the wide "Summon me to your server" invite on its own line
+				//          (moved here from the introductions intro, which gets buried
+				//          now that the channel is member-writable).
 				return [
-					new ActionRowBuilder<ButtonBuilder>().addComponents(
-						buildSuggestionBoxButton(),
-						...buildMemberControlButtons(),
-						ChannelContent.buildInviteButton()
-					),
+					new ActionRowBuilder<ButtonBuilder>().addComponents(buildSuggestionBoxButton(), ...buildMemberControlButtons()),
+					new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton()),
 				];
 			case "adminCommandsChannelId":
 				// admin-controls guide row (2 buttons): owner-only Self destruct + the
@@ -742,23 +742,27 @@ export class GuildSetupManager {
 	//       the 2026-06 controls fold-in) would never reach existing guilds:
 	//       refreshIntroEmbeds short-circuits on embed equivalence and never
 	//       re-sends components.
-	// How:  flatten each side to a per-button signature (customId | url | label |
-	//       style | emoji) via toJSON so a Builder and a live message component
-	//       compare on the same API shape, then compare the joined signatures.
+	// How:  reduce each side to a per-row, per-button signature (customId | url |
+	//       label | style | emoji) via toJSON so a Builder and a live message
+	//       component compare on the same API shape. Row boundaries are part of
+	//       the signature, so a pure row-restructure (same buttons, regrouped
+	//       across rows — e.g. the 4-in-one-row → 3+1 split) is also detected.
 	private static componentsAreEquivalent(
 		resolved: ActionRowBuilder<ButtonBuilder>[] | null,
 		current: ReadonlyArray<{ toJSON(): unknown }>
 	): boolean {
 		const signature = (rows: ReadonlyArray<{ toJSON(): unknown }>): string =>
 			rows
-				.flatMap((row) => {
+				.map((row) => {
 					const json = row.toJSON() as { components?: Array<Record<string, unknown>> };
-					return (json.components ?? []).map((c) => {
-						const emoji = c.emoji as { name?: string; id?: string } | undefined;
-						return `${c.custom_id ?? ""}|${c.url ?? ""}|${c.label ?? ""}|${c.style ?? ""}|${emoji?.name ?? emoji?.id ?? ""}`;
-					});
+					return (json.components ?? [])
+						.map((c) => {
+							const emoji = c.emoji as { name?: string; id?: string } | undefined;
+							return `${c.custom_id ?? ""}|${c.url ?? ""}|${c.label ?? ""}|${c.style ?? ""}|${emoji?.name ?? emoji?.id ?? ""}`;
+						})
+						.join("~~");
 				})
-				.join("~~");
+				.join(" ;; ");
 		return signature(resolved ?? []) === signature(current);
 	}
 

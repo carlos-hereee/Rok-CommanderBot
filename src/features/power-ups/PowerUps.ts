@@ -11,7 +11,7 @@ import { welcomeNewMember } from "@features/greeter/welcomeNewMember.js";
 // The bot's common channel actions are one-click buttons in Discord, no slash
 // command required. They USED to live on standalone pinned "power-up" panel
 // messages; they are now BUTTONS on the pinned intro guides instead:
-//   • #command-center guide: "Toggle announcement pings" + "Say hello" (any member)
+//   • #command-center guide: "Toggle pings" + "Take the trial" (any member)
 //   • admin-controls guide:  "Refresh standings" (owner/admin)
 // resolveIntroComponents (GuildSetupManager) composes these — built by the
 // factories below — into the guide rows alongside the suggestion-box, invite,
@@ -31,8 +31,9 @@ const POWERUP_PREFIX = "powerup";
 
 // The folded controls, keyed by `<kind>:<action>` (the customId tail). The
 // handler reads this table to (a) reject unknown/retired customIds and (b)
-// decide whether to gate the click. "Say hello" is member-usable — any member
-// can fire their own welcome + icebreaker — so it is NOT adminOnly.
+// decide whether to gate the click. "Take the trial" (member:greet) is member-
+// usable — any member can pull their own icebreaker question — so it is NOT
+// adminOnly.
 const POWERUP_ACTIONS = {
 	"member:subscribe": { adminOnly: false },
 	"member:greet": { adminOnly: false },
@@ -44,13 +45,14 @@ const POWERUP_ACTIONS = {
 // Returned as bare ButtonBuilders so resolveIntroComponents can pack several into
 // one ActionRow. The customIds MUST match POWERUP_ACTIONS / the switch below.
 
-// #command-center guide row: announcement-ping toggle + "Say hello" (both open
-// to any member). Secondary style so the Suggestion Box (Primary) stays the row's
-// visual lead.
+// #command-center guide row 1: announcement-ping toggle ("Toggle pings" — the
+// bell carries "announcements") + "Take the trial" (pull a random icebreaker to
+// answer in #introductions). Both open to any member. Secondary style so the
+// Suggestion Box (Primary) stays the row's visual lead.
 export function buildMemberControlButtons(): ButtonBuilder[] {
 	return [
-		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:subscribe`).setLabel("Toggle announcement pings").setEmoji("🔔").setStyle(ButtonStyle.Secondary),
-		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:greet`).setLabel("Say hello").setEmoji("👋").setStyle(ButtonStyle.Secondary),
+		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:subscribe`).setLabel("Toggle pings").setEmoji("🔔").setStyle(ButtonStyle.Secondary),
+		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:greet`).setLabel("Take the trial").setEmoji("⚔️").setStyle(ButtonStyle.Secondary),
 	];
 }
 
