@@ -332,20 +332,21 @@ export const rokCommanderCopy = {
 			// Where: paired with the "Summon me to your server, Mortal"
 			//        link button composed in ChannelContent.introductionComponents().
 			description:
-				"Mortals of this alliance. I am your **ROK Commander**.\n\n" +
-				"My Creator built me as a **gift to those who would build great things**. " +
-				"They have sent me to your side, and I am yours to command.\n\n" +
-				"Through me, you will be reminded of your duties. " +
-				"Your deeds will be remembered. " +
-				"Your effort, rewarded. " +
-				"The worthy shall rise to glory.\n\n" +
-				"**── What I Do ──**\n" +
-				"⚔️ I'll remind you of important dates and events.\n" +
-				"📺 Post stream / event reminders on a fixed schedule for any Discord community.\n" +
-				"🏆 Rank the worthy on a living leaderboard.\n" +
-				"📅 Keep a pinned schedule in sight at all times.\n\n" +
-				"*Now. Let us build something legendary.*\n\n" +
-				"**Command me in a realm of your own.** The button below shall summon me.",
+				"Mortals of this alliance. I am Dero Dero.\n\n" +
+				"My Creator forged me as a gift to those who build great things. They have sent me to your side, and I am yours to command.\n\n" +
+				"Through me, your events shall be remembered. Your victories recorded. Your efforts recognized. The worthy shall rise, and their names shall not be forgotten.\n\n" +
+				"── What I Do ──\n\n" +
+				"⚔️ Remind your members of important dates, battles, and events.\n" +
+				"📺 Post stream, announcement, and event reminders on a fixed schedule.\n" +
+				"🏆 Track participation and rank the worthy on living leaderboards.\n" +
+				"📅 Keep important schedules pinned and always within reach.\n" +
+				"📜 Preserve records, achievements, and community milestones.\n" +
+				"🌟 Turn activity into history and members into legends.\n\n" +
+				"── And This Is Only The Beginning ──\n\n" +
+				"I am constantly evolving. New powers, tools, and systems are being forged even now. As my Creator's work continues, so too shall my capabilities.\n\n" +
+				"Now then.\n\n" +
+				"Gather your people. Organize your ranks. Build something worthy of legend.\n\n" +
+				"Command me in a realm of your own. The button below shall summon me.",
 		},
 
 		// ── public #command-center guide ──────────────────────────
