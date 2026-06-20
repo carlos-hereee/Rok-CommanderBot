@@ -161,19 +161,21 @@ async function runFireGreeting(interaction: ButtonInteraction): Promise<void> {
 	// posted to the introductions channel pinging the member). Lets an admin
 	// preview the greeter or drop a fresh icebreaker on demand. Reuses
 	// welcomeNewMember so the on-demand fire and the on-join fire never drift.
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	// Silent ack: the posted greeting IS the visible feedback, so there is no
+	// ephemeral success reply (it was just clutter). deferUpdate acknowledges the
+	// click without a "thinking" state and buys time for welcomeNewMember's
+	// channel I/O; we only speak up (ephemeral followUp) when nothing got posted
+	// so a dud click is not left silent.
+	await interaction.deferUpdate();
 	let member = interaction.guild?.members.cache.get(interaction.user.id) ?? null;
 	if (!member) member = (await interaction.guild?.members.fetch(interaction.user.id).catch(() => null)) ?? null;
-	if (!member) {
-		await interaction.editReply({ content: "Could not resolve your membership. Try again in a moment." });
-		return;
+	const sent = member ? await welcomeNewMember(member) : false;
+	if (!sent) {
+		await interaction.followUp({
+			content: "Could not post a greeting. Check that the introductions channel exists and the bot can post there.",
+			flags: MessageFlags.Ephemeral,
+		});
 	}
-	const sent = await welcomeNewMember(member);
-	await interaction.editReply({
-		content: sent
-			? "👋 Said hello in this channel."
-			: "Could not post a greeting. Check that the introductions channel exists and the bot can post there.",
-	});
 }
 
 async function runToggleNotificationRole(interaction: ButtonInteraction, guildId: string): Promise<void> {
