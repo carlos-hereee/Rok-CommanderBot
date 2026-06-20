@@ -25,8 +25,8 @@ import { COLORS } from "@base/copy/brand.js";
 //
 // Two entry points both pop the SAME ephemeral Confirm/Cancel prompt: the
 // /self-destruct slash command, and an owner-only "Self destruct" button on the
-// danger-zone power-up panel in the admin channel. The teardown only runs on an
-// explicit Confirm, with an owner re-check at confirm time.
+// admin command guide (pinned in the admin command channel). The teardown only
+// runs on an explicit Confirm, with an owner re-check at confirm time.
 //
 // customId scheme `self_destruct:<action>` (prompt | confirm | cancel), routed on
 // the "self_destruct" prefix via interactionRegistry. The panel button uses the
@@ -47,6 +47,7 @@ const HOMEBASE_CHANNEL_FIELDS = [
 	"announcementsChannelId",
 	"nextDecreeChannelId",
 	"adminChannelId",
+	"adminCommandsChannelId",
 ] as const;
 
 type SelfDestructEntry = ButtonInteraction | ChatInputCommandInteraction;
@@ -72,7 +73,7 @@ export async function showSelfDestructConfirm(interaction: SelfDestructEntry): P
 	const warning = infoEmbed(
 		"💥 Self destruct the homebase?",
 		[
-			"This DELETES the bot's category and every homebase channel in this server (introductions, command center, leaderboard, event schedule, announcements, upcoming events, and the admin channel) along with everything posted in them.",
+			"This DELETES the bot's category and every homebase channel in this server (introductions, command center, leaderboard, event schedule, announcements, upcoming events, the admin channel, and the admin command center) along with everything posted in them.",
 			"",
 			"It stays gone across restarts until you run `/setup` again. **This cannot be undone.**",
 		].join("\n"),

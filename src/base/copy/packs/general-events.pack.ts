@@ -257,6 +257,8 @@ export const generalEventsCopy: IPluginCopy = {
 			announcements: "📢announcements",
 			admin: "🔒admin",
 			nextDecree: "🔜upcoming-events",
+			// Eighth channel: admin-only command + control surface (mirrors rok-commander).
+			adminCommands: "🛠️admin-center",
 		},
 	},
 

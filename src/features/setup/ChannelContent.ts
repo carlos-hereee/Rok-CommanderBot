@@ -86,13 +86,12 @@ export const ChannelContent = {
 	},
 
 	// ── admin command guide ──────────────────────────────────────
-	// Posted as a SECOND pinned message inside #inner-sanctum, in
-	// addition to adminWelcome. Tracked on
-	// GuildConfig.introMessageIds.adminCommandGuideId so
-	// refreshIntroEmbeds edits it in place on boot when copy or the
-	// command list evolves. ADMIN color matches the rest of the inner
-	// sanctum surface so visual identity stays consistent with the
-	// welcome embed above it.
+	// The pinned intro of the dedicated admin command center (its own
+	// homebase channel as of the 2026-06-19 split; previously a second
+	// pinned message inside #inner-sanctum next to adminWelcome). Tracked on
+	// GuildConfig.introMessageIds.adminCommandsChannelId so refreshIntroEmbeds
+	// edits/reposts it in place on boot when copy or the command list evolves.
+	// ADMIN color keeps it visually consistent with the rest of the admin surface.
 	adminCommandGuide(guildConfig?: ICopyConfig | null): EmbedBuilder {
 		const copy = getPluginCopy(guildConfig);
 		const cc = copy.channelContent;

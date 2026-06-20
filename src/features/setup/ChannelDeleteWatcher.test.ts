@@ -350,14 +350,15 @@ describe("GuildSetupManager.CHANNEL_SPECS", () => {
 			"scheduleChannelId",
 			"announcementsChannelId",
 			"adminChannelId",
+			"nextDecreeChannelId",
+			"adminCommandsChannelId",
 		];
 		const actualFields = GuildSetupManager.CHANNEL_SPECS.map((s) => s.configField);
 		expect(actualFields.sort()).toEqual(expectedFields.sort());
 	});
 
-	it("marks only the admin channel as kind 'admin'", () => {
+	it("marks the admin channel and the admin command center as kind 'admin'", () => {
 		const adminEntries = GuildSetupManager.CHANNEL_SPECS.filter((s) => s.kind === "admin");
-		expect(adminEntries).toHaveLength(1);
-		expect(adminEntries[0].configField).toBe("adminChannelId");
+		expect(adminEntries.map((s) => s.configField).sort()).toEqual(["adminChannelId", "adminCommandsChannelId"].sort());
 	});
 });

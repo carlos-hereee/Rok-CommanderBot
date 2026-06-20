@@ -41,6 +41,13 @@ const guildConfigSchema = new Schema(
 		//        null as "missing" and rebuilds the channel on next tick.
 		nextDecreeChannelId: { type: String, required: false, default: null },
 
+		// ── admin command center channel (2026-06-19) ──
+		// Admin-only command channel: holds the relocated admin command guide (out
+		// of inner-sanctum) + the admin power-up panel. Same overwrites as
+		// adminChannelId; nullable so existing rows load before the boot sweep
+		// creates it (repairMissingChannels treats null as "missing, build it").
+		adminCommandsChannelId: { type: String, required: false, default: null },
+
 		// id of the pinned message inside scheduleChannelId that ScheduleBoard
 		// keeps up to date. null until autoSetup finishes posting the intro,
 		// at which point this is populated and every subsequent refresh edits
@@ -142,6 +149,9 @@ const guildConfigSchema = new Schema(
 				//        case and move on.
 				// How:   nullable string, same contract as every sibling.
 				adminCommandGuideId: { type: String, required: false, default: null },
+				// Pinned intro anchor for the new admin command channel (the relocated
+				// command guide). Tracked like every other channel intro.
+				adminCommandsChannelId: { type: String, required: false, default: null },
 			},
 			required: false,
 			default: () => ({}),
@@ -413,6 +423,8 @@ const guildConfigSchema = new Schema(
 				// so daily channel activity never buries them.
 				adminChannelId: { type: String, required: false, default: null },
 				commandsChannelId: { type: String, required: false, default: null },
+				// admin panel, now in its own admin command channel
+				adminCommandsChannelId: { type: String, required: false, default: null },
 				// Legacy per-channel panels, retired when controls moved; kept so the boot
 				// sweep can find and delete the orphaned messages, then null these.
 				leaderboardChannelId: { type: String, required: false, default: null },

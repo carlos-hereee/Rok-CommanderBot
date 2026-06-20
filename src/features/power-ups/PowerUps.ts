@@ -36,13 +36,16 @@ import { welcomeNewMember } from "@features/greeter/welcomeNewMember.js";
 //    persisting message ids on GuildConfig.powerUpMessageIds, the same way
 //    ScheduleBoard and the intro embeds are kept alive across restarts.
 //
-// Panels shipped here: leaderboard "Refresh standings" (admin, Phase 2
-// refreshLeaderboard), intro "Say hello" (admin, fires the new-member greeter
-// flow on demand via features/greeter), and announcements "Toggle
-// announcement pings" (any member). The schedule channel is deliberately NOT a
-// power-up panel: its controls (Go Live + a phase-gated Pause/Resume toggle)
-// live on the schedule board itself, owned by ScheduleControls, so the board's
-// refresh-on-event-change keeps them current.
+// Panels shipped here, split by audience (2026-06-19): a MEMBER panel in
+// #command-center with "Toggle announcement pings" (any member), and an ADMIN
+// panel in the admin command center with "Refresh standings" + "Say hello"
+// (fires the new-member greeter flow on demand via features/greeter). Keeping
+// them in separate channels means daily activity in #inner-sanctum never buries
+// the admin quick-actions, and members are not shown buttons they cannot use.
+// The schedule channel is deliberately NOT a power-up panel: its controls (Go
+// Live + a phase-gated Pause/Resume toggle) live on the schedule board itself,
+// owned by ScheduleControls, so the board's refresh-on-event-change keeps them
+// current.
 
 const POWERUP_PREFIX = "powerup";
 
@@ -68,21 +71,32 @@ interface IPowerUpDefinition {
 }
 
 const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
-	// One controls panel in the read-only command-center (next to the command
-	// guide), where members already look for controls and nothing buries it. It
-	// holds both the member announcement-ping toggle and the admin actions; the
-	// admin buttons are per-action gated, so a member who taps them just gets a
-	// "no access" reply. Deliberately NOT in #inner-sanctum: that channel takes
-	// feature announcements and self-heal notices, which would bury a panel there.
+	// Member panel: lives in the read-only #command-center next to the command
+	// guide, where members already look for controls and nothing buries it. Just
+	// the announcement-ping toggle — open to any member, so the panel shows only
+	// what a member can actually use.
 	{
-		kind: "controls",
+		kind: "member",
 		channelField: "commandsChannelId",
-		title: "🎛️ Bot controls",
+		title: "🔔 Announcement pings",
 		description:
-			"Members: tap to opt in or out of announcement pings. Admins: refresh the leaderboard standings, or post a fresh welcome + icebreaker into the introductions channel.",
+			"Tap to opt in or out of announcement pings. This adds (or removes) the role the bot @mentions when an event reminder fires.",
 		color: rokCommanderCopy.COLORS.COMMANDS,
 		actions: [
 			{ action: "subscribe", label: "Toggle announcement pings", emoji: "🔔", style: ButtonStyle.Secondary, adminOnly: false },
+		],
+	},
+	// Admin panel: lives in the dedicated admin command center (admin-only) so
+	// quick actions are not buried by the daily notices that land in
+	// #inner-sanctum. Both actions are owner/admin gated.
+	{
+		kind: "admin",
+		channelField: "adminCommandsChannelId",
+		title: "🎛️ Admin controls",
+		description:
+			"Refresh the leaderboard standings, or post a fresh welcome + icebreaker into the introductions channel.",
+		color: rokCommanderCopy.COLORS.ADMIN,
+		actions: [
 			{ action: "refresh", label: "Refresh standings", emoji: "🔄", style: ButtonStyle.Primary, adminOnly: true },
 			{ action: "greet", label: "Say hello", emoji: "👋", style: ButtonStyle.Primary, adminOnly: true },
 		],
@@ -123,13 +137,13 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 	}
 
 	switch (`${def.kind}:${actionDef.action}`) {
-		case "controls:refresh":
+		case "admin:refresh":
 			await runLeaderboardRefresh(interaction, guildId);
 			return;
-		case "controls:greet":
+		case "admin:greet":
 			await runFireGreeting(interaction);
 			return;
-		case "controls:subscribe":
+		case "member:subscribe":
 			await runToggleNotificationRole(interaction, guildId);
 			return;
 		default:
@@ -378,9 +392,13 @@ export async function ensurePowerUps(client: Client, guild: Guild): Promise<void
 	// refreshIntroEmbeds handles introMessageIds and keeps the write complete.
 	const stored = (config.powerUpMessageIds ?? {}) as unknown as Record<string, string | null | undefined>;
 	const nextIds: Record<string, string | null> = {
-		adminChannelId: stored.adminChannelId ?? null,
+		// active panels: member toggle in #command-center, admin actions in the
+		// admin command center.
 		commandsChannelId: stored.commandsChannelId ?? null,
-		// legacy per-channel panels, retired by the cleanup below
+		adminCommandsChannelId: stored.adminCommandsChannelId ?? null,
+		// legacy per-channel panels, retired by the cleanup below. adminChannelId
+		// held the previous admin panel before the member/admin split.
+		adminChannelId: stored.adminChannelId ?? null,
 		leaderboardChannelId: stored.leaderboardChannelId ?? null,
 		introChannelId: stored.introChannelId ?? null,
 		announcementsChannelId: stored.announcementsChannelId ?? null,

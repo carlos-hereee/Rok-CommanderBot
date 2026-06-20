@@ -29,6 +29,10 @@ export interface ICreatedChannels {
 	// the NextUpBoard's permanent-post audit trail does not drown the
 	// 15/30 minute reminder pings.
 	nextDecreeChannelId: string;
+	// id of the admin-only command channel. Holds the relocated admin command
+	// guide + the admin power-up panel; kept out of inner-sanctum so daily
+	// announcements there do not bury the quick-action controls.
+	adminCommandsChannelId: string;
 }
 
 // live channel objects returned from createChannels
@@ -41,6 +45,7 @@ export interface IChannelObjects {
 	announcementsChannel: TextChannel;
 	adminChannel: TextChannel;
 	nextDecreeChannel: TextChannel;
+	adminCommandsChannel: TextChannel;
 }
 
 // return shape of GuildSetupManager.ensureHomebase. the ready sweep in main.ts
