@@ -22,15 +22,23 @@ import type { ColorResolvable } from "discord.js";
 export const FOOTER = "Company Uno";
 
 // Dero, the Company Uno mascot, is the bot's visual identity. Set as the embed
-// author in embedBuilder.base() so every embed carries his name and icon.
-// iconURL points at the PNG deployed with the web app (nexious-client/public/
-// dero); Discord shows the name alone and skips a 404 icon gracefully, so this
-// is safe to ship before that deploy lands. Same value across every pack — the
-// bot presents as Dero regardless of voice.
+// author in embedBuilder.base() so every embed carries his name and icon. The
+// icon is a 128px PNG: Discord renders author icons as a single static frame, so
+// the icon-sized PNG is the right asset here; the animated gif is used as the
+// introductions embed image instead (see DERO_GIF_URL). Same value across every
+// pack — the bot presents as Dero regardless of voice.
+//
+// DEPLOY NOTE: these assets live in nexious-client/public/dero and only render
+// once the web app is deployed with them. Until then companyuno.com/dero/* 200s
+// with the SPA's HTML (not the file), so Discord shows the name with no image.
 export const AUTHOR = {
 	name: "Dero",
 	iconURL: "https://www.companyuno.com/dero/dero-icon-128.png",
 };
+
+// Animated Dero (default state) for the introductions embed image (setImage), so
+// new members see the mascot in action. Same deploy requirement as AUTHOR.iconURL.
+export const DERO_GIF_URL = "https://www.companyuno.com/dero/dero-default.gif";
 
 // Embed color palette. Color is neutral by design — the kingdom vs streamer
 // split happens in words, not in chrome — so the palette is identical across

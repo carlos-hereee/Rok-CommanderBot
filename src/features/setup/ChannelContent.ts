@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { getPluginCopy, type ICopyConfig } from "@base/copy/getCopy.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
+import { DERO_GIF_URL } from "@base/copy/brand.js";
 // botInviteLink is composed in @utils/config from the env-driven
 // clientId, so a dev process serves the dev install URL and a prod
 // process serves the prod install URL automatically. We deliberately
@@ -32,7 +33,10 @@ export const ChannelContent = {
 	introduction(guildConfig?: ICopyConfig | null): EmbedBuilder {
 		const copy = getPluginCopy(guildConfig);
 		const cc = copy.channelContent;
-		return infoEmbed(cc.introduction.title, cc.introduction.description, copy.COLORS.INTRODUCTION);
+		// setImage shows the large animated Dero below the welcome so new members
+		// see the mascot in action (gifs animate in the image slot, unlike the
+		// static author icon). Renders once the asset is deployed (see DERO_GIF_URL).
+		return infoEmbed(cc.introduction.title, cc.introduction.description, copy.COLORS.INTRODUCTION).setImage(DERO_GIF_URL);
 	},
 
 	// ── introduction invite button row ──────────────────────────────

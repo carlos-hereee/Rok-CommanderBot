@@ -688,6 +688,10 @@ export class GuildSetupManager {
 
 		if ((a.title ?? null) !== (stored.title ?? null)) return false;
 		if ((a.description ?? null) !== (stored.description ?? null)) return false;
+		// Compare the image url too so adding/changing an embed image (e.g. the
+		// Dero gif on the introductions embed) counts as a change worth reposting
+		// instead of being masked because the title and description still match.
+		if ((a.image?.url ?? null) !== (stored.image?.url ?? null)) return false;
 		if (aFields.length !== bFields.length) return false;
 
 		// Field-by-field compare. Name + value are the only fields that
