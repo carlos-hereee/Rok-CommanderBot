@@ -33,7 +33,7 @@ import { registerScheduleControlHandlers } from "@features/schedule/ScheduleCont
 import { registerSuggestionBoxHandlers } from "@features/suggestion-box/SuggestionBox.js";
 import { registerPollHandlers, dispatchPolls, logPollTallies } from "@features/polls/PollDispatcher.js";
 import { registerSelfDestructHandlers } from "@features/setup/selfDestruct.js";
-import { registerPowerUpHandlers, ensureAllPowerUps } from "@features/power-ups/PowerUps.js";
+import { registerPowerUpHandlers, removeAllPowerUpPanels } from "@features/power-ups/PowerUps.js";
 import { registerGreeter, ensureIntroChannelsWritable } from "@features/greeter/welcomeNewMember.js";
 
 // ── DNS resolver guard ─────────────────────────────────────────────────────
@@ -598,15 +598,14 @@ process.on("uncaughtException", (err) => {
 		//        refreshAllNextUp; one bad guild does not stall the others.
 		await refreshAllNextUp(client);
 
-		// ── channel power-up panels (item 36) ─────────────────────
-		// What: post or repair each homebase channel's pinned button panel
-		//       (refresh standings, pause/resume schedules, ...). Separate
-		//       pinned messages from the boards they complement.
-		// When: after the homebase sweep + board refreshes so the channels and
-		//       their boards already exist. Per-guild failures are logged and
-		//       swallowed inside ensureAllPowerUps; one bad guild cannot stall
-		//       the rest.
-		await ensureAllPowerUps(client);
+		// ── retire the old standalone control panels (2026-06 fold-in) ──
+		// What: the channel controls (toggle pings, say hello, refresh) moved
+		//       off standalone "power-up" panels onto the pinned intro guides.
+		//       This one-time sweep deletes any leftover panel + clears its id.
+		// When: after the homebase sweep so the channels still exist to clean.
+		//       Idempotent; per-guild failures are logged and swallowed inside
+		//       the sweep so one bad guild cannot stall the rest.
+		await removeAllPowerUpPanels(client);
 
 		// ── make existing guilds' introductions channels member-writable ──
 		// New guilds get this from createChannels' introOverwrites; this

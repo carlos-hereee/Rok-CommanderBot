@@ -67,19 +67,17 @@ export function buildSuggestionModal(): ModalBuilder {
 	return modal;
 }
 
-// Compose the action row that hosts the "Suggestion Box" button on
-// the #command-center pinned commandGuide. Exported so the channel-
-// content / populate path can attach it on send. ButtonStyle.Primary
-// (blurple) reads as the main action of the card without alarm
-// framing; Success (green) would imply a successful state, which
-// the button does not represent.
-export function buildSuggestionBoxButtonRow(): ActionRowBuilder<ButtonBuilder> {
-	const button = new ButtonBuilder()
+// The "Suggestion Box" button that opens the feedback modal. Exported as a bare
+// ButtonBuilder (not a row) so resolveIntroComponents can pack it into the same
+// #command-center guide row as the member controls + invite button. ButtonStyle.Primary
+// (blurple) reads as the main action without alarm framing; Success (green) would
+// imply a successful state, which the button does not represent.
+export function buildSuggestionBoxButton(): ButtonBuilder {
+	return new ButtonBuilder()
 		.setCustomId(OPEN_BUTTON_ID)
 		.setLabel("Suggestion Box")
 		.setEmoji("💡")
 		.setStyle(ButtonStyle.Primary);
-	return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 }
 
 // Button handler: just shows the modal. No permission gate because

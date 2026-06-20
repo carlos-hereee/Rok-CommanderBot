@@ -393,40 +393,28 @@ const guildConfigSchema = new Schema(
 			default: () => ({ paused: false, pausedUntil: null }),
 		},
 
-		// ── power-up message ids (v1.6 Phase 5, item 36) ────────────────
-		// What:  per-channel id of the pinned "power-up" message — a button
-		//        panel that puts the common channel actions one click away
-		//        (refresh standings, pause/resume schedules, etc) without a
-		//        slash command. One entry per homebase channel that hosts a
-		//        panel. Keyed by the GuildConfig channel-id field name so the
-		//        power-up code can look up both the channel and its stored
-		//        message id from the same key.
-		// Who:   written by PowerUps.ensurePowerUps (initial post + repair on
-		//        the boot sweep); read there to edit the panel in place rather
-		//        than reposting. The button handler does NOT read these — it
-		//        routes purely on the customId.
-		// When:  set on the first boot after this feature ships (or after a
-		//        panel message is deleted and reposted). Legacy rows load with
-		//        an empty object and the boot sweep posts fresh panels.
-		// Where: nested object mirroring introMessageIds so adding a panel for
-		//        another channel later is a one-line schema bump. Panels exist for
-		//        the leaderboard, intro, and announcements channels. The schedule
-		//        channel has NO panel — its controls (Go Live + a phase-gated
-		//        Pause/Resume toggle) live on the schedule board itself, owned by
-		//        ScheduleControls, so there is no scheduleChannelId slot here.
-		// How:   nullable per slot, same contract as introMessageIds — null
-		//        means "no panel posted yet, post one".
+		// ── power-up message ids (v1.6 item 36; RETIRED 2026-06) ────────
+		// What:  LEGACY. Per-channel id of a pinned standalone "power-up" panel
+		//        message. The controls (toggle pings, say hello, refresh) no
+		//        longer live on standalone panels — they are buttons folded into
+		//        the pinned intro guides now (see resolveIntroComponents). This
+		//        field is kept only so the one-time cleanup can find + delete the
+		//        old panels on guilds set up before the fold-in.
+		// Who:   read + cleared by PowerUps.removeAllPowerUpPanels (the boot-time
+		//        cleanup sweep). Nothing writes a non-null value anymore. The
+		//        button handler never read these — it routes purely on customId.
+		// When:  legacy rows carry the old panel ids until the cleanup runs once,
+		//        after which every slot is null and the sweep is a no-op.
+		// How:   nullable per slot. Safe to drop this field entirely once every
+		//        live guild has booted past the cleanup.
 		powerUpMessageIds: {
 			type: {
-				// Current control panels (relocated 2026-06-19): the admin panel in the
-				// admin channel, the member announcement-ping toggle in the command-center,
-				// so daily channel activity never buries them.
+				// All slots are now legacy: each tracked the standalone panel that
+				// used to sit in that channel. The boot cleanup deletes the message
+				// and nulls the slot; nothing posts a new panel.
 				adminChannelId: { type: String, required: false, default: null },
 				commandsChannelId: { type: String, required: false, default: null },
-				// admin panel, now in its own admin command channel
 				adminCommandsChannelId: { type: String, required: false, default: null },
-				// Legacy per-channel panels, retired when controls moved; kept so the boot
-				// sweep can find and delete the orphaned messages, then null these.
 				leaderboardChannelId: { type: String, required: false, default: null },
 				introChannelId: { type: String, required: false, default: null },
 				announcementsChannelId: { type: String, required: false, default: null },

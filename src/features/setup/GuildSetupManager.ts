@@ -17,8 +17,9 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { ISetupConfig, IAdminRoleConfig, ICreatedChannels, IChannelObjects, IEnsureHomebaseResult } from "./setup.types.js";
 import { ChannelContent } from "./ChannelContent.js";
 import type { ICopyConfig } from "@base/copy/getCopy.js";
-import { buildSuggestionBoxButtonRow } from "@features/suggestion-box/SuggestionBox.js";
-import { buildSelfDestructButtonRow } from "@features/setup/selfDestruct.js";
+import { buildSuggestionBoxButton } from "@features/suggestion-box/SuggestionBox.js";
+import { buildSelfDestructButton } from "@features/setup/selfDestruct.js";
+import { buildMemberControlButtons, buildAdminControlButtons } from "@features/power-ups/PowerUps.js";
 import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
@@ -640,39 +641,42 @@ export class GuildSetupManager {
 	}
 
 	// ── resolveIntroComponents ────────────────────────────────────
-	// What:  returns the action row(s) that should accompany a given
-	//        channel's intro embed, or null if the channel has no
-	//        component surface (the common case). Only the introductions
-	//        channel currently has a component row (the "Summon me to
-	//        your server, Mortal" invite button).
-	// Who:   populateChannels on first build (via the send() call for
-	//        the intro channel) and refreshIntroEmbeds on every boot
-	//        (both the edit-in-place and repost paths must pass
-	//        components or Discord silently drops them).
+	// What:  returns the action row(s) that accompany a given channel's intro
+	//        embed, or null if it has no buttons (the common case). Two channels
+	//        carry a folded control row (2026-06): the #command-center guide and
+	//        the admin-controls guide. The standalone "power-up" panels were
+	//        retired — every button now rides on these pinned guides.
+	// Who:   populateChannels on first build and refreshIntroEmbeds on every boot
+	//        (both the edit-in-place and repost paths must pass components or
+	//        Discord silently drops them).
 	// When:  called per spec during the intro sweep.
-	// Where: parallels resolveIntroEmbed so a future channel that grows
-	//        a component row (eg. an invite button for a central
-	//        announcement channel) can be added with a single new case.
-	// How:   switch on the spec. Returning null means "do not touch
-	//        components"; returning an array means "replace components
-	//        with this array."
+	// Where: the powerup-prefixed buttons (toggle pings, say hello, refresh) keep
+	//        their customIds so PowerUps.handlePowerUpButton still routes them;
+	//        suggestion-box / invite / self-destruct each expose a bare button
+	//        factory so all of a channel's buttons fit in ONE ActionRow.
+	// How:   compose one ActionRow per channel. Returning null means "no buttons."
 	private static resolveIntroComponents(
 		field: (typeof GuildSetupManager.CHANNEL_FIELDS)[number]
 	): ActionRowBuilder<ButtonBuilder>[] | null {
 		switch (field) {
-			case "introChannelId":
-				return [ChannelContent.introductionComponents()];
 			case "commandsChannelId":
-				// Suggestion Box button on the pinned commandGuide so
-				// members can open the modal with one click instead of
-				// typing /suggestion-box. Returned as ActionRowBuilder
-				// to match the existing component contract.
-				return [buildSuggestionBoxButtonRow()];
+				// #command-center guide row (4 buttons): Suggestion Box + the member
+				// controls (announcement-ping toggle, Say hello) + the "Summon me to
+				// your server" invite — moved here from the introductions intro, which
+				// gets buried now that the channel is member-writable.
+				return [
+					new ActionRowBuilder<ButtonBuilder>().addComponents(
+						buildSuggestionBoxButton(),
+						...buildMemberControlButtons(),
+						ChannelContent.buildInviteButton()
+					),
+				];
 			case "adminCommandsChannelId":
-				// owner-only Self destruct button rides on the admin command
-				// guide (moved here from the admin channel in the 2026-06-19 split).
-				return [buildSelfDestructButtonRow()];
+				// admin-controls guide row (2 buttons): owner-only Self destruct + the
+				// admin controls (Refresh standings).
+				return [new ActionRowBuilder<ButtonBuilder>().addComponents(buildSelfDestructButton(), ...buildAdminControlButtons())];
 			default:
+				// introductions + every other channel: intro embed only, no buttons.
 				return null;
 		}
 	}
@@ -729,6 +733,33 @@ export class GuildSetupManager {
 			if ((af.inline ?? false) !== (bf.inline ?? false)) return false;
 		}
 		return true;
+	}
+
+	// ── component equivalence check ──────────────────────────────
+	// What: returns true when the resolved button rows already match the rows on
+	//       a posted message. embedsAreEquivalent compares only the EMBED, so
+	//       without this a button relocation (same copy, different buttons — e.g.
+	//       the 2026-06 controls fold-in) would never reach existing guilds:
+	//       refreshIntroEmbeds short-circuits on embed equivalence and never
+	//       re-sends components.
+	// How:  flatten each side to a per-button signature (customId | url | label |
+	//       style | emoji) via toJSON so a Builder and a live message component
+	//       compare on the same API shape, then compare the joined signatures.
+	private static componentsAreEquivalent(
+		resolved: ActionRowBuilder<ButtonBuilder>[] | null,
+		current: ReadonlyArray<{ toJSON(): unknown }>
+	): boolean {
+		const signature = (rows: ReadonlyArray<{ toJSON(): unknown }>): string =>
+			rows
+				.flatMap((row) => {
+					const json = row.toJSON() as { components?: Array<Record<string, unknown>> };
+					return (json.components ?? []).map((c) => {
+						const emoji = c.emoji as { name?: string; id?: string } | undefined;
+						return `${c.custom_id ?? ""}|${c.url ?? ""}|${c.label ?? ""}|${c.style ?? ""}|${emoji?.name ?? emoji?.id ?? ""}`;
+					});
+				})
+				.join("~~");
+		return signature(resolved ?? []) === signature(current);
 	}
 
 	// ── single channel repair primitive ───────────────────────
@@ -1556,13 +1587,13 @@ export class GuildSetupManager {
 			// also pass components on edit or Discord will drop the row.
 			introChannel.send({
 				embeds: [ChannelContent.introduction()],
-				components: [ChannelContent.introductionComponents()],
+				components: GuildSetupManager.resolveIntroComponents("introChannelId") ?? [],
 			}),
 			// Initial post includes the Suggestion Box button row so the
 			// pin carries the member-clickable surface from minute one.
 			// resolveIntroComponents returns the same row for refresh
 			// reposts on subsequent boots; keep both call sites aligned.
-			commandsChannel.send({ embeds: [ChannelContent.commandGuide()], components: [buildSuggestionBoxButtonRow()] }),
+			commandsChannel.send({ embeds: [ChannelContent.commandGuide()], components: GuildSetupManager.resolveIntroComponents("commandsChannelId") ?? [] }),
 			leaderboardChannel.send({ embeds: [ChannelContent.leaderboardIntro()] }),
 			scheduleChannel.send({ embeds: [ChannelContent.scheduleIntro()] }),
 			announcementsChannel.send({ embeds: [ChannelContent.announcementsIntro()] }),
@@ -1576,7 +1607,7 @@ export class GuildSetupManager {
 			// command center. Carries the owner-only Self destruct button row
 			// (gated in the handler). Pinning handled below alongside the
 			// schedule + next-decree pins.
-			adminCommandsChannel.send({ embeds: [ChannelContent.adminCommandGuide()], components: [buildSelfDestructButtonRow()] }),
+			adminCommandsChannel.send({ embeds: [ChannelContent.adminCommandGuide()], components: GuildSetupManager.resolveIntroComponents("adminCommandsChannelId") ?? [] }),
 		]);
 
 		try {
@@ -1811,9 +1842,23 @@ export class GuildSetupManager {
 			if (storedMessageId) {
 				storedMessage = await channel.messages.fetch(storedMessageId).catch(() => null);
 				if (storedMessage && GuildSetupManager.embedsAreEquivalent(embed, storedMessage.embeds[0])) {
-					// No change — backfill pin if the invariant says
-					// this channel should be pinned but the stored
-					// message somehow lost its pin.
+					// Embed copy is unchanged. Buttons might still have moved (the
+					// 2026-06 controls fold-in relocated power-up buttons onto these
+					// guides). A button relocation is not a copy change, so when the
+					// components drift we refresh them IN PLACE (edit, not repost — no
+					// audit-trail message to preserve). embedsAreEquivalent ignores
+					// components, so this is the only path that migrates existing guilds
+					// to the new button layout.
+					if (!GuildSetupManager.componentsAreEquivalent(componentRows, storedMessage.components)) {
+						try {
+							await storedMessage.edit({ embeds: [embed], components: componentRows ?? [] });
+							edited += 1;
+						} catch (error) {
+							console.warn(LOG_MESSAGES.setup.introRefreshEditFailed(spec.displayName, guild.id), error);
+						}
+					}
+					// Backfill pin if the invariant says this channel should be pinned
+					// but the stored message somehow lost its pin.
 					if (shouldBePinned && !storedMessage.pinned) {
 						try {
 							await storedMessage.pin();

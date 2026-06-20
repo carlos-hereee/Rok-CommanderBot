@@ -29,9 +29,10 @@ import { COLORS } from "@base/copy/brand.js";
 // runs on an explicit Confirm, with an owner re-check at confirm time.
 //
 // customId scheme `self_destruct:<action>` (prompt | confirm | cancel), routed on
-// the "self_destruct" prefix via interactionRegistry. The panel button uses the
-// "powerup" prefix and is delegated here by PowerUps (it calls
-// showSelfDestructConfirm); only confirm/cancel use this module's own prefix.
+// the "self_destruct" prefix via interactionRegistry. The "Self destruct" button
+// folded into the admin command guide row uses `self_destruct:prompt`, which
+// handleSelfDestruct turns into the Confirm/Cancel prompt; confirm/cancel use the
+// same prefix. (It is NOT a powerup-prefixed control — PowerUps does not delegate here.)
 
 const PREFIX = "self_destruct";
 const CONFIRM_ID = `${PREFIX}:confirm`;
@@ -195,15 +196,15 @@ async function demolishHomebase(client: Client, guild: Guild, actorId: string): 
 }
 
 /**
- * Owner-only "Self destruct" button row, attached to the pinned admin command
- * guide. The `self_destruct:prompt` customId routes through handleSelfDestruct,
- * which gates owner-only and pops the Confirm/Cancel prompt. Visible to admins
- * but only the server owner can act on it.
+ * Owner-only "Self destruct" button, folded into the pinned admin command guide
+ * row (alongside the admin controls). Exported as a bare ButtonBuilder so
+ * resolveIntroComponents can compose it with the other admin-controls buttons.
+ * The `self_destruct:prompt` customId routes through handleSelfDestruct, which
+ * gates owner-only and pops the Confirm/Cancel prompt. Visible to admins but
+ * only the server owner can act on it.
  */
-export function buildSelfDestructButtonRow(): ActionRowBuilder<ButtonBuilder> {
-	return new ActionRowBuilder<ButtonBuilder>().addComponents(
-		new ButtonBuilder().setCustomId(`${PREFIX}:prompt`).setLabel("Self destruct homebase").setEmoji("💥").setStyle(ButtonStyle.Danger)
-	);
+export function buildSelfDestructButton(): ButtonBuilder {
+	return new ButtonBuilder().setCustomId(`${PREFIX}:prompt`).setLabel("Self destruct homebase").setEmoji("💥").setStyle(ButtonStyle.Danger);
 }
 
 /**

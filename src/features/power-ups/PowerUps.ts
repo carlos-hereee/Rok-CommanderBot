@@ -1,120 +1,77 @@
-import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	Client,
-	ColorResolvable,
-	DiscordAPIError,
-	EmbedBuilder,
-	Guild,
-	Message,
-	MessageFlags,
-	TextChannel,
-	type ButtonInteraction,
-} from "discord.js";
+import { ButtonBuilder, ButtonStyle, Client, Guild, MessageFlags, TextChannel, type ButtonInteraction } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { registerButton } from "@handlers/interactionRegistry.js";
 import { gateOwnerOrAdmin } from "@utils/permissions.js";
-import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
+import { errorEmbed } from "@utils/embedBuilder.js";
 import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { refreshLeaderboard } from "@features/leaderboard/LeaderboardBoard.js";
 import { welcomeNewMember } from "@features/greeter/welcomeNewMember.js";
 
-// ── Channel power-ups (v1.6 Phase 5, item 36) ──────────────────────────
-// Each homebase channel carries a pinned "power-up" panel: an embed + a row of
-// buttons that put the common channel actions one click away in Discord, no
-// slash command required. The panel is a SEPARATE pinned message from any board
-// in the channel (it complements the auto leaderboard board and the schedule
-// board rather than replacing them).
+// ── Channel controls (v1.6 item 36; folded into intro guides 2026-06) ──────
+// The bot's common channel actions are one-click buttons in Discord, no slash
+// command required. They USED to live on standalone pinned "power-up" panel
+// messages; they are now BUTTONS on the pinned intro guides instead:
+//   • #command-center guide: "Toggle announcement pings" + "Say hello" (any member)
+//   • admin-controls guide:  "Refresh standings" (owner/admin)
+// resolveIntroComponents (GuildSetupManager) composes these — built by the
+// factories below — into the guide rows alongside the suggestion-box, invite,
+// and self-destruct buttons.
 //
-// Architecture mirrors the rest of the bot's persistent-button surfaces:
+// This module still owns the button BEHAVIOUR:
 //  - customId scheme `powerup:<kind>:<action>`, dispatched on the "powerup"
-//    prefix through interactionRegistry; this handler splits the rest.
-//  - one registerButton("powerup", ...) handles every panel button and routes
-//    by kind + action.
-//  - panels are posted + repaired on the boot sweep (ensureAllPowerUps),
-//    persisting message ids on GuildConfig.powerUpMessageIds, the same way
-//    ScheduleBoard and the intro embeds are kept alive across restarts.
-//
-// Panels shipped here, split by audience (2026-06-19): a MEMBER panel in
-// #command-center with "Toggle announcement pings" (any member), and an ADMIN
-// panel in the admin command center with "Refresh standings" + "Say hello"
-// (fires the new-member greeter flow on demand via features/greeter). Keeping
-// them in separate channels means daily activity in #inner-sanctum never buries
-// the admin quick-actions, and members are not shown buttons they cannot use.
-// The schedule channel is deliberately NOT a power-up panel: its controls (Go
-// Live + a phase-gated Pause/Resume toggle) live on the schedule board itself,
-// owned by ScheduleControls, so the board's refresh-on-event-change keeps them
-// current.
+//    prefix through interactionRegistry; handlePowerUpButton splits + gates +
+//    routes. The host message does not matter — routing is purely by customId.
+//  - the one-time removeAllPowerUpPanels sweep deletes the OLD standalone panels
+//    from guilds set up before the fold-in.
+// The schedule channel is deliberately NOT here: its controls (Go Live + a
+// phase-gated Pause/Resume toggle) live on the schedule board itself, owned by
+// ScheduleControls.
 
 const POWERUP_PREFIX = "powerup";
 
-interface IPowerUpAction {
-	// the <action> segment of the customId; unique within a panel
-	action: string;
-	label: string;
-	emoji?: string;
-	style: ButtonStyle;
-	// owner/admin-gated when true; open to any member when false
-	adminOnly: boolean;
+// The folded controls, keyed by `<kind>:<action>` (the customId tail). The
+// handler reads this table to (a) reject unknown/retired customIds and (b)
+// decide whether to gate the click. "Say hello" is member-usable — any member
+// can fire their own welcome + icebreaker — so it is NOT adminOnly.
+const POWERUP_ACTIONS = {
+	"member:subscribe": { adminOnly: false },
+	"member:greet": { adminOnly: false },
+	"admin:refresh": { adminOnly: true },
+} as const satisfies Record<string, { adminOnly: boolean }>;
+
+// ── button factories (folded into the intro guides) ──────────────────────
+// Built here so the customIds stay co-located with the handler that routes them.
+// Returned as bare ButtonBuilders so resolveIntroComponents can pack several into
+// one ActionRow. The customIds MUST match POWERUP_ACTIONS / the switch below.
+
+// #command-center guide row: announcement-ping toggle + "Say hello" (both open
+// to any member). Secondary style so the Suggestion Box (Primary) stays the row's
+// visual lead.
+export function buildMemberControlButtons(): ButtonBuilder[] {
+	return [
+		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:subscribe`).setLabel("Toggle announcement pings").setEmoji("🔔").setStyle(ButtonStyle.Secondary),
+		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:greet`).setLabel("Say hello").setEmoji("👋").setStyle(ButtonStyle.Secondary),
+	];
 }
 
-interface IPowerUpDefinition {
-	// the <kind> segment of the customId, and the log label
-	kind: string;
-	// GuildConfig field holding this channel's id AND the powerUpMessageIds key
-	channelField: string;
-	title: string;
-	description: string;
-	color: ColorResolvable;
-	actions: IPowerUpAction[];
+// admin-controls guide row: refresh the leaderboard standings. Owner/admin gated
+// in handlePowerUpButton via POWERUP_ACTIONS.
+export function buildAdminControlButtons(): ButtonBuilder[] {
+	return [
+		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:admin:refresh`).setLabel("Refresh standings").setEmoji("🔄").setStyle(ButtonStyle.Primary),
+	];
 }
-
-const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
-	// Member panel: lives in the read-only #command-center next to the command
-	// guide, where members already look for controls and nothing buries it. Just
-	// the announcement-ping toggle — open to any member, so the panel shows only
-	// what a member can actually use.
-	{
-		kind: "member",
-		channelField: "commandsChannelId",
-		title: "🔔 Announcement pings",
-		description:
-			"Tap to opt in or out of announcement pings. This adds (or removes) the role the bot @mentions when an event reminder fires.",
-		color: rokCommanderCopy.COLORS.COMMANDS,
-		actions: [
-			{ action: "subscribe", label: "Toggle announcement pings", emoji: "🔔", style: ButtonStyle.Secondary, adminOnly: false },
-		],
-	},
-	// Admin panel: lives in the dedicated admin command center (admin-only) so
-	// quick actions are not buried by the daily notices that land in
-	// #inner-sanctum. Both actions are owner/admin gated.
-	{
-		kind: "admin",
-		channelField: "adminCommandsChannelId",
-		title: "🎛️ Admin controls",
-		description:
-			"Refresh the leaderboard standings, or post a fresh welcome + icebreaker into the introductions channel.",
-		color: rokCommanderCopy.COLORS.ADMIN,
-		actions: [
-			{ action: "refresh", label: "Refresh standings", emoji: "🔄", style: ButtonStyle.Primary, adminOnly: true },
-			{ action: "greet", label: "Say hello", emoji: "👋", style: ButtonStyle.Primary, adminOnly: true },
-		],
-	},
-];
 
 // ── button handling ────────────────────────────────────────────────────
 
 async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void> {
-	// customId: powerup:<kind>:<action>
+	// customId: powerup:<kind>:<action> → key on the `<kind>:<action>` tail.
 	const parts = interaction.customId.split(":");
-	const kind = parts[1];
-	const action = parts[2];
-	const def = kind ? POWERUP_DEFINITIONS.find((d) => d.kind === kind) : undefined;
-	const actionDef = def?.actions.find((a) => a.action === action);
+	const key = `${parts[1]}:${parts[2]}`;
+	const actionDef = POWERUP_ACTIONS[key as keyof typeof POWERUP_ACTIONS] as { adminOnly: boolean } | undefined;
 
-	// Unknown / retired control (stale panel from an older deploy). Ack quietly.
-	if (!def || !actionDef) {
+	// Unknown / retired control (a stale button from an older layout). Ack quietly.
+	if (!actionDef) {
 		await interaction.reply({ content: "This control is no longer available.", flags: MessageFlags.Ephemeral });
 		return;
 	}
@@ -136,19 +93,19 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 		}
 	}
 
-	switch (`${def.kind}:${actionDef.action}`) {
+	switch (key) {
 		case "admin:refresh":
 			await runLeaderboardRefresh(interaction, guildId);
 			return;
-		case "admin:greet":
+		case "member:greet":
 			await runFireGreeting(interaction);
 			return;
 		case "member:subscribe":
 			await runToggleNotificationRole(interaction, guildId);
 			return;
 		default:
-			// Defined in the panel but not yet wired to logic — should not happen
-			// for shipped actions, but keeps the switch exhaustive and loud.
+			// In POWERUP_ACTIONS but not wired here — should not happen for shipped
+			// actions, but keeps the switch exhaustive and loud.
 			await interaction.reply({ content: "This control is not wired up yet.", flags: MessageFlags.Ephemeral });
 	}
 }
@@ -165,10 +122,10 @@ async function runLeaderboardRefresh(interaction: ButtonInteraction, guildId: st
 }
 
 async function runFireGreeting(interaction: ButtonInteraction): Promise<void> {
-	// Fire the real new-member greeting flow for the clicking admin: the same
+	// Fire the real new-member greeting flow for the clicking member: the same
 	// path a join takes (a pack-voiced welcome framing + a random icebreaker,
-	// posted to the introductions channel pinging the member). Lets an admin
-	// preview the greeter or drop a fresh icebreaker on demand. Reuses
+	// posted to the introductions channel pinging them). Member-usable — anyone
+	// can drop a fresh icebreaker or re-introduce themselves on demand. Reuses
 	// welcomeNewMember so the on-demand fire and the on-join fire never drift.
 	// Silent ack: the posted greeting IS the visible feedback, so there is no
 	// ephemeral success reply (it was just clutter). deferUpdate acknowledges the
@@ -256,206 +213,73 @@ async function runToggleNotificationRole(interaction: ButtonInteraction, guildId
 /**
  * Register the power-up button handler. Called once at boot from main.ts
  * alongside the other registerXHandlers, BEFORE the InteractionCreate listener.
+ * Still required even though the buttons now live on the intro guides — every
+ * `powerup:*` click routes through here.
  */
 export function registerPowerUpHandlers(): void {
 	registerButton(POWERUP_PREFIX, handlePowerUpButton);
 }
 
-// ── panel message building ──────────────────────────────────────────────
-
-function buildPowerUpEmbed(def: IPowerUpDefinition): EmbedBuilder {
-	return infoEmbed(def.title, def.description, def.color);
-}
-
-function buildPowerUpComponents(def: IPowerUpDefinition): ActionRowBuilder<ButtonBuilder>[] {
-	const rows: ActionRowBuilder<ButtonBuilder>[] = [];
-	// Discord caps an action row at 5 buttons; chunk so a panel with more than
-	// 5 actions still renders (current panels have 1-2).
-	for (let i = 0; i < def.actions.length; i += 5) {
-		const slice = def.actions.slice(i, i + 5);
-		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-			slice.map((a) => {
-				const button = new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:${def.kind}:${a.action}`).setLabel(a.label).setStyle(a.style);
-				if (a.emoji) button.setEmoji(a.emoji);
-				return button;
-			})
-		);
-		rows.push(row);
-	}
-	return rows;
-}
-
-// ── boot sweep: post + repair panels ─────────────────────────────────────
-
-// Post-or-edit one panel. Returns the message id to persist (the existing id on
-// a successful edit or a bail, the new id on a repost). Mirrors
-// ScheduleBoard.postOrEdit but simpler: on an author mismatch it bails quietly
-// and lets ScheduleBoard own the homebase rebuild rather than re-running it.
-async function postOrEditPanel(channel: TextChannel, storedId: string | null, def: IPowerUpDefinition, guildId: string): Promise<string | null> {
-	const embed = buildPowerUpEmbed(def);
-	const components = buildPowerUpComponents(def);
-	const selfId = channel.client.user?.id;
-
-	if (storedId) {
-		try {
-			const existing = await channel.messages.fetch(storedId);
-			if (selfId && existing.author.id !== selfId) {
-				console.warn(`[powerup] ${def.kind} panel ${storedId} in guild ${guildId} not authored by this bot; skipping`);
-				return storedId;
-			}
-			// message.edit must pass BOTH embeds and components or the buttons drop.
-			await existing.edit({ embeds: [embed], components });
-			return storedId;
-		} catch (error) {
-			if (error instanceof DiscordAPIError && (error.code === 10008 || error.code === 10003)) {
-				// 10008 Unknown Message (admin deleted it) / 10003 Unknown Channel —
-				// fall through to repost a fresh panel.
-				console.warn(`[powerup] ${def.kind} panel ${storedId} in guild ${guildId} was deleted; reposting`);
-			} else if (error instanceof DiscordAPIError && error.code === 50005) {
-				console.warn(`[powerup] ${def.kind} panel ${storedId} in guild ${guildId} authored by another bot; skipping`);
-				return storedId;
-			} else {
-				console.error(`[powerup] failed to edit ${def.kind} panel ${storedId} in guild ${guildId}`, error);
-				return storedId; // leave the id; retry on the next boot
-			}
-		}
-	}
-
-	// ── adoption guard ───────────────────────────────────────────────────
-	// Before posting a fresh panel, scan recent bot-authored messages for an
-	// existing panel of this kind (a button whose customId starts with
-	// `powerup:<kind>:`, a stable marker). If found, adopt it: refresh its
-	// content and return its id instead of duplicating. Mirrors refreshIntroEmbeds'
-	// idempotency scan so a flaky id round-trip cannot spam the channel with
-	// duplicate panels.
-	const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
-	const adoptable = recent?.find(
-		(msg) =>
-			(!selfId || msg.author.id === selfId) &&
-			msg.components.some(
-				(row) =>
-					"components" in row &&
-					row.components.some(
-						(comp) =>
-							"customId" in comp && typeof comp.customId === "string" && comp.customId.startsWith(`${POWERUP_PREFIX}:${def.kind}:`)
-					)
-			)
-	);
-	if (adoptable) {
-		try {
-			await adoptable.edit({ embeds: [embed], components });
-		} catch (error) {
-			console.warn(`[powerup] failed to refresh adopted ${def.kind} panel in guild ${guildId}`, error);
-		}
-		if (!adoptable.pinned) {
-			try {
-				await adoptable.pin();
-			} catch (error) {
-				console.warn(`[powerup] pin failed for adopted ${def.kind} panel in guild ${guildId}`, error);
-			}
-		}
-		return adoptable.id;
-	}
-
-	// First post (or recovery): send, pin best-effort, return the new id.
-	let message: Message;
-	try {
-		message = await channel.send({ embeds: [embed], components });
-	} catch (error) {
-		console.error(`[powerup] failed to post ${def.kind} panel in guild ${guildId}`, error);
-		return storedId;
-	}
-	try {
-		await message.pin();
-	} catch (error) {
-		console.warn(`[powerup] pin failed for ${def.kind} panel in guild ${guildId} (likely missing ManageMessages)`, error);
-	}
-	return message.id;
-}
+// ── one-time migration: delete the old standalone control panels ──────────
+// The controls used to live on separate pinned "power-up" panel messages; they
+// are now buttons on the pinned intro guides. On boot we delete any leftover
+// panel (whose id is tracked in GuildConfig.powerUpMessageIds) and clear the
+// field. Idempotent: once every tracked id is null this is a no-op (one
+// findByGuildId, no write). Safe to retire this sweep once every live guild has
+// booted past it.
+const PANEL_KEYS = [
+	"commandsChannelId",
+	"adminCommandsChannelId",
+	"adminChannelId",
+	"leaderboardChannelId",
+	"introChannelId",
+	"announcementsChannelId",
+] as const;
 
 /**
- * Post or repair every defined power-up panel for one guild, persisting the
- * message ids in a single GuildConfig write. Safe to call repeatedly — steady
- * state is one fetch + one edit per panel and no DB write.
+ * Delete every tracked control panel for one guild and clear powerUpMessageIds.
+ * Best-effort per panel: a failed delete is logged and the rest proceed.
  */
-export async function ensurePowerUps(client: Client, guild: Guild): Promise<void> {
+async function removeGuildPowerUpPanels(client: Client, guild: Guild): Promise<void> {
 	const config = await guildConfigStore.findByGuildId(guild.id);
 	if (!config) return;
 
-	// Dynamic field access: the panel defs key channels by their GuildConfig
-	// field name (e.g. "leaderboardChannelId"). Cast once so the lookup typechecks.
 	const channelIds = config as unknown as Record<string, string | null | undefined>;
-	// Read the stored panel ids EXPLICITLY into a plain object. Spreading the
-	// Mongoose nested subdocument (`{ ...config.powerUpMessageIds }`) did NOT
-	// reliably copy the leaf ids, so the $set below clobbered previously-stored
-	// ids and the panels re-posted every boot. Reading key-by-key mirrors how
-	// refreshIntroEmbeds handles introMessageIds and keeps the write complete.
 	const stored = (config.powerUpMessageIds ?? {}) as unknown as Record<string, string | null | undefined>;
-	const nextIds: Record<string, string | null> = {
-		// active panels: member toggle in #command-center, admin actions in the
-		// admin command center.
-		commandsChannelId: stored.commandsChannelId ?? null,
-		adminCommandsChannelId: stored.adminCommandsChannelId ?? null,
-		// legacy per-channel panels, retired by the cleanup below. adminChannelId
-		// held the previous admin panel before the member/admin split.
-		adminChannelId: stored.adminChannelId ?? null,
-		leaderboardChannelId: stored.leaderboardChannelId ?? null,
-		introChannelId: stored.introChannelId ?? null,
-		announcementsChannelId: stored.announcementsChannelId ?? null,
-	};
+
 	let changed = false;
-
-	for (const def of POWERUP_DEFINITIONS) {
-		const channelId = channelIds[def.channelField] ?? null;
-		if (!channelId) continue; // channel not provisioned (legacy / incomplete setup)
-
-		const channel = await client.channels.fetch(channelId).catch(() => null);
-		if (!(channel instanceof TextChannel)) continue;
-
-		const storedId = nextIds[def.channelField] ?? null;
-		const resultId = await postOrEditPanel(channel, storedId, def, guild.id);
-		if (resultId && resultId !== storedId) {
-			nextIds[def.channelField] = resultId;
-			changed = true;
-		}
-	}
-
-	// ── retire the legacy per-channel panels ──────────────────────────
-	// Controls moved off the leaderboard / intro / announcements channels (where
-	// daily activity buried them) into the admin + command channels. Delete any
-	// old panel still pinned there and clear its id. One-time: once these are
-	// null this block is a no-op.
-	const LEGACY_PANEL_KEYS = ["adminChannelId", "leaderboardChannelId", "introChannelId", "announcementsChannelId"] as const;
-	for (const legacyKey of LEGACY_PANEL_KEYS) {
-		const panelId = nextIds[legacyKey];
+	const cleared: Record<string, null> = {};
+	for (const key of PANEL_KEYS) {
+		cleared[key] = null;
+		const panelId = stored[key];
 		if (!panelId) continue;
-		const legacyChannelId = channelIds[legacyKey] ?? null;
-		const legacyChannel = legacyChannelId ? await client.channels.fetch(legacyChannelId).catch(() => null) : null;
-		if (legacyChannel instanceof TextChannel) {
-			const stale = await legacyChannel.messages.fetch(panelId).catch(() => null);
+		changed = true; // a tracked panel existed → delete it + clear the id
+
+		const channelId = channelIds[key] ?? null;
+		const channel = channelId ? await client.channels.fetch(channelId).catch(() => null) : null;
+		if (channel instanceof TextChannel) {
+			const stale = await channel.messages.fetch(panelId).catch(() => null);
 			if (stale) {
 				try {
 					await stale.delete();
 				} catch (error) {
-					console.warn(`[powerup] failed to delete legacy ${legacyKey} panel in guild ${guild.id}`, error);
+					console.warn(`[powerup] failed to delete legacy ${key} panel in guild ${guild.id}`, error);
 				}
 			}
 		}
-		nextIds[legacyKey] = null;
-		changed = true;
 	}
 
-	// One write per guild, only when an id actually changed (post, repost, or the legacy cleanup above).
-	if (changed) await guildConfigStore.update(guild.id, { powerUpMessageIds: nextIds });
+	if (changed) await guildConfigStore.update(guild.id, { powerUpMessageIds: cleared });
 }
 
 /**
- * Boot-sweep entry point: ensure panels for every guild. Per-guild failures are
+ * Boot-sweep entry point: delete the old standalone control panels for every
+ * guild (the buttons now live on the intro guides). Per-guild failures are
  * logged and swallowed so one guild cannot stall the rest. Called from main.ts
- * after the homebase sweep + board refreshes so the channels exist first.
+ * where ensureAllPowerUps used to run.
  */
-export async function ensureAllPowerUps(client: Client): Promise<void> {
+export async function removeAllPowerUpPanels(client: Client): Promise<void> {
 	for (const guild of client.guilds.cache.values()) {
-		await ensurePowerUps(client, guild).catch((error) => console.error(`[powerup] ensure failed for guild ${guild.id}`, error));
+		await removeGuildPowerUpPanels(client, guild).catch((error) => console.error(`[powerup] panel cleanup failed for guild ${guild.id}`, error));
 	}
 }

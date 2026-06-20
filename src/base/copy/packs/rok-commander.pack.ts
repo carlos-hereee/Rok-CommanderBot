@@ -314,8 +314,9 @@ export const rokCommanderCopy = {
 			//        the bot via category level overwrites.
 			nextDecree: "🔜upcoming-events",
 			// Eighth channel: admin-only command + control surface (the admin command
-			// guide moved out of inner-sanctum, plus the admin power-up panel).
-			adminCommands: "🛡️command-deck",
+			// guide moved out of inner-sanctum, with the admin control buttons folded
+			// into its pinned row).
+			adminCommands: "🛡️admin-controls",
 		},
 	},
 

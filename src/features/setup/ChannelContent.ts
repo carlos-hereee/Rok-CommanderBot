@@ -1,4 +1,4 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { EmbedBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { getPluginCopy, type ICopyConfig } from "@base/copy/getCopy.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
 import { DERO_GIF_URL } from "@base/copy/brand.js";
@@ -39,42 +39,30 @@ export const ChannelContent = {
 		return infoEmbed(cc.introduction.title, cc.introduction.description, copy.COLORS.INTRODUCTION).setImage(DERO_GIF_URL);
 	},
 
-	// ── introduction invite button row ──────────────────────────────
-	// What:  link button row that sits beneath the introduction embed.
-	//        Opens Discord's OAuth consent screen for inviting ROK
-	//        Commander into another server. Link buttons do NOT require
-	//        an interaction handler — Discord opens the URL directly.
-	// Who:   outsiders who wander into the introductions channel and want
-	//        to run the bot in their own guild. Existing mortals will
-	//        mostly ignore the button; it is aimed at growth, not at
-	//        current members.
-	// When:  posted alongside the introduction embed on /setup, and re
-	//        attached during refreshIntroEmbeds on every boot so copy /
-	//        permission revisions land without a manual rebuild.
-	// Where: paired with ChannelContent.introduction() in
-	//        GuildSetupManager.populateChannels. The edit path in
-	//        refreshIntroEmbeds must pass this row alongside embeds or
-	//        the button gets silently dropped on boot (Discord clears
-	//        components on edit unless explicitly preserved).
-	// How:   single ButtonBuilder, ButtonStyle.Link, URL pulled from
-	//        @utils/config.botInviteLink so the client id + permissions
-	//        track the running environment automatically. Permissions
-	//        breakdown comment lives next to botInviteLink in config.ts;
-	//        BOT_CONSTANTS.MIN_PERMISSIONS_DOCS holds the audit-friendly
-	//        list for install docs.
-	// NOTE:  the label + emoji are hardcoded kingdom voice and are NOT yet
-	//        pack-aware (there is no channelContent.introduction button copy
-	//        in either pack). A general-events guild would see this ROK-voiced
-	//        label until a pack field is added. Deferred deliberately — adding
-	//        the field is a copy-authoring decision, tracked outside this pass.
-	introductionComponents(): ActionRowBuilder<ButtonBuilder> {
-		return new ActionRowBuilder<ButtonBuilder>().addComponents(
-			new ButtonBuilder()
-				.setLabel("Summon me to your server, Mortal")
-				.setStyle(ButtonStyle.Link)
-				.setURL(botInviteLink)
-				.setEmoji("🔱")
-		);
+	// ── invite button ────────────────────────────────────────────────
+	// What:  the "Summon me to your server" Link button. Opens Discord's OAuth
+	//        consent screen for inviting the bot into another server. Link buttons
+	//        need no interaction handler — Discord opens the URL directly.
+	// Who:   folded into the #command-center guide row by resolveIntroComponents,
+	//        alongside the Suggestion Box + member-control buttons. MOVED off the
+	//        introductions intro (2026-06) because that channel is now member-
+	//        writable and the welcome would bury a pinned button there.
+	// When:  attached on first build (populateChannels) and re-attached on every
+	//        boot (refreshIntroEmbeds) so URL/permission revisions land without a
+	//        manual rebuild. Returned as a bare ButtonBuilder so it can share one
+	//        ActionRow with the other command-center buttons.
+	// How:   ButtonStyle.Link, URL from @utils/config.botInviteLink so the client
+	//        id + permissions track the running environment automatically.
+	// NOTE:  the label + emoji are hardcoded kingdom voice and are NOT pack-aware
+	//        (no pack field exists for them). A general-events guild would see this
+	//        ROK-voiced label until a pack field is added. Pre-existing limitation,
+	//        just relocated; tracked outside this pass.
+	buildInviteButton(): ButtonBuilder {
+		return new ButtonBuilder()
+			.setLabel("Summon me to your server, Mortal")
+			.setStyle(ButtonStyle.Link)
+			.setURL(botInviteLink)
+			.setEmoji("🔱");
 	},
 
 	commandGuide(guildConfig?: ICopyConfig | null): EmbedBuilder {
