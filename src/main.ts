@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import type { Server } from "http";
+import dns from "dns";
 import { startScheduler, stopScheduler } from "@features/reminders/ReminderScheduler.js";
 import { connectMongoose, disconnectMongoose } from "@db/db.js";
 import { registerActivityListeners } from "@features/activity-tracking/ActivityTracker.js";
@@ -34,6 +35,22 @@ import { registerPollHandlers, dispatchPolls, logPollTallies } from "@features/p
 import { registerSelfDestructHandlers } from "@features/setup/selfDestruct.js";
 import { registerPowerUpHandlers, ensureAllPowerUps } from "@features/power-ups/PowerUps.js";
 import { registerGreeter, ensureIntroChannelsWritable } from "@features/greeter/welcomeNewMember.js";
+
+// ── DNS resolver guard ─────────────────────────────────────────────────────
+// Some dev machines leave node's DNS library (c-ares) unable to read the system
+// resolver config, so it falls back to its hard-coded 127.0.0.1 default where
+// nothing is listening — and EVERY lookup fails with ECONNREFUSED, including the
+// Atlas SRV record mongoose needs at startup. Detect that loopback-only fallback
+// and point node at public resolvers instead. Runs at module load, before
+// connectMongoose (the first DNS consumer) is called below. No-op in production:
+// Heroku / Railway report real resolvers, so the condition is false there.
+const dnsResolvers = dns.getServers();
+if (dnsResolvers.length === 0 || dnsResolvers.every((server) => server === "127.0.0.1" || server === "::1")) {
+	console.warn(
+		`[dns] system resolver was loopback-only (${dnsResolvers.join(", ") || "none"}); falling back to public DNS so SRV lookups work`
+	);
+	dns.setServers(["1.1.1.1", "1.0.0.1", "8.8.8.8"]);
+}
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
