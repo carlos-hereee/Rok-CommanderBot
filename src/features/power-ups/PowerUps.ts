@@ -68,31 +68,24 @@ interface IPowerUpDefinition {
 }
 
 const POWERUP_DEFINITIONS: IPowerUpDefinition[] = [
-	// Admin controls live in the admin channel (#inner-sanctum): role-gated and
-	// never buried by member activity. The two admin actions share ONE panel so
-	// the channel only carries a single extra pinned message.
+	// One controls panel in the read-only command-center (next to the command
+	// guide), where members already look for controls and nothing buries it. It
+	// holds both the member announcement-ping toggle and the admin actions; the
+	// admin buttons are per-action gated, so a member who taps them just gets a
+	// "no access" reply. Deliberately NOT in #inner-sanctum: that channel takes
+	// feature announcements and self-heal notices, which would bury a panel there.
 	{
-		kind: "admin",
-		channelField: "adminChannelId",
-		title: "🛠️ Admin controls",
+		kind: "controls",
+		channelField: "commandsChannelId",
+		title: "🎛️ Bot controls",
 		description:
-			"Admin-only quick actions. Refresh the leaderboard standings board, or drop a fresh welcome + icebreaker into the introductions channel.",
-		color: rokCommanderCopy.COLORS.ADMIN,
+			"Members: tap to opt in or out of announcement pings. Admins: refresh the leaderboard standings, or post a fresh welcome + icebreaker into the introductions channel.",
+		color: rokCommanderCopy.COLORS.COMMANDS,
 		actions: [
+			{ action: "subscribe", label: "Toggle announcement pings", emoji: "🔔", style: ButtonStyle.Secondary, adminOnly: false },
 			{ action: "refresh", label: "Refresh standings", emoji: "🔄", style: ButtonStyle.Primary, adminOnly: true },
 			{ action: "greet", label: "Say hello", emoji: "👋", style: ButtonStyle.Primary, adminOnly: true },
 		],
-	},
-	// The member-facing announcement-ping toggle lives in the read-only
-	// command-center (alongside the command guide), where members already look
-	// for controls and daily announcements can't push it out of sight.
-	{
-		kind: "announcements",
-		channelField: "commandsChannelId",
-		title: "🔔 Announcement pings",
-		description: "Want a heads-up when this server posts an announcement? Tap to opt in or out.",
-		color: rokCommanderCopy.COLORS.ANNOUNCEMENTS,
-		actions: [{ action: "subscribe", label: "Toggle announcement pings", emoji: "🔔", style: ButtonStyle.Secondary, adminOnly: false }],
 	},
 ];
 
@@ -130,13 +123,13 @@ async function handlePowerUpButton(interaction: ButtonInteraction): Promise<void
 	}
 
 	switch (`${def.kind}:${actionDef.action}`) {
-		case "admin:refresh":
+		case "controls:refresh":
 			await runLeaderboardRefresh(interaction, guildId);
 			return;
-		case "admin:greet":
+		case "controls:greet":
 			await runFireGreeting(interaction);
 			return;
-		case "announcements:subscribe":
+		case "controls:subscribe":
 			await runToggleNotificationRole(interaction, guildId);
 			return;
 		default:
@@ -414,7 +407,7 @@ export async function ensurePowerUps(client: Client, guild: Guild): Promise<void
 	// daily activity buried them) into the admin + command channels. Delete any
 	// old panel still pinned there and clear its id. One-time: once these are
 	// null this block is a no-op.
-	const LEGACY_PANEL_KEYS = ["leaderboardChannelId", "introChannelId", "announcementsChannelId"] as const;
+	const LEGACY_PANEL_KEYS = ["adminChannelId", "leaderboardChannelId", "introChannelId", "announcementsChannelId"] as const;
 	for (const legacyKey of LEGACY_PANEL_KEYS) {
 		const panelId = nextIds[legacyKey];
 		if (!panelId) continue;
