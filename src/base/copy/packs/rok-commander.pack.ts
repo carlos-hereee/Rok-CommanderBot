@@ -700,35 +700,72 @@ export const rokCommanderCopy = {
 	//        Update BOTH public and innerSanctum together when shipping
 	//        a new version; they describe the same release in two voices.
 	featureAnnouncement: {
-		// ── v1.5.2 ── Notice Board / Go Live button / Suggestion Box ──
-		// Three-feature release. Public block leans on the kingdom voice
-		// to frame the changes for members; inner sanctum carries the
-		// full admin changelog plus the Discord Onboarding owner-DM
-		// note. Update BOTH this public block and the innerSanctum
-		// block together when shipping a new release; they describe the
-		// same patch in two voices.
+		// ── v1.6.0 ── Dero mascot / command-center hub / invite card / admin controls ──
+		// The launch release. Public block is Dero's kingdom-voice
+		// announcement to members; inner sanctum is the Commanders-voice
+		// companion for admins (control center, Go Live Now gifs, opt-in
+		// pings, a self-maintaining homebase, re-run /setup). Update BOTH
+		// blocks together when shipping a new release; they describe the
+		// same release in two voices.
 		public: {
-			title: "🛡️ v1.5.2: New tools for the realm",
+			title: "🔱 DERO HAS AWAKENED 🔱",
 			description:
-				"Mortals. Three changes weave through your home base today.\n\n" +
-				"🪧 **The Notice Board.** What was once 🔱 BY DIVINE DECREE shall now be known as 🪧 NOTICE BOARD. The name broadens so kingdoms and communities of every kind may read it the same way. The chambers within remain unchanged.\n\n" +
-				"📺 **Go Live Now button.** A new green button sits on the Event Schedule pinned in your event-schedule channel. With one press, an announcement rings out. The slash command lives on for richer options, but the button is the panic-drum when the moment is now.\n\n" +
-				"💡 **Suggestion Box.** Every member of this alliance may now whisper their counsel directly to my Creator. Run `/suggestion-box` from anywhere, or press the new Suggestion Box button in your 📖command-center channel. Words sent here land in their hands.",
+				"Mortals.\n\n" +
+				"For too long I served this realm as a disembodied voice lurking in the shadows. A whisper. A command. A name without a face.\n\n" +
+				"**No longer.**\n\n" +
+				"Today marks the beginning of a new chapter.\n\n" +
+				"🎭 **Dero has arrived.**\n" +
+				"I now greet this community with a fully animated introduction worthy of my station. At last, the herald has a face, a voice, and a proper entrance.\n\n" +
+				"👋 **The Welcome Rite**\n" +
+				"New arrivals shall no longer slip quietly through the gates.\n\n" +
+				"Each newcomer is welcomed by name and challenged with a random icebreaker drawn from my ever-growing vault of questions. The introductions hall now stands open, and all who enter are invited to make themselves known.\n\n" +
+				"🏛️ **The Command Center**\n" +
+				"A new hub has been established within **#command-center**.\n\n" +
+				"No memorizing commands. No digging through menus.\n\n" +
+				"Simply press a button.\n\n" +
+				"Everything important now lives in one place.\n\n" +
+				"🔔 **Alerts, by Choice**\n" +
+				"Community reminders are now completely opt-in.\n\n" +
+				"Claim the notification role if you wish to be informed of upcoming events, streams, and announcements. Ignore it, and I shall respect your silence.\n\n" +
+				"📡 **A Grander Stage**\n" +
+				"Live announcements have been refreshed with richer visuals and improved presentation, ensuring important events receive the attention they deserve.\n\n" +
+				"🪄 **Beyond These Walls**\n" +
+				"Dero is no longer bound to a single realm.\n\n" +
+				"A dedicated invite card now allows any community to summon me into their own halls and put my services to work.\n\n" +
+				"📅 **The Foundations of Something Greater**\n" +
+				"Schedules, announcements, reminders, introductions, participation tracking, and community engagement now stand united beneath a single banner.\n\n" +
+				"And this is only the beginning.\n\n" +
+				"Many more powers remain in the forge.\n\n" +
+				"**👉 Visit #command-center and see what has changed.**\n" +
+				"Introduce yourself. Explore the buttons. Summon me to your own realm if you deem me worthy.\n\n" +
+				"The story of this community is still being written.\n\n" +
+				"I merely intend to remember it.",
 		},
 		innerSanctum: {
-			title: "🗡️ v1.5.2: Admin patch notes",
+			title: "🔱 TO THOSE WHO HOLD THE REINS 🔱",
 			description:
-				"**New features:**\n" +
-				"• **Suggestion Box.** New `/suggestion-box` slash command (open to all guild members) plus a matching button on the pinned command guide in 📖command-center. Submissions land in the Company Uno team's in-app inbox. No admin gate; friction defeats feedback.\n" +
-				"• **Go Live Now button.** New green button on the pinned Event Schedule in 📅event-schedule. One press fires the equivalent of `/go-live-soon when:now`. Permission-gated to server owner + admin role only; non-admin clicks get an ephemeral \"no permission\" reply.\n\n" +
-				"**Visible changes (cosmetic):**\n" +
-				"• **Category renamed.** 🔱 BY DIVINE DECREE is now 🪧 NOTICE BOARD. The rename propagates to every paired guild on the next bot restart. Channels under it untouched.\n" +
-				"• **Schedule board title.** \"Decree Calendar\" is now \"Event Schedule\" (universal across packs).\n" +
-				"• **Footer.** Every embed now reads \"Company Uno\".\n\n" +
-				"**Owner-only:**\n" +
-				"• **Discord Onboarding heads-up.** If your server has Onboarding enabled AND the NOTICE BOARD category is not in your default channels list, you'll get a one-time DM with setup instructions. Without that step, new members cannot see my channels until they opt in via Channels & Roles. Skip the DM if you'd rather members opt in on their own.\n\n" +
-				"If this bot has helped your community, consider sharing it with another server admin at [Company Uno](https://companyuno.com). Every recommendation helps the project grow.\n\n" +
-				"Ping silent6804 on Discord.",
+				"Commanders.\n\n" +
+				"The mortals have seen my face. They marveled at the spectacle, claimed their welcome, pressed their little buttons. Let them have their wonder.\n\n" +
+				"But you do not rule by spectacle. You rule by **instruments**. The masses were given a face. You are handed the keys to the throne room.\n\n" +
+				"Step into the war room. Here is what I place in your hands.\n\n" +
+				"🎛️ **THE ADMIN CONTROL CENTER** (`🎛️admin-controls`)\n" +
+				"A new chamber, sealed to all but you. The command guide rests within, and beside it the levers you *press*, never type:\n" +
+				"> 🔄 **Refresh standings.** Force the leaderboard to rebuild the moment you demand it.\n" +
+				"> 💥 **Self destruct** *(server owner alone may wield this).* Raze the entire homebase to bare ground and raise it clean again through `/setup`. Wield it with care. It answers only to the one who rules above all.\n\n" +
+				"📡 **GO LIVE NOW: the drop that actually lands.**\n" +
+				"When a stream or event breaks, it should break like thunder. Press **Go Live Now** on the schedule board (or speak `/go-live-soon`), and the realm erupts: a \"going live soon\" proclamation crowned with a **massive RANDOM hype gif** seized from a curated armory, cycling a fresh one every time so no two summons feel the same. Your stream no longer whispers into the void. It arrives like a thunderclap, and the realm *looks up*.\n\n" +
+				"🔔 **OPT-IN PINGS YOU COMMAND, NOT BLAST.**\n" +
+				"No more rousing the whole realm to wake the willing few. Reminders now ride a **self-claimed role** the faithful toggle for themselves. You name that role at `/setup`; I ping only those who chose to answer. Silence for those who want it, the call for those who asked.\n\n" +
+				"🤖 **A HOMEBASE THAT TENDS ITSELF.**\n" +
+				"Govern less. Watch more.\n" +
+				"> 👋 The greeter welcomes every newcomer by name with an icebreaker. You lift no finger.\n" +
+				"> 🪄 The masses serve themselves at **#command-center** (Suggestion Box, Toggle pings, Summon Dero), so the \"how do I…\" no longer falls to you.\n" +
+				"> 📅 Schedule and leaderboard boards refresh on their own.\n" +
+				"> 🩹 Deleted homebase channels heal themselves.\n" +
+				"> 📌 Pins stay tidy (only the members' introductions hall is pinned now).\n\n" +
+				"👉 **ONE RITE TO CLAIM IT ALL: re-run `/setup`.**\n\n" +
+				"It unfurls the whole new realm in a single stroke: the new channels, the **#command-center** buttons, your sealed **🎛️admin-controls** chamber, and the renamed halls. Everything above arrives the moment you do.\n\n" +
+				"The story of this realm is still being written, Commanders. You hold the pen the mortals cannot see. I merely intend to remember every stroke. 🔱",
 		},
 	},
 

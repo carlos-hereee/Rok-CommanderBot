@@ -514,42 +514,49 @@ export const generalEventsCopy: IPluginCopy = {
 		postFailed: "Could not post the announcement. Check bot permissions on the announcements channel.",
 	},
 
-	// featureAnnouncement: rok-commander's public copy is kingdom-voice. The
-	// general-events equivalent uses plain English. innerSanctum is already
-	// plain admin changelog in rok-commander; this pack mirrors its tone.
+	// featureAnnouncement: rok-commander's copy is kingdom-voice. This
+	// general-events equivalent uses plain English for non-ROK communities.
 	// When the next bot release ships, BOTH packs need their copy updated in
-	// lockstep — the admin sub-pack is the same content, only the public sub-pack
-	// gets translated per voice.
+	// lockstep; both the public and inner-sanctum blocks get translated per voice.
 	featureAnnouncement: {
-		// ── v1.5.2 ── Notice Board / Go Live button / Suggestion Box ──
-		// Three-feature release. Public voicing is plain English for the
-		// streamer audience; inner sanctum carries the full admin
-		// changelog. Same shape as rok-commander v1.5.2 with the
-		// streamer-specific category name (📺 Stream Hub → 🪧 NOTICE
-		// BOARD instead of 🔱 BY DIVINE DECREE → 🪧 NOTICE BOARD) and
-		// without the schedule-board-title bullet (this pack already
-		// used "Event Schedule").
+		// ── v1.6.0 ── Dero mascot / command-center hub / invite card / admin controls ──
+		// The launch release in plain English. Public block is the
+		// member-facing announcement; inner sanctum is the plain admin
+		// companion (control center, Go Live Now gifs, opt-in pings, a
+		// self-maintaining homebase, re-run /setup). Update BOTH blocks
+		// together with the rok-commander pack when shipping a new release.
 		public: {
-			title: "📺 v1.5.2: New tools for your community",
+			title: "📣 v1.6.0: A big upgrade for your community",
 			description:
-				"Three new pieces ship today.\n\n" +
-				"🪧 **Category renamed.** What was previously \"📺 Stream Hub\" is now \"🪧 NOTICE BOARD\". One universal name across every community using this bot, so it reads the same whether your audience is streamers, alliance leaders, or general community organizers.\n\n" +
-				"📺 **Go Live Now button.** Open your pinned Event Schedule in your #event-schedule channel. There's a new green Go Live Now button. One click posts a going-live announcement to your announcements channel, same as `/go-live-soon when:now`. The slash command stays for richer options like 10-minute lead time, a custom note, or a different role to ping.\n\n" +
-				"💡 **Suggestion Box.** Any member of your server can now send a suggestion or feature request straight to the Company Uno team. Run `/suggestion-box` from anywhere, or press the new Suggestion Box button pinned in your #command-center channel.",
+				"A lot changed today. Here's what's new.\n\n" +
+				"🎭 **Meet your host.**\n" +
+				"The bot now has a face: a fully animated introduction instead of a faceless voice.\n\n" +
+				"👋 **A real welcome.**\n" +
+				"Every new member is greeted by name and given a random icebreaker to break the ice, and the introductions channel is open for them to answer.\n\n" +
+				"🏛️ **The Command Center.**\n" +
+				"A new hub lives in **#command-center**. No commands to memorize and no menus to dig through, just press a button. Everything important is in one place.\n\n" +
+				"🔔 **Reminders, opt-in.**\n" +
+				"Event and stream reminders are now completely opt-in. Claim the notification role if you want to hear about upcoming events, streams, and announcements, or skip it for silence.\n\n" +
+				"📡 **A bigger stage.**\n" +
+				"Live announcements have been refreshed with richer visuals so the moments that matter actually get noticed.\n\n" +
+				"🪄 **Bring the bot anywhere.**\n" +
+				"A dedicated invite card lets any community add the bot to their own server in one click.\n\n" +
+				"📅 **One foundation.**\n" +
+				"Schedules, announcements, reminders, introductions, participation tracking, and community engagement now live under a single roof. This is only the start.\n\n" +
+				"**👉 Visit #command-center to see what changed.** Introduce yourself, explore the buttons, and add the bot to your own server if you like what you see.",
 		},
 		innerSanctum: {
-			title: "🎬 v1.5.2: New tools for your stream",
+			title: "🛠️ v1.6.0: Admin update",
 			description:
-				"**New features:**\n" +
-				"• **Suggestion Box.** New `/suggestion-box` slash command (open to all guild members) plus a matching button on the pinned command guide in 📖command-center. Submissions land in the Company Uno team's in-app inbox. No admin gate; friction defeats feedback.\n" +
-				"• **Go Live Now button.** New green button on the pinned Event Schedule in 📅event-schedule. One press fires the equivalent of `/go-live-soon when:now`. Permission-gated to server owner + admin role only; non-admin clicks get an ephemeral \"no permission\" reply.\n\n" +
-				"**Visible changes (cosmetic):**\n" +
-				"• **Category renamed.** 📺 Stream Hub is now 🪧 NOTICE BOARD. The rename propagates to every paired guild on the next bot restart. Channels under it untouched.\n" +
-				"• **Footer.** Every embed now reads \"Company Uno\".\n\n" +
-				"**Owner-only:**\n" +
-				"• **Discord Onboarding heads-up.** If your server has Onboarding enabled AND the NOTICE BOARD category is not in your default channels list, you'll get a one-time DM with setup instructions. Without that step, new members cannot see my channels until they opt in via Channels & Roles. Skip the DM if you'd rather members opt in on their own.\n\n" +
-				"If this bot has helped your community, consider sharing it with another server admin at [Company Uno](https://companyuno.com). Every recommendation helps the project grow.\n\n" +
-				"Ping silent6804 on Discord.",
+				"Here's what's new for admins.\n\n" +
+				"**Admin control center.** A new admin-only channel (`🎛️admin-controls`) holds the command guide plus buttons you press instead of type:\n" +
+				"• **Refresh standings** rebuilds the leaderboard on demand.\n" +
+				"• **Self destruct** (server owner only) tears the whole homebase down and rebuilds it clean via `/setup`. Use with care.\n\n" +
+				"**Go Live Now.** The Go Live Now button on the schedule board (or `/go-live-soon`) now fires a going-live announcement with a large random hype gif, cycling a fresh one every time, so a stream or event drop actually lands.\n\n" +
+				"**Opt-in pings you control.** Reminders now use a self-claimed role members toggle themselves. You set the member role at `/setup`, and the bot only pings members who opted in. No more blasting everyone.\n\n" +
+				"**A homebase that maintains itself.** The greeter welcomes and icebreaks every new member, schedule and leaderboard boards refresh on their own, deleted homebase channels heal themselves, and pins stay tidy (only the member-writable introductions channel is pinned now).\n\n" +
+				"**One action to claim it all: re-run `/setup`.** It rolls out the new channels, the **#command-center** buttons, your sealed **🎛️admin-controls** channel, and the renamed channels in a single step.\n\n" +
+				"If this bot has helped your community, consider sharing it with another server admin at [Company Uno](https://companyuno.com).",
 		},
 	},
 
