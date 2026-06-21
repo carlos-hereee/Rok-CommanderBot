@@ -185,13 +185,9 @@ async function postOrEdit(
 		return;
 	}
 
-	try {
-		await message.pin();
-	} catch (error) {
-		// pinning is best effort. without ManageMessages the board still works,
-		// the message just floats in recent history.
-		console.warn(LOG_MESSAGES.leaderboard.pinFailed(guildId), error);
-	}
+	// No pin: the leaderboard channel is read-only, so the board stays put without
+	// one (2026-06 pinning policy — only the member-writable introductions channel
+	// is pinned).
 
 	await guildConfigStore.update(guildId, { leaderboardMessageId: message.id });
 }

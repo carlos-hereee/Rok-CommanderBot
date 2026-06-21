@@ -21,7 +21,7 @@ import { buildSuggestionBoxButton } from "@features/suggestion-box/SuggestionBox
 import { buildSelfDestructButton } from "@features/setup/selfDestruct.js";
 import { buildMemberControlButtons, buildAdminControlButtons } from "@features/power-ups/PowerUps.js";
 import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
-import { buildDeroImageAttachment } from "@base/copy/brand.js";
+import { buildDeroGifAttachment } from "@base/copy/brand.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
@@ -916,15 +916,8 @@ export class GuildSetupManager {
 					components: introComponents ?? [],
 				});
 				introMessageId = introMessage.id;
-				// schedule channel's intro doubles as the pinned board
-				// anchor — repin on repair to preserve that invariant.
-				if (spec.configField === "scheduleChannelId") {
-					try {
-						await introMessage.pin();
-					} catch (pinError) {
-						console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
-					}
-				}
+				// No pin: the schedule channel is read-only, so the board stays put
+				// without one (2026-06 pinning policy — only introductions is pinned).
 			}
 		} catch (error) {
 			console.warn(LOG_MESSAGES.setup.channelRepairFailed(spec.displayName, guild.id), error);
@@ -1629,65 +1622,21 @@ export class GuildSetupManager {
 			commandsChannel.send({
 				embeds: [ChannelContent.inviteCard()],
 				components: [new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton())],
-				files: [buildDeroImageAttachment()],
+				files: [buildDeroGifAttachment()],
 			}),
 		]);
 
-		try {
-			await scheduleMessage.pin();
-		} catch (error) {
-			// pin requires ManageMessages. if the bot's role lacks it the
-			// board still works, the intro just floats in recent history.
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.scheduleChannel.guildId), error);
-		}
-
-		// Pin the introductions welcome embed. The intro channel is now
-		// member-writable (greeter surface), so without a pin the welcome would
-		// get buried under member chatter. refreshIntroEmbeds keeps it pinned on
-		// boot via the shouldBePinned set.
+		// Pinning policy (2026-06): pin ONLY member-writable channels. The
+		// introductions channel lets members post, so without a pin the welcome
+		// would get buried under chatter. Every other homebase channel is read-only,
+		// so the bot's message stays put with nothing to bury it — a pin there is
+		// just noise. So we deliberately do NOT pin the schedule board, command
+		// guide, next-decree intro, admin command guide, or invite card.
+		// refreshIntroEmbeds enforces the same rule on boot via shouldBePinned.
 		try {
 			await introMsg.pin();
 		} catch (error) {
 			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.introChannel.guildId), error);
-		}
-
-		// Pin the next-decree intro as well so mortals who scroll up see
-		// it first even after the channel accumulates hundreds of
-		// audit-trail posts. Same best effort posture as the schedule pin.
-		try {
-			await nextDecreeMsg.pin();
-		} catch (error) {
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.nextDecreeChannel.guildId), error);
-		}
-
-		// Pin the public command center guide so mortals can always
-		// scroll up to it even if the channel accumulates other content
-		// in the future. Today #command-center is read-only for mortals
-		// so in practice nothing pushes the guide down, but the pin
-		// future-proofs it.
-		try {
-			await commandsMsg.pin();
-		} catch (error) {
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.commandsChannel.guildId), error);
-		}
-
-		// Pin the admin command guide for the same reason as the public
-		// one — the admin command center may accumulate panel reposts and
-		// ad-hoc admin chatter, so the pin keeps the guide scannable as the
-		// primary reference.
-		try {
-			await adminCommandsMsg.pin();
-		} catch (error) {
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.adminCommandsChannel.guildId), error);
-		}
-
-		// Pin the invite card so the Summon button stays scannable above member
-		// chatter (command-center is read-only for members, so nothing pushes it
-		// down today, but the pin future-proofs it alongside the command guide).
-		try {
-			await inviteCardMsg.pin();
-		} catch (error) {
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.commandsChannel.guildId), error);
 		}
 
 		return {
@@ -1828,13 +1777,7 @@ export class GuildSetupManager {
 					try {
 						const message = await channel.messages.fetch(storedMessageId);
 						await message.edit({ embeds: [embed], components: componentRows ?? [] });
-						if (!message.pinned) {
-							try {
-								await message.pin();
-							} catch (pinError) {
-								console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
-							}
-						}
+						// No pin: schedule channel is read-only (2026-06 pinning policy).
 						edited += 1;
 					} catch (error) {
 						// Anchor missing or corrupted — let the schedule
@@ -1866,11 +1809,10 @@ export class GuildSetupManager {
 			// Which channels should have their intro pinned at all?
 			// These are the channels where the intro is a permanent
 			// reference a mortal or admin might scroll back to.
-			const shouldBePinned =
-				spec.configField === "introChannelId" ||
-				spec.configField === "commandsChannelId" ||
-				spec.configField === "nextDecreeChannelId" ||
-				spec.configField === "adminCommandsChannelId";
+			// Pin ONLY member-writable channels — just introductions. Every other
+			// homebase channel is read-only, so the bot's message stays put with
+			// nothing to bury it and a pin is just noise (see populateChannels).
+			const shouldBePinned = spec.configField === "introChannelId";
 
 			// Try to fetch the stored message. If present, compare its
 			// embed to the fresh one; if equivalent, we are done for
@@ -2065,33 +2007,22 @@ export class GuildSetupManager {
 						try {
 							// attachments: [] drops the old upload so the re-attached file
 							// (attachment://) resolves to the fresh one rather than duplicating.
-							await cardMessage.edit({ embeds: [cardEmbed], components: cardComponents, files: [buildDeroImageAttachment()], attachments: [] });
+							await cardMessage.edit({ embeds: [cardEmbed], components: cardComponents, files: [buildDeroGifAttachment()], attachments: [] });
 							edited += 1;
 						} catch (error) {
 							console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("invite card", guild.id), error);
 						}
 					}
-					if (!cardMessage.pinned) {
-						try {
-							await cardMessage.pin();
-						} catch (pinError) {
-							console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
-						}
-					}
+					// No pin: command-center is read-only (2026-06 pinning policy).
 					if (nextIntroIds.inviteCardId !== cardMessage.id) {
 						nextIntroIds.inviteCardId = cardMessage.id;
 						needsPersist = true;
 					}
 				} else {
-					// No card yet (legacy guild migrating onto this feature) — post,
-					// pin, track.
+					// No card yet (legacy guild migrating onto this feature) — post
+					// and track (no pin: command-center is read-only).
 					try {
-						const message = await channel.send({ embeds: [cardEmbed], components: cardComponents, files: [buildDeroImageAttachment()] });
-						try {
-							await message.pin();
-						} catch (pinError) {
-							console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
-						}
+						const message = await channel.send({ embeds: [cardEmbed], components: cardComponents, files: [buildDeroGifAttachment()] });
 						nextIntroIds.inviteCardId = message.id;
 						needsPersist = true;
 						reposted += 1;

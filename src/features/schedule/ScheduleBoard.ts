@@ -263,14 +263,9 @@ async function postOrEdit(
 		return;
 	}
 
-	try {
-		await message.pin();
-	} catch (error) {
-		// pinning is a nice to have. if the bot lacks ManageMessages the
-		// board still works, the message just floats in recent history.
-		console.warn(LOG_MESSAGES.schedule.pinFailed(guildId), error);
-	}
-
+	// No pin: the schedule channel is read-only, so the board stays put without one
+	// (2026-06 pinning policy — only the member-writable introductions channel is
+	// pinned, where member chatter would otherwise bury a message).
 	await guildConfigStore.update(guildId, { scheduleMessageId: message.id });
 }
 

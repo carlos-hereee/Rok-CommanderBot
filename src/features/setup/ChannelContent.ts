@@ -1,7 +1,7 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { getPluginCopy, type ICopyConfig } from "@base/copy/getCopy.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
-import { DERO_GIF_URL, COLORS, DERO_IMAGE_REF } from "@base/copy/brand.js";
+import { DERO_GIF_URL, COLORS, DERO_GIF_REF } from "@base/copy/brand.js";
 // botInviteLink is composed in @utils/config from the env-driven
 // clientId, so a dev process serves the dev install URL and a prod
 // process serves the prod install URL automatically. We deliberately
@@ -43,8 +43,8 @@ export const ChannelContent = {
 	// What:  a standalone "summon Dero" growth card, pinned in #command-center as
 	//        its OWN message so the wide invite button gets its own embed instead
 	//        of crowding the command guide's button row. Short pitch + the bundled
-	//        static Dero image (setImage attachment://) + the Summon button. The
-	//        caller must also upload the image file (buildDeroImageAttachment).
+	//        animated Dero gif (setImage attachment://) + the Summon button. The
+	//        caller must also upload the gif file (buildDeroGifAttachment).
 	// Who:   populateChannels (initial post) + refreshIntroEmbeds (maintains it).
 	// How:   brand-indigo (COLORS.DERO) so it reads as a Dero card, not a channel
 	//        intro. NOTE: like buildInviteButton, the pitch is hardcoded kingdom
@@ -55,7 +55,7 @@ export const ChannelContent = {
 			"🔱 Summon Dero to Your Realm",
 			"Command a kingdom of your own? Dero answers the call. Bring him to your server and let the events, reminders, and rankings run themselves.",
 			COLORS.DERO
-		).setImage(DERO_IMAGE_REF);
+		).setImage(DERO_GIF_REF);
 	},
 
 	// ── invite button ────────────────────────────────────────────────

@@ -317,7 +317,7 @@ export const rokCommanderCopy = {
 			// Eighth channel: admin-only command + control surface (the admin command
 			// guide moved out of inner-sanctum, with the admin control buttons folded
 			// into its pinned row).
-			adminCommands: "🛡️admin-controls",
+			adminCommands: "🎛️admin-controls",
 		},
 	},
 
