@@ -7,11 +7,10 @@ import {
 	EmbedBuilder,
 } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
+import { getPluginCopy } from "@base/copy/getCopy.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { creatorId } from "@utils/config.js";
-
-const { responses } = embedContent;
 
 /* /channels — v1.5.1 visibility-toggle command.
    Three subcommands let admins hide or show the five optional homebase
@@ -30,7 +29,7 @@ const HIDEABLE_CHANNELS = [
 	{ name: "Leaderboard", value: "leaderboardChannelId" },
 	{ name: "Event schedule", value: "scheduleChannelId" },
 	{ name: "Announcements", value: "announcementsChannelId" },
-	{ name: "Next decree", value: "nextDecreeChannelId" },
+	{ name: "Upcoming events", value: "nextDecreeChannelId" },
 ] as const;
 
 type HideableField = (typeof HIDEABLE_CHANNELS)[number]["value"];
@@ -100,6 +99,12 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
 }
 
 export async function execute(interaction: ChatInputCommandInteraction) {
+	// Load config first so the owner/setup responses below speak in the guild's
+	// copy pack (ownerOnly + setupChannelsPending diverge between packs). A null
+	// config resolves to the rok-commander default inside getPluginCopy.
+	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
+	const { responses } = getPluginCopy(config);
+
 	const isOwner = interaction.user.id === interaction.guild?.ownerId;
 	const isCreator = interaction.user.id === creatorId;
 
@@ -108,7 +113,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		return;
 	}
 
-	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
 	if (!config?.categoryId) {
 		await interaction.reply({ embeds: [errorEmbed(responses.setupChannelsPending)], ephemeral: true });
 		return;
@@ -217,7 +221,7 @@ async function handleHide(interaction: ChatInputCommandInteraction, config: Guil
 			infoEmbed(
 				`Channel hidden`,
 				`Hid <#${channelId}> (${displayName}) from members. The bot still posts there in the background. Run /channels show to make it visible again.`,
-				embedContent.COLORS.ARRIVAL
+				COLORS.ARRIVAL
 			),
 		],
 		ephemeral: true,
@@ -286,7 +290,7 @@ async function handleShow(interaction: ChatInputCommandInteraction, config: Guil
 			infoEmbed(
 				`Channel visible`,
 				`Made <#${channelId}> (${displayName}) visible to members again.`,
-				embedContent.COLORS.ARRIVAL
+				COLORS.ARRIVAL
 			),
 		],
 		ephemeral: true,
@@ -305,7 +309,7 @@ async function handleList(interaction: ChatInputCommandInteraction, config: Guil
 	const embed = new EmbedBuilder()
 		.setTitle("Channel visibility")
 		.setDescription(lines)
-		.setColor(embedContent.COLORS.ARRIVAL)
+		.setColor(COLORS.ARRIVAL)
 		.setFooter({ text: "Hidden channels still receive bot posts; only member visibility is suppressed." });
 
 	await interaction.reply({ embeds: [embed], ephemeral: true });

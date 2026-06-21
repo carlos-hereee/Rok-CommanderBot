@@ -4,7 +4,7 @@ import {
 	PermissionFlagsBits,
 	MessageFlags,
 } from "discord.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { errorEmbed } from "@utils/embedBuilder.js";
 import { postGoLiveAnnouncement } from "@features/schedule/postGoLiveAnnouncement.js";
 
@@ -32,7 +32,7 @@ import { postGoLiveAnnouncement } from "@features/schedule/postGoLiveAnnouncemen
 //        path. This handler only parses the slash command inputs and
 //        acks the interaction.
 
-const c = embedContent.goLiveSoon;
+const c = rokCommanderCopy.goLiveSoon;
 
 export const data = new SlashCommandBuilder()
 	.setName("go-live-soon")

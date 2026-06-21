@@ -18,12 +18,19 @@ import { Client } from "discord.js";
 //        fetch fallback). If the client has no view of the guild — e.g.
 //        the bot was kicked between requests — we return the records
 //        untouched so the API still responds.
-//        ② collect the unique userIds, fetch each member once in parallel,
-//        and derive displayName the same way ActivityTracker does at
-//        write time so both code paths agree on the canonical string.
+//        ② collect the unique userIds and fetch them in BATCHES via
+//        guild.members.fetch({ user: [...] }) rather than one fetch per id.
+//        A 500-player leaderboard was previously 500 parallel member fetches
+//        (a per-guild rate-limit hazard on a cold cache); batching makes it
+//        ceil(N/100) requests instead. displayName is derived the same way
+//        ActivityTracker does at write time so both code paths agree.
 //        ③ map the records, swapping the username field when we have a
 //        fresh value. Records without a resolved member keep their stored
 //        username so a row never goes blank.
+
+// Discord's REQUEST_GUILD_MEMBERS op accepts at most 100 user ids per call, so
+// we chunk the unique id list to stay within that limit.
+const MEMBER_FETCH_CHUNK_SIZE = 100;
 export async function enrichWithNicknames<T extends { userId: string; username?: string }>(
 	client: Client,
 	guildId: string,
@@ -37,14 +44,18 @@ export async function enrichWithNicknames<T extends { userId: string; username?:
 	const uniqueIds = Array.from(new Set(records.map((r) => r.userId)));
 	const nameById = new Map<string, string>();
 
-	await Promise.all(
-		uniqueIds.map(async (userId) => {
-			const member = await guild.members.fetch(userId).catch(() => null);
-			if (!member) return;
+	// Fetch members in chunks of 100 (the per-request id ceiling). Each chunk
+	// is one batched request instead of one-per-id; a failed chunk is swallowed
+	// so a single bad id never blanks the whole enrichment pass.
+	for (let i = 0; i < uniqueIds.length; i += MEMBER_FETCH_CHUNK_SIZE) {
+		const chunk = uniqueIds.slice(i, i + MEMBER_FETCH_CHUNK_SIZE);
+		const members = await guild.members.fetch({ user: chunk }).catch(() => null);
+		if (!members) continue;
+		for (const member of members.values()) {
 			const displayName = member.displayName ?? member.user.globalName ?? member.user.username;
-			if (displayName) nameById.set(userId, displayName);
-		})
-	);
+			if (displayName) nameById.set(member.id, displayName);
+		}
+	}
 
 	return records.map((r) => {
 		const fresh = nameById.get(r.userId);

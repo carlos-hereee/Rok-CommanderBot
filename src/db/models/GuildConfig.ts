@@ -41,15 +41,35 @@ const guildConfigSchema = new Schema(
 		//        null as "missing" and rebuilds the channel on next tick.
 		nextDecreeChannelId: { type: String, required: false, default: null },
 
+		// ── admin command center channel (2026-06-19) ──
+		// Admin-only command channel: holds the relocated admin command guide (out
+		// of inner-sanctum) + the admin power-up panel. Same overwrites as
+		// adminChannelId; nullable so existing rows load before the boot sweep
+		// creates it (repairMissingChannels treats null as "missing, build it").
+		adminCommandsChannelId: { type: String, required: false, default: null },
+
 		// id of the pinned message inside scheduleChannelId that ScheduleBoard
 		// keeps up to date. null until autoSetup finishes posting the intro,
 		// at which point this is populated and every subsequent refresh edits
 		// that one message in place so the channel never accumulates clutter.
-		// As of FUTURE_PLANS item 36 (partial, 2026-05-22) this same message
-		// also hosts the Go Live Now button row; ScheduleBoard attaches the
-		// components on send + edit via buildGoLiveNowButtonRow in
-		// ScheduleControls.
+		// As of v1.6 (item 36) this same message also hosts the schedule control
+		// row: Go Live Now plus a phase-gated Set up / Pause / Resume button.
+		// ScheduleBoard attaches the components on send + edit via
+		// buildScheduleControlRow in ScheduleControls.
 		scheduleMessageId: { type: String, required: false, default: null },
+
+		// ── leaderboard board message id (v1.6 Phase 2, item 13, added 2026-06-17) ─
+		// What:  id of the pinned message inside leaderboardChannelId that
+		//        LeaderboardBoard keeps up to date with the week's standings.
+		// Who:   written by LeaderboardBoard.postOrEdit on first post; read on
+		//        every refresh so subsequent updates edit that one message in
+		//        place rather than spamming the channel. Mirrors scheduleMessageId.
+		// When:  null until the first refresh posts the board (boot sweep, a
+		//        reminder fire, or debounced activity). Repopulated when an admin
+		//        deletes the message and the next refresh reposts.
+		// How:   nullable so legacy guilds load cleanly; the post path treats
+		//        null as "never posted, send a fresh one and persist the id".
+		leaderboardMessageId: { type: String, required: false, default: null },
 
 		// ── KvK season end ─────────────────────────────────────────────
 		// What:  the configured end date of the guild's current KvK season.
@@ -129,6 +149,16 @@ const guildConfigSchema = new Schema(
 				//        case and move on.
 				// How:   nullable string, same contract as every sibling.
 				adminCommandGuideId: { type: String, required: false, default: null },
+				// Pinned intro anchor for the new admin command channel (the relocated
+				// command guide). Tracked like every other channel intro.
+				adminCommandsChannelId: { type: String, required: false, default: null },
+				// ── invite card (2026-06) ──────────────────────────────
+				// Flat key (like adminCommandGuideId): the SECOND pinned message in
+				// #command-center — the standalone "summon Dero" card (pitch + gif +
+				// Summon button), separate from commandsChannelId (the command guide).
+				// refreshIntroEmbeds maintains it; null on legacy rows until the first
+				// boot posts it.
+				inviteCardId: { type: String, required: false, default: null },
 			},
 			required: false,
 			default: () => ({}),
@@ -285,6 +315,37 @@ const guildConfigSchema = new Schema(
 		//        admin action and should be its own command if/when needed.
 		leaderboardTrackingEnabled: { type: Boolean, required: false, default: true },
 
+		// ── leaderboard week start (v1.6 Phase 1, item 17, added 2026-06-17) ─
+		// What:  which weekday anchors the leaderboard's "this week" window.
+		//        "sunday" (default) runs Sun to Sat; "monday" runs Mon to Sun.
+		// Who:   read by /leaderboard's thisWeekRange to compute the [from, to]
+		//        window and by its embed title so the boundary is explicit, and
+		//        by Phase 2's LeaderboardBoard which reuses the same window math.
+		// When:  read on every "This week" leaderboard render. Written when an
+		//        admin changes the preference.
+		// Where: per guild, not per user. The per-user timezone preference this
+		//        was once coupled to (FUTURE_PLANS item 16) does not exist, and
+		//        per guild is the right scope for a community bot.
+		// How:   enum-constrained string. Default "sunday" preserves the prior
+		//        hardcoded behavior so legacy rows render identically with no
+		//        backfill.
+		weekStart: { type: String, enum: ["sunday", "monday"], default: "sunday" },
+
+		// ── default event image (v1.6 Phase 4, media attachments) ───────
+		// What:  per-guild fallback image URL used by event embeds when an
+		//        event has no imageUrl of its own. Resolution at each embed site
+		//        is `event.imageUrl ?? guildConfig.defaultEventImageUrl ?? null`,
+		//        so a guild can give every event a house banner without setting
+		//        one per event. The go-live announcement (not tied to a single
+		//        event) uses this value directly.
+		// Who:   read by ReminderJob, NextUpBoard, and postGoLiveAnnouncement at
+		//        embed-build time. Set by the dashboard (server/client half).
+		// When:  optional. null on legacy rows, so embeds stay text-only until a
+		//        guild opts in. Never empty by contract once set — it is the
+		//        last-resort image so the embed always has something to render.
+		// How:   plain nullable String, same trust model as Event.imageUrl.
+		defaultEventImageUrl: { type: String, required: false, default: null },
+
 		// ── hidden channels (v1.5.1 item 4, added 2026-05-12) ──────────
 		// Tracks which optional bot-managed channels the admin has chosen
 		// to hide from members. Hiding applies @everyone deny ViewChannel
@@ -338,6 +399,66 @@ const guildConfigSchema = new Schema(
 			required: false,
 			default: () => ({ paused: false, pausedUntil: null }),
 		},
+
+		// ── power-up message ids (v1.6 item 36; RETIRED 2026-06) ────────
+		// What:  LEGACY. Per-channel id of a pinned standalone "power-up" panel
+		//        message. The controls (toggle pings, say hello, refresh) no
+		//        longer live on standalone panels — they are buttons folded into
+		//        the pinned intro guides now (see resolveIntroComponents). This
+		//        field is kept only so the one-time cleanup can find + delete the
+		//        old panels on guilds set up before the fold-in.
+		// Who:   read + cleared by PowerUps.removeAllPowerUpPanels (the boot-time
+		//        cleanup sweep). Nothing writes a non-null value anymore. The
+		//        button handler never read these — it routes purely on customId.
+		// When:  legacy rows carry the old panel ids until the cleanup runs once,
+		//        after which every slot is null and the sweep is a no-op.
+		// How:   nullable per slot. Safe to drop this field entirely once every
+		//        live guild has booted past the cleanup.
+		powerUpMessageIds: {
+			type: {
+				// All slots are now legacy: each tracked the standalone panel that
+				// used to sit in that channel. The boot cleanup deletes the message
+				// and nulls the slot; nothing posts a new panel.
+				adminChannelId: { type: String, required: false, default: null },
+				commandsChannelId: { type: String, required: false, default: null },
+				adminCommandsChannelId: { type: String, required: false, default: null },
+				leaderboardChannelId: { type: String, required: false, default: null },
+				introChannelId: { type: String, required: false, default: null },
+				announcementsChannelId: { type: String, required: false, default: null },
+			},
+			required: false,
+			default: () => ({}),
+		},
+
+		// ── announcement notifications role (v1.6, 2026-06-18) ──────────
+		// What:  id of a mentionable role members self-assign via the
+		//        announcements power-up to opt into announcement pings. Replaces
+		//        the old pingSubscribers array: a real role can actually be
+		//        @mentioned by a future announcement flow, and Discord shows who
+		//        holds it. A Discord button label cannot be per-user, so the
+		//        toggle conveys state through its ephemeral reply, not its label.
+		// Who:   written by the announcements power-up toggle handler, which
+		//        lazily creates the role on first use (and recreates it if an
+		//        admin deletes it) and stores the id here.
+		// When:  set on first opt-in toggle in a guild. null until then.
+		// How:   nullable string. null means the role has not been created yet;
+		//        the toggle handler creates it on demand.
+		notificationsRoleId: { type: String, required: false, default: null },
+
+		// ── homebase self-destruct flag (v1.6, 2026-06-18) ─────────────
+		// What:  set true when the server owner runs /self-destruct (or the
+		//        danger-zone panel button). While true, the homebase has been
+		//        demolished and MUST stay gone: ensureHomebase (boot sweep) and
+		//        ChannelDeleteWatcher (realtime repair) both short-circuit on it
+		//        so nothing rebuilds the category/channels.
+		// Who:   written true by selfDestruct.demolishHomebase BEFORE it deletes
+		//        any channel (so the realtime watcher does not race the teardown
+		//        and resurrect channels); cleared (false) by /setup, which
+		//        rebuilds the homebase and re-assigns roles.
+		// When:  read on every ensureHomebase pass and every channelDelete event.
+		// How:   plain Boolean, default false so every existing/legacy row loads
+		//        as "not destroyed" and behaves exactly as before.
+		homebaseDestroyed: { type: Boolean, required: false, default: false },
 	},
 	{ timestamps: true }
 );

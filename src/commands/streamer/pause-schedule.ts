@@ -6,7 +6,9 @@ import {
 	MessageFlags,
 } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
+import { getPluginCopy } from "@base/copy/getCopy.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
@@ -28,7 +30,7 @@ import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 //        update the pausedUntil but report "already paused" rather than
 //        re-pausing silently.
 
-const c = embedContent.pauseSchedule;
+const c = rokCommanderCopy.pauseSchedule;
 
 export const data = new SlashCommandBuilder()
 	.setName("pause-schedule")
@@ -77,7 +79,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	// event.guildId check is now redundant.
 	const event = await eventStore.findByIdInGuild(eventId, guildId);
 	if (!event) {
-		await interaction.reply({ embeds: [errorEmbed(c.notFound)], flags: MessageFlags.Ephemeral });
+		// notFound is the one field in this namespace whose copy diverges by
+		// pack (it names the list command), so resolve it against the guild's
+		// config. The remaining pauseSchedule strings are identical across packs
+		// and still read from the shim above. Config is loaded lazily here so the
+		// happy path takes no extra read.
+		const config = await guildConfigStore.findByGuildId(guildId);
+		await interaction.reply({
+			embeds: [errorEmbed(getPluginCopy(config).pauseSchedule.notFound)],
+			flags: MessageFlags.Ephemeral,
+		});
 		return;
 	}
 
@@ -107,7 +118,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 			: c.paused(event.name);
 
 		await interaction.reply({
-			embeds: [infoEmbed("⏸️ Schedule paused", successText, embedContent.COLORS.SCHEDULE)],
+			embeds: [infoEmbed("⏸️ Schedule paused", successText, rokCommanderCopy.COLORS.SCHEDULE)],
 			flags: MessageFlags.Ephemeral,
 		});
 

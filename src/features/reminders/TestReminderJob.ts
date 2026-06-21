@@ -79,7 +79,7 @@ export async function fireTestReminder(client: Client, event: IGameEvent): Promi
 
 	// ③ build the embed. the [TEST] prefix lives inside testReminderEmbed
 	// so it cannot be accidentally removed by a caller.
-	const embed = testReminderEmbed(event, nextOccurrence);
+	const embed = testReminderEmbed(event, nextOccurrence, config);
 
 	// ④ post the message. the real ReminderJob pings the per-event mention
 	// override first, then the guild member role, then @here. We mirror that

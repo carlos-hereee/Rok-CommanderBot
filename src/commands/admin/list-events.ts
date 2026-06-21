@@ -2,7 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "
 import { eventStore } from "@db/stores/eventStore.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { listEventsEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { getPluginCopy } from "@base/copy/getCopy.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
 
 export const data = new SlashCommandBuilder()
@@ -12,9 +12,14 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction) {
 	const events = await eventStore.findByGuildId(interaction.guildId!);
 
+	// Load the config up front: it both selects the copy pack for the
+	// empty-state message below and feeds listEventsEmbed (pack voice +
+	// announcements channel), so a single read serves both paths.
+	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
+
 	if (!events.length) {
 		await interaction.reply({
-			content: embedContent.listEvents.noEvents,
+			content: getPluginCopy(config).listEvents.noEvents,
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -24,7 +29,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	// it once and hand it to the embed to render in the description. the rows
 	// themselves no longer carry a channel, because per event overrides were
 	// removed from the data model.
-	const config = await guildConfigStore.findByGuildId(interaction.guildId!);
 	const announcementsChannelId = config?.announcementsChannelId ?? null;
 
 	const fields = events.map((event) => {
@@ -63,7 +67,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	});
 
 	await interaction.reply({
-		embeds: [listEventsEmbed(fields, announcementsChannelId)],
+		embeds: [listEventsEmbed(fields, announcementsChannelId, config)],
 		flags: MessageFlags.Ephemeral,
 	});
 }

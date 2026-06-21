@@ -1,7 +1,9 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, AutocompleteInteraction, MessageFlags } from "discord.js";
 import { activityStore } from "@db/stores/activityStore.js";
 import { eventStore } from "@db/stores/eventStore.js";
+import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { leaderboardEmbed } from "@utils/embedBuilder.js";
+import { thisWeekRange, thisMonthRange, weekBoundaryTitle, type WeekStart } from "@features/leaderboard/leaderboardWindow.js";
 
 // ── /leaderboard ──────────────────────────────────────────────────────
 // What:  show participation rankings for an event or across every event
@@ -35,30 +37,9 @@ const ALL_TIME_SENTINEL = "__alltime__";
 const THIS_MONTH_SENTINEL = "__thismonth__";
 const THIS_WEEK_SENTINEL = "__thisweek__";
 
-// Compute [from, to] window for the current calendar month in the server's
-// local time. The bot runs in UTC on Railway so "this month" is UTC-anchored;
-// good enough for v1, can revisit if streamers want timezone-aware windows
-// (which probably belongs alongside FUTURE_PLANS 12b on per-user timezone).
-function thisMonthRange(): { from: Date; to: Date } {
-	const now = new Date();
-	const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-	// last millisecond of the last day of the month — month-end without
-	// caring how many days the month has.
-	const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-	return { from, to };
-}
-
-// Compute [from, to] window for the current calendar week. Sunday-anchored
-// because the bot's existing day-of-week constants (DAYS_OF_WEEK in the
-// dashboard's EventCreatePage) treat Sunday as day 0. Streamers can think of
-// "this week" as Sunday through Saturday.
-function thisWeekRange(): { from: Date; to: Date } {
-	const now = new Date();
-	const dayOfWeek = now.getDay(); // 0 = Sun
-	const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0, 0);
-	const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - dayOfWeek), 23, 59, 59, 999);
-	return { from, to };
-}
+// thisWeekRange / thisMonthRange / weekBoundaryTitle moved to
+// @features/leaderboard/leaderboardWindow so the pinned LeaderboardBoard
+// reuses the same window math instead of forking a copy.
 
 // /leaderboard intentionally does NOT setDefaultMemberPermissions. As of
 // the 2026-04-24 public/admin command guide split it is a member command —
@@ -71,7 +52,7 @@ export const data = new SlashCommandBuilder()
 	.addStringOption((option) =>
 		option
 			.setName("event")
-			.setDescription("Pick an event or a time window. Weeks run Sunday to Saturday.")
+			.setDescription("Pick an event or a time window. The leaderboard states its week boundary.")
 			.setRequired(true)
 			.setAutocomplete(true)
 	)
@@ -114,6 +95,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 	const eventValue = interaction.options.getString("event", true);
 	const isPublic = interaction.options.getBoolean("public") ?? false;
 
+	// Loaded once for both the weekStart window and pack-aware embed rendering.
+	// A null config (guild not set up) falls back to defaults / rok-commander.
+	const config = await guildConfigStore.findByGuildId(guildId);
+
 	// ── guild-wide branches (all time / this month / this week) ──
 	// Three views share the same aggregation primitive; the difference is
 	// the optional dateRange filter. Each view pulls every event in the
@@ -135,8 +120,14 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 			title = "This month";
 			emptyMessage = "No activity recorded this month yet.";
 		} else if (eventValue === THIS_WEEK_SENTINEL) {
-			dateRange = thisWeekRange();
-			title = "This week";
+			// Anchor the week window to the guild's configured weekStart (item 17).
+			// A null config (guild has not run /setup) or any unexpected value
+			// falls back to Sunday, matching the pre-config hardcoded behavior so
+			// existing guilds render identically.
+			const weekStart: WeekStart = config?.weekStart === "monday" ? "monday" : "sunday";
+			dateRange = thisWeekRange(weekStart);
+			// State the boundary in the title so "this week" is never ambiguous.
+			title = weekBoundaryTitle(weekStart);
 			emptyMessage = "No activity recorded this week yet.";
 		} else {
 			dateRange = undefined;
@@ -157,7 +148,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 				totalAcknowledged: r.totalAcknowledged,
 			})
 		);
-		const embed = leaderboardEmbed(title, ranked);
+		const embed = leaderboardEmbed(title, ranked, config);
 		await interaction.reply({
 			embeds: [embed],
 			flags: isPublic ? undefined : MessageFlags.Ephemeral,
@@ -196,7 +187,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 		})
 	);
 
-	const embed = leaderboardEmbed(event.name, ranked);
+	const embed = leaderboardEmbed(event.name, ranked, config);
 
 	await interaction.reply({
 		embeds: [embed],

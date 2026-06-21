@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
 import { buildLeaderboardChannelDeleteCustomId } from "@features/leaderboard/leaderboardChannelHandlers.js";
 
 // ── /configure-leaderboard-tracking ───────────────────────────────────
@@ -93,7 +93,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 				infoEmbed(
 					"Leaderboard tracking already that way",
 					body,
-					embedContent.COLORS.SCHEDULE
+					COLORS.SCHEDULE
 				),
 			],
 			components,
@@ -155,7 +155,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 				: undefined;
 
 		await interaction.reply({
-			embeds: [infoEmbed(heading, body, embedContent.COLORS.SCHEDULE)],
+			embeds: [infoEmbed(heading, body, COLORS.SCHEDULE)],
 			components,
 			flags: MessageFlags.Ephemeral,
 		});

@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { scheduleBoardEmbed, IScheduleField } from "./embedBuilder.js";
+import { scheduleBoardEmbed, reminderEmbed, IScheduleField } from "./embedBuilder.js";
+import type { IGameEvent } from "../features/events/event.types.js";
 // Relative path to dodge a vitest+vite-tsconfig-paths bug where `@`-aliased
 // imports in TEST files fail with "Cannot find package" even though the
 // same imports resolve fine in source files. Pre-existing project config
 // issue affecting several other test suites too.
-import { embedContent } from "../base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 
 // ── helpers ─────────────────────────────────────────────────────────
 // Build the toJSON() shape Discord wire-encodes from the embed. The tests
@@ -96,7 +97,7 @@ describe("scheduleBoardEmbed layout", () => {
 		expect(fieldsOut[2]?.name).toContain("Trial of Kau Karuak — Hard");
 
 		// heading row sits between active and completed.
-		expect(fieldsOut[3]?.name).toBe(embedContent.scheduleBoard.completedSectionTitle);
+		expect(fieldsOut[3]?.name).toBe(rokCommanderCopy.scheduleBoard.completedSectionTitle);
 
 		// completed block: descending by firstOccurrenceTs (most recent first).
 		// kauNormal.firstTs (1690200000) > kauEasy.firstTs (1690100000), so
@@ -120,7 +121,7 @@ describe("scheduleBoardEmbed layout", () => {
 		// heading would look like a bug to readers.
 		expect(fieldsOut).toHaveLength(2);
 		const names = fieldsOut.map((f) => f.name);
-		expect(names).not.toContain(embedContent.scheduleBoard.completedSectionTitle);
+		expect(names).not.toContain(rokCommanderCopy.scheduleBoard.completedSectionTitle);
 	});
 
 	it("omits the season-end banner when guildSeasonEndTs is null (regular-announcements-only guild)", () => {
@@ -140,7 +141,36 @@ describe("scheduleBoardEmbed layout", () => {
 		const embed = scheduleBoardEmbed([], "ch-announcements", { seasonEnded: true });
 		const json = embed.toJSON() as EmbedJSON;
 
-		expect(json.description).toBe(embedContent.scheduleBoard.seasonEnded);
+		expect(json.description).toBe(rokCommanderCopy.scheduleBoard.seasonEnded);
 		expect(json.fields ?? []).toHaveLength(0);
+	});
+});
+
+describe("reminderEmbed image", () => {
+	// Minimal event — reminderEmbed only reads name + prepSteps. Cast keeps the
+	// fixture small without spelling out every IGameEvent field.
+	const event = {
+		name: "Ancient Ruins",
+		prepSteps: [{ id: "1", label: "Activate stats token", order: 1 }],
+	} as IGameEvent;
+	const occurrence = new Date("2026-06-20T12:00:00Z");
+
+	it("sets a corner thumbnail (not a banner image) when an image url is provided", () => {
+		const url = "https://cdn.example.com/ruins.png";
+		const json = reminderEmbed(event, occurrence, 30, url).toJSON() as EmbedJSON;
+		expect(json.thumbnail?.url).toBe(url);
+		// Reminders deliberately use the small thumbnail slot, never the large
+		// banner image (which is reserved for go-live and decree posts).
+		expect(json.image).toBeUndefined();
+	});
+
+	it("renders no thumbnail when the image url is null", () => {
+		const json = reminderEmbed(event, occurrence, 30, null).toJSON() as EmbedJSON;
+		expect(json.thumbnail).toBeUndefined();
+	});
+
+	it("renders no thumbnail when the image url is omitted (legacy callers)", () => {
+		const json = reminderEmbed(event, occurrence, 30).toJSON() as EmbedJSON;
+		expect(json.thumbnail).toBeUndefined();
 	});
 });

@@ -34,6 +34,42 @@ export const BOT_LOG_EVENTS = {
 	// the member opts in via Channels & Roles. Logged once per guild so
 	// every restart does not re-nag.
 	ONBOARDING_HEADSUP_SENT: "onboarding_headsup_sent",
+	// ── pairing code DM (FUTURE_PLANS item 63, 2026-06-10) ─────────
+	// Logged each time the guild owner is DM'd a one-time claim code on
+	// guildCreate (both the fresh-install and re-install branches). Paired
+	// with PAIRING_REDEEMED (added in Phase 2) it yields the activation funnel:
+	// redemption rate = redeemed / sent, and time-to-redeem from the row
+	// timestamps. Not idempotent on purpose: every invite issues a new code and
+	// logs a new row.
+	PAIRING_CODE_SENT: "pairing_code_sent",
+	// ── pairing code redeemed (FUTURE_PLANS item 63, Phase 2, 2026-06-10) ─
+	// Logged once when the platform server successfully redeems a code through
+	// POST /api/pairing/redeem. Closes the activation funnel: redemption rate
+	// is rows-with-PAIRING_REDEEMED divided by rows-with-PAIRING_CODE_SENT
+	// for the same guildId, and time-to-redeem is the createdAt delta between
+	// the two. Not idempotent on purpose: every successful redemption logs a
+	// fresh row, so a re-invite that issues a new code and gets redeemed
+	// again shows up as a second redemption (the funnel measures activation
+	// events, not unique guilds). Metadata shape matches PAIRING_CODE_SENT
+	// — `{ ownerId }` (sourced from the PendingPairing row's ownerUserId
+	// field but keyed `ownerId` for cross-event funnel queries) — so the
+	// analytics query that joins the two events on guildId can also slice
+	// by ownerId without translating field names per event type.
+	PAIRING_REDEEMED: "pairing_redeemed",
+	// ── audience poll dispatch idempotency (v1.6 Phase 3, item 34a) ─
+	// What:  per-guild log that a specific audience poll has already been
+	//        broadcast to the guild's announcements channel. The log `event`
+	//        string is composed as `poll_sent:<pollId>` so each poll gets its
+	//        own bucket and a redeploy does not repost a poll the guild has
+	//        already received.
+	// Who:   PollDispatcher reads (skip already-sent) and writes (after a
+	//        successful post). No other caller.
+	// When:  read once per active poll per guild per boot; written once per
+	//        successful poll post.
+	// How:   prefix constant + template helper below, same pattern as the
+	//        feature-announcement key, so call sites stay symmetric and the
+	//        pollId rides in the event string without a new schema field.
+	POLL_SENT_PREFIX: "poll_sent",
 	// add more here as needed
 } as const;
 
@@ -42,3 +78,7 @@ export const BOT_LOG_EVENTS = {
 // lands in one place.
 export const featureAnnouncedEvent = (version: string): string =>
 	`${BOT_LOG_EVENTS.FEATURE_ANNOUNCED_PREFIX}:${version}`;
+
+// Compose the per-poll dispatch event key. Mirrors featureAnnouncedEvent so the
+// idempotency model stays consistent across broadcast features.
+export const pollSentEvent = (pollId: string): string => `${BOT_LOG_EVENTS.POLL_SENT_PREFIX}:${pollId}`;

@@ -1,5 +1,5 @@
-import { ColorResolvable } from "discord.js";
 import type { IEmbedField } from "../types.js";
+import { COLORS, FOOTER, AUTHOR } from "../brand.js";
 
 // ── ROK Commander copy pack ───────────────────────────────────────────────
 // What:  the canonical "kingdom voice" copy for the original ROK Commander
@@ -7,11 +7,11 @@ import type { IEmbedField } from "../types.js";
 //        guild whose `GuildConfig.pluginId === "rok-commander"` (or null,
 //        which the lookup treats as the back-compat default) is sourced
 //        from this object.
-// Who:   the legacy `embedContent` export at `@base/constants/embed-content`
-//        is a thin re-export of this file so the 96 existing import sites
-//        keep working without a touch. New code SHOULD prefer
-//        `getPluginCopy(guildConfig)` from `@base/copy/getCopy` because it
-//        honors `pluginId` and routes the right pack at runtime.
+// Who:   the legacy `embedContent` shim has been retired. Call sites now
+//        resolve copy through `getPluginCopy(guildConfig)` from
+//        `@base/copy/getCopy` (which honors `pluginId` and routes the right
+//        pack at runtime), or import `rokCommanderCopy` / the brand constants
+//        from `@base/copy/brand` directly when they need this pack specifically.
 // When:  every embed, slash command response, and channel intro that has
 //        ROK-flavored copy reads from this object. Per-guild owner overrides
 //        (Phase 3 of the streamer plugin spec) layer on top via
@@ -24,28 +24,33 @@ import type { IEmbedField } from "../types.js";
 //        words shipped to mortals are unchanged so this can land without
 //        any visual diff in Discord.
 export const rokCommanderCopy = {
-	// Platform brand, not bot brand. Survives item 32's Herald rename
-	// and any future pack-name changes. Also reinforces companyuno.com
-	// recognition across every embed the bot posts.
-	FOOTER: "Company Uno",
+	// Brand identity (footer wordmark, Dero author, color palette) is shared
+	// across every pack — see @base/copy/brand. Referenced here so
+	// getPluginCopy(config).FOOTER / .AUTHOR / .COLORS keep resolving off the
+	// pack, and so IPluginCopy (= typeof rokCommanderCopy) still carries them.
+	FOOTER,
+	AUTHOR,
+	COLORS,
 
-	COLORS: {
-		REMINDER: "Red",
-		SEASON_END: "DarkGrey",
-		LEADERBOARD: "Gold",
-		CONFIRMATION: "Yellow",
-		ERROR: "DarkRed",
-		ARRIVAL: "DarkGold",
-		INTRODUCTION: "DarkGold",
-		COMMANDS: "DarkBlue",
-		SCHEDULE: "DarkGreen",
-		ANNOUNCEMENTS: "DarkRed",
-		ADMIN: "DarkPurple",
-		// NextUpBoard posts + 🛡️next-decree channel intro. Navy Blue
-		// reads as "shield" without colliding with SCHEDULE (DarkGreen)
-		// or ANNOUNCEMENTS (DarkRed) in the sidebar.
-		NEXT_DECREE: "DarkNavy",
-	} satisfies Record<string, ColorResolvable>,
+	// ── new-member greeter (v1.6) ──────────────────────────────────────
+	// Welcome framings posted in the introductions channel when a member joins
+	// (welcomeNewMember). Each takes the member mention AND a randomly chosen
+	// icebreaker (from @features/greeter/icebreakers, a shared neutral bank of
+	// ~500) and weaves them into a kingdom-voiced welcome. Posted as message
+	// CONTENT, not an embed, so the ping actually notifies — Discord does not
+	// fire notifications for mentions inside embed descriptions. The framing
+	// carries the voice; the icebreaker carries the variety (a few framings ×
+	// hundreds of questions = thousands of distinct welcomes).
+	greeter: {
+		framings: [
+			(user: string, q: string) => `⚔️ A new challenger approaches. Welcome, ${user}. First trial: ${q}`,
+			(user: string, q: string) => `🔱 The gates swing open for you, ${user}. Tell the war council: ${q}`,
+			(user: string, q: string) => `🛡️ Hail and welcome, ${user}. Settle one for the realm: ${q}`,
+			(user: string, q: string) => `📜 The realm gains a new soul. Welcome, ${user}. ${q}`,
+			(user: string, q: string) => `🏰 Welcome to the kingdom, ${user}. ${q}`,
+			(user: string, q: string) => `🐉 A fresh face in the ranks. Welcome, ${user}. Most pressing question of the day: ${q}`,
+		] as Array<(user: string, q: string) => string>,
+	},
 
 	listEvents: {
 		title: "📅 Active KvK Events",
@@ -126,21 +131,30 @@ export const rokCommanderCopy = {
 		row: (medal: string, username: string, score: number, events: number, acknowledged: number) =>
 			`${medal} **${username}**\n` + `Score: ${score} | ` + `Events: ${events} | ` + `Reminders acknowledged: ${acknowledged}`,
 		medals: ["🥇", "🥈", "🥉"],
+		// Shown on the pinned LeaderboardBoard when no warrior has earned a
+		// standing in the current window yet. Points Mortals at the two ways to
+		// climb so an empty board reads as an invitation, not a dead feature.
+		boardEmptyState:
+			"No deeds recorded yet this week. React ✅ to event reminders and join the call during events to claim your place on the board.",
 	},
 
 	// ── schedule board (public, lives in the event-schedule channel) ──
 	// this is the content of the pinned message ScheduleBoard keeps fresh.
-	// it is different copy from listEvents (which is an ephemeral admin reply)
-	// because this one is read by every warrior in the alliance, so the voice
-	// leans kingdom flavored and skips the admin only language.
+	// it is different copy from listEvents (which is an ephemeral admin reply).
+	// Voice is kept NEUTRAL here (not kingdom flavored) per the owner: every guild
+	// renders this pack today regardless of pluginId, so ROK-specific wording would
+	// leak into non-ROK servers. seasonEnded stays KvK-specific because that state
+	// only ever fires for KvK guilds.
 	scheduleBoard: {
 		title: "📅 Event Schedule",
 		description: (announcementsChannelId: string | null) =>
 			announcementsChannelId
-				? `⚔️ Reminders will ring out in <#${announcementsChannelId}>. Mortals, stand ready.`
-				: "⚠️ The heralds have no channel to shout from. An admin must finish `/setup` before reminders can fire.",
+				? `📺 Reminders post in <#${announcementsChannelId}>. Keep an eye on this channel.`
+				: "⚠️ No announcements channel configured yet. An admin needs to finish `/setup` before reminders can fire.",
 		noEvents:
-			"📭 No decrees stand. The kingdom rests.\n\n" + "An admin must run `/configure-kvk-season` to summon the season's events.",
+			"The future has yet to be written.\n\n" +
+			"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
+			"Admins run the slash command `/configure-kvk-season` to establish the server's schedule.",
 		seasonEnded:
 			"🏁 The KvK season has ended. The kingdom stands down.\n\n" + "Run `/configure-kvk-season` when the next campaign begins.",
 		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
@@ -159,7 +173,7 @@ export const rokCommanderCopy = {
 		// Label rendered alongside the date a one-time event was concluded
 		// (its firstOccurrence timestamp). Lives in completed-block rows.
 		completedDateLabel: "Concluded",
-		footer: "Updated automatically. The scroll refreshes itself.",
+		footer: "Updated automatically.",
 	},
 	// user-facing strings for the /configure-kvk-season command. lives
 	// here so every line the warrior sees in Discord can be audited and
@@ -255,6 +269,21 @@ export const rokCommanderCopy = {
 			"*Do not keep me waiting.*",
 	},
 
+	// ── pairing claim code DM (FUTURE_PLANS item 63) ──
+	// Second DM after arrival on a fresh install, and the only DM on a
+	// re-invite. Gives the owner a one-time code to claim this guild from the
+	// plugin dashboard with no slash command. Copy names the code, the 15
+	// minute expiry, where to paste it, and that re-inviting issues a fresh
+	// code.
+	pairingCode: {
+		title: "🔑 Claim This Realm",
+		description: (code: string) =>
+			"To bind this server to your dashboard, present this code:\n\n" +
+			`**\`${code}\`**\n\n` +
+			"Open the ROK Commander panel on your Company Uno dashboard at companyuno.com and enter it there.\n\n" +
+			"The code expires in **15 minutes**. Re-invite me and I will issue a fresh one.",
+	},
+
 	setup: {
 		// Universal category name across packs. Decision 2026-05-22: the category
 		// name is the first field that goes universal across packs (intro copy,
@@ -284,7 +313,11 @@ export const rokCommanderCopy = {
 			// Where: sits beside 📢announcements in the homebase
 			//        category; readable by mortals, writable only by
 			//        the bot via category level overwrites.
-			nextDecree: "🛡️next-decree",
+			nextDecree: "🔜upcoming-events",
+			// Eighth channel: admin-only command + control surface (the admin command
+			// guide moved out of inner-sanctum, with the admin control buttons folded
+			// into its pinned row).
+			adminCommands: "🎛️admin-controls",
 		},
 	},
 
@@ -304,20 +337,21 @@ export const rokCommanderCopy = {
 			// Where: paired with the "Summon me to your server, Mortal"
 			//        link button composed in ChannelContent.introductionComponents().
 			description:
-				"Mortals of this alliance. I am your **ROK Commander**.\n\n" +
-				"My Creator built me as a **gift to those who would build great things**. " +
-				"They have sent me to your side, and I am yours to command.\n\n" +
-				"Through me, you will be reminded of your duties. " +
-				"Your deeds will be remembered. " +
-				"Your effort, rewarded. " +
-				"The worthy shall rise to glory.\n\n" +
-				"**── What I Do ──**\n" +
-				"⚔️ I'll remind you of important dates and events.\n" +
-				"📺 Post stream / event reminders on a fixed schedule for any Discord community.\n" +
-				"🏆 Rank the worthy on a living leaderboard.\n" +
-				"📅 Keep a pinned schedule in sight at all times.\n\n" +
-				"*Now. Let us build something legendary.*\n\n" +
-				"**Command me in a realm of your own.** The button below shall summon me.",
+				"Mortals of this alliance. I am Dero Dero.\n\n" +
+				"My Creator forged me as a gift to those who build great things. They have sent me to your side, and I am yours to command.\n\n" +
+				"Through me, your events shall be remembered. Your victories recorded. Your efforts recognized. The worthy shall rise, and their names shall not be forgotten.\n\n" +
+				"── What I Do ──\n\n" +
+				"⚔️ Remind your members of important dates, battles, and events.\n" +
+				"📺 Post stream, announcement, and event reminders on a fixed schedule.\n" +
+				"🏆 Track participation and rank the worthy on living leaderboards.\n" +
+				"📅 Keep important schedules pinned and always within reach.\n" +
+				"📜 Preserve records, achievements, and community milestones.\n" +
+				"🌟 Turn activity into history and members into legends.\n\n" +
+				"── And This Is Only The Beginning ──\n\n" +
+				"I am constantly evolving. New powers, tools, and systems are being forged even now. As my Creator's work continues, so too shall my capabilities.\n\n" +
+				"Now then.\n\n" +
+				"Gather your people. Organize your ranks. Build something worthy of legend.\n\n" +
+				"Command me in a realm of your own. The button below shall summon me.",
 		},
 
 		// ── public #command-center guide ──────────────────────────
@@ -410,9 +444,9 @@ export const rokCommanderCopy = {
 		schedule: {
 			title: "📅 Event Schedule",
 			description:
-				"Upcoming KvK events will be displayed here once configured.\n\n" +
-				"An admin must run `/configure-kvk-season` " +
-				"to initialize the season schedule.",
+				"The future has yet to be written.\n\n" +
+				"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
+				"Admins run the slash command `/configure-kvk-season` to establish the server's schedule.",
 		},
 
 		leaderboard: {
@@ -438,12 +472,13 @@ export const rokCommanderCopy = {
 		// Where: posted once by populateChannels on first setup; edited in
 		//        place on every boot via refreshIntroEmbeds.
 		nextDecree: {
-			title: "🛡️ The Next Decree",
+			// Intentionally neutral (not kingdom voice) per the owner: this channel
+			// reads as "upcoming events" for every audience.
+			title: "🔜 Upcoming Events",
 			description:
-				"Herald of what comes next.\n\n" +
-				"As each event nears within the next day, a fresh decree shall appear here — " +
-				"its hour, its trial, and the preparations demanded of the worthy.\n\n" +
-				"*These scrolls remain forever. Scroll back to prove your alliance was warned.*",
+				"A heads-up for what is coming next.\n\n" +
+				"As each event moves within the next day, a fresh post appears here with its time and any prep notes.\n\n" +
+				"*Posts stay so you can scroll back to confirm what was announced.*",
 		},
 
 		adminWelcome: {
@@ -550,7 +585,7 @@ export const rokCommanderCopy = {
 	},
 
 	// ── streamer / general schedule copy ──────────────────────────
-	// Copy lives on this same constants file (same audit point as the
+	// Copy lives in this same copy pack (same audit point as the
 	// kingdom voice) but speaks plainly. Streamers want a working
 	// schedule, not a roleplay. Voice still leans casual gamer — Discord
 	// communities skew that way and the streamer who first asked for the
@@ -588,7 +623,7 @@ export const rokCommanderCopy = {
 
 	// ── pause / continue ──────────────────────────────────────────
 	pauseSchedule: {
-		notFound: "No schedule by that name. Use `/event-list` to see what is configured.",
+		notFound: "No schedule by that name. Use `/list-events` to see what is configured.",
 		alreadyPaused: (name: string) => `**${name}** is already paused.`,
 		paused: (name: string) => `⏸️ **${name}** paused. Resume with \`/continue-schedule name:${name}\`.`,
 		pausedUntil: (name: string, untilUnix: number) =>

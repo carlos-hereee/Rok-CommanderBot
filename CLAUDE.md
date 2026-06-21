@@ -17,8 +17,11 @@ Key domains under `src/features/`:
 | `schedule/` | ScheduleBoard — keeps a pinned message in the event-schedule channel in sync with active events. |
 | `activity-tracking/` | Tracks voice minutes and reaction acks for participation scoring. |
 | `university/` | Commander build lookups (talents, tree guides). |
+| `greeter/` | Welcomes new members in the introductions channel on `guildMemberAdd` (a pack-voiced welcome framing + a random icebreaker from a ~500-question bank in `icebreakers.ts`), pinging the member. The intro power-up panel's admin "Say hello" button reuses the same `welcomeNewMember` flow on demand. |
 
 `src/api/` has middleware, routes, and the Express server. `src/db/` has Mongoose models and thin store wrappers. `src/base/` has constants and types.
+
+**Introductions channel is member-writable.** Unlike the other homebase channels (members are read-only), the introductions channel lets `@everyone` send, so newcomers can answer the greeter's icebreaker (and satisfy a Discord Onboarding gate that requires posting in a channel before full access). New guilds get this from `GuildSetupManager.createChannels` (`introOverwrites`); guilds set up before the greeter shipped are migrated idempotently on boot by `ensureIntroChannelsWritable`. The welcome embed is pinned (intro added to `refreshIntroEmbeds`' `shouldBePinned`) so member chatter does not bury it.
 
 ## Commands and scripts
 
@@ -68,7 +71,7 @@ Recovery: if the stored message was deleted by an admin, the next refresh repost
 ## Conventions and rules for working on this codebase
 
 1. Never use dashes in chat replies (the owner's preference).
-2. Do NOT run `npx tsc --noEmit`, `npm run build`, or anything that triggers `tsc`. The owner builds manually before deploy. `npm install` does run `tsc` via postinstall — prefer writing files and asking the owner to run the install.
+2. `npx tsc --noEmit` (type-check only, no emit) IS the standard verification in code mode: run it to catch compile errors before ending a session and fix what it reports. Do NOT run `npm run build`, `tsc-alias`, or anything that EMITS a build artifact or deploys (Railway, `npm run deploy`) — the owner does those manually before deploy. `npm install` runs `tsc` via postinstall, so prefer writing files and asking the owner to install rather than running install yourself.
 3. Comment complicated logic. Every non trivial branch, algorithm, invariant, or workaround should have an inline comment. Complex comments must answer the relevant 5Ws (Who, What, When, Where, How) adapted to code:
    - What: what this block does in one line
    - Who: which callers or downstream consumers are affected
@@ -77,7 +80,7 @@ Recovery: if the stored message was deleted by an admin, the next refresh repost
    - How: the mechanism or algorithm, especially when non obvious
    Not every comment needs all five. Function or module level comments should cover most of them. Inline comments on a single line can focus on the one or two that matter. Trivial wiring does not need comments; anything requiring a second read does. Match the existing voice: prose explanations, numbered steps (①②③) for multi phase functions, section markers (// ── Section ──) for major groups.
 4. Tests live colocated next to the module (`src/features/events/occurrenceCalculator.test.ts` next to `occurrenceCalculator.ts`). Vitest picks them up via `src/**/*.test.ts`, and the main tsconfig excludes them so they never compile into `dist/`.
-5. When adding user facing copy that warriors see in Discord, route it through the rok-commander pack at `src/base/copy/packs/rok-commander.pack.ts`. Keep the medieval kingdom voice (castle, scroll, shield, "Summon New Event", "The kingdom rests"). Admin facing ephemeral copy can be more practical. The legacy `src/base/constants/embed-content.ts` still exists as a back-compat re-export, but new edits should land in the pack file directly so they automatically apply to anything reading via `getPluginCopy(guildConfig)`.
+5. When adding user facing copy that warriors see in Discord, route it through the rok-commander pack at `src/base/copy/packs/rok-commander.pack.ts`. Keep the medieval kingdom voice (castle, scroll, shield, "Summon New Event", "The kingdom rests"). Admin facing ephemeral copy can be more practical. New copy edits land in the pack file directly so they apply to anything reading via `getPluginCopy(guildConfig)`. (The legacy `embed-content.ts` back-compat shim was retired in Phase 5; brand-level constants — colors, footer, the Dero author — now live in `src/base/copy/brand.ts`.)
 6. Stores (`src/db/stores/*`) are thin Mongoose wrappers. Business logic belongs in feature modules, not in stores. Do not test store methods.
 7. Discord side effects in a feature should be fire and forget when they follow a successful primary action (for example, schedule refreshes after reminder fires). Log errors, never throw back into the caller.
 8. The bot is ESM. All local imports must carry the `.js` suffix even though the source is `.ts`.
@@ -88,15 +91,16 @@ The bot's user-facing strings live in plugin-scoped packs under `src/base/copy/`
 
 Module layout:
 - `src/base/copy/packs/rok-commander.pack.ts` — the canonical pack. New copy edits land here.
+- `src/base/copy/brand.ts` — shared brand identity (`FOOTER`, `AUTHOR`, `COLORS`). Pack-independent and identical across packs; both packs reference it, and non pack-aware call sites (no guildConfig in scope) import colors/footer from here directly.
 - `src/base/copy/types.ts` — `IEmbedField`, `IPluginCopy` (derived from the rok-commander pack), `PluginId` union.
 - `src/base/copy/packs.ts` — `COPY_PACKS` registry plus `DEFAULT_PLUGIN_ID`.
 - `src/base/copy/getCopy.ts` — `getPluginCopy(guildConfig)` resolves the active pack; `getCopyOverride(key, guildConfig)` resolves the per-guild owner-authored override (Phase 3 editor UI writes these).
 - `src/base/copy/index.ts` — barrel export (`@base/copy`).
-- `src/base/constants/embed-content.ts` — back-compat shim. Re-exports `rokCommanderCopy` as `embedContent` so the legacy import sites keep working untouched. Removing this file is a follow-up gated on every legacy call site migrating to `getPluginCopy(guildConfig)`.
+- `src/base/constants/embed-content.ts` — REMOVED (Phase 5). This was the back-compat shim re-exporting `rokCommanderCopy` as `embedContent`. All call sites now read `getPluginCopy(guildConfig)` (pack-aware), or import `rokCommanderCopy` / the `@base/copy/brand` constants directly where the default pack is correct (KvK-only, no-config, guild-create-time).
 
 `GuildConfig` carries the per-guild pluginId and copyOverrides Map. Both fields default to "rok-commander" / empty Map respectively, so legacy rows load cleanly without a backfill.
 
-Phase 1 ships: pack architecture, schema fields, lookup helpers. Phase 1 does NOT migrate the 96 existing `embedContent.*` call sites — that is the follow-on phase that lands when embed builders gain a guildConfig parameter so they can honor pluginId. Until then, all guilds render rok-commander copy regardless of pluginId.
+Phase 1 shipped the pack architecture, schema fields, and lookup helpers. The follow-on migration is now COMPLETE: embed builders + their callers (Phase 2), the divergent handler reads (Phase 3), the channel intros + repair notices (Phase 4), and the shim retirement + brand extraction (Phase 5) all landed, so pack-aware code resolves voice via `getPluginCopy(guildConfig)`. KEY GAP: there is still no setter for `pluginId = "general-events"` (the plugin-install flow is unbuilt), so every guild defaults to rok-commander and the neutral pack is unreachable in production until a setter ships. To exercise general-events today, set a guild's `pluginId` directly in Mongo. Two voice surfaces are intentionally still hardcoded to the kingdom default and not yet pack-driven: the `introductionComponents` invite-button label (no pack field exists for it) and the `setup.channels.admin` channel NAME (`🔒inner-sanctum` vs `🔒admin`; channel-name resolution is deferred as risky).
 
 ## Tech debt
 
@@ -112,7 +116,8 @@ Outbound requests (Future A: bot → server) reuse the same secret and same cano
 Env vars:
 - `DASHBOARD_API_KEY` — legacy shared secret for `x-api-key`
 - `DASHBOARD_SIGNING_SECRET` — HMAC secret. Used in both directions (verify inbound, sign outbound). When unset, inbound verification transparently falls back to plain api key auth so the rollout can land one side at a time; outbound calls fail with `ServerNotConfiguredError`.
-- `NEXIOUS_BASE_URL` — Heroku URL of the platform server. Required when `USE_REMOTE_EVENTS=true`.
+- `REQUIRE_SIGNED_REQUESTS` — strict mode. When true, `verifySignature` rejects any unsigned `/api/*` request (no fallback to plain api-key auth). OFF by default so the rollout can land one side at a time. Flip on AFTER both sides sign every request — it closes the last path by which a caller holding only the shared api key could pass an arbitrary `?guildId=`.
+- `SERVER_BASE_URL` (alias `NEXIOUS_BASE_URL`) — Heroku URL of the platform server. Required when `USE_REMOTE_EVENTS=true`. `serverApi` reads `SERVER_BASE_URL` first, then falls back to `NEXIOUS_BASE_URL`, so either name works; set one.
 - `USE_REMOTE_EVENTS` — feature flag. When true, `eventStore` routes reads/writes through `serverApi` instead of local Mongo. Off by default; flip on AFTER the F4 migration script has copied existing events into the platform DB.
 
 ## Operational Dependencies (Future A)

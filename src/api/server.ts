@@ -1,4 +1,5 @@
 import express from "express";
+import type { Server } from "http";
 import cors from "cors";
 import { Client } from "discord.js";
 import { verifySignature } from "./middleware/verifySignature.js";
@@ -11,13 +12,14 @@ import { remindersRouter } from "./routes/reminders.routes.js";
 import { createScheduleRouter } from "./routes/schedule.routes.js";
 import { createLeaderboardTrackingRouter } from "./routes/leaderboardTracking.routes.js";
 import { createAutoHealRouter } from "./routes/autoHeal.routes.js";
+import { createPairingRouter } from "./routes/pairing.routes.js";
 import { dashboardOrigin, port } from "@utils/config.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 // the Discord client is a dependency because the events router has one route
 // (POST /api/events/:eventId/test-reminder) that needs to post to a channel.
 // the rest of the API is pure DB reads/writes and does not touch the client.
-export function startApiServer(client: Client): void {
+export function startApiServer(client: Client): Server {
 	const app = express();
 
 	// Parse JSON bodies. The verify callback captures the exact raw UTF-8 bytes BEFORE
@@ -97,8 +99,19 @@ export function startApiServer(client: Client): void {
 	// /api/auto-heal — HTTP twin of /configure-auto-heal for the Settings
 	// tab toggle. Same idempotency + payload shape as leaderboard-tracking.
 	app.use("/api/auto-heal", createAutoHealRouter());
+	// /api/pairing — exchanges a one-time claim code (issued + DM'd on
+	// guildCreate in Phase 1 of FUTURE_PLANS item 63) for guildId +
+	// ownerUserId so the platform server can bind this Discord guild into
+	// the user's pluginConfig. Unlike every other /api/* route this one does
+	// NOT take ?guildId= because the code IS the discriminator — the
+	// platform does not yet know the guildId at redemption time. Still
+	// behind verifySignature because the signed proxy is the only caller.
+	app.use("/api/pairing", createPairingRouter());
 
-	app.listen(port, () => {
+	// Return the Server handle so main.ts can close it during graceful shutdown
+	// (stop accepting new requests before the Discord client and Mongo connection
+	// are torn down).
+	return app.listen(port, () => {
 		console.log(LOG_MESSAGES.api.serverRunning(port));
 	});
 }

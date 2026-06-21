@@ -1,6 +1,7 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { EmbedBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { getPluginCopy, type ICopyConfig } from "@base/copy/getCopy.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
+import { DERO_GIF_URL, COLORS, DERO_GIF_REF } from "@base/copy/brand.js";
 // botInviteLink is composed in @utils/config from the env-driven
 // clientId, so a dev process serves the dev install URL and a prod
 // process serves the prod install URL automatically. We deliberately
@@ -9,90 +10,137 @@ import { infoEmbed } from "@utils/embedBuilder.js";
 // risk.
 import { botInviteLink } from "@utils/config.js";
 
-const cc = embedContent.channelContent;
-
+// ── ChannelContent ───────────────────────────────────────────────────────
+// What:  builders for the pinned intro embeds + self-heal notices the bot
+//        posts in each homebase channel. Every method that renders pack copy
+//        takes an optional `guildConfig` so the words track the guild's
+//        plugin pack (kingdom voice for rok-commander, neutral for
+//        general-events).
+// Who:   GuildSetupManager. populateChannels passes nothing on first build;
+//        repairOneChannel / refreshIntroEmbeds / applyAdminRole and the
+//        notice posters pass the loaded GuildConfig so a non-ROK guild
+//        renders neutral copy.
+// When:  a null/undefined config resolves to the rok-commander default via
+//        getPluginCopy. That preserves the historical behavior of every
+//        existing guild AND is the correct voice for a brand-new guild whose
+//        pluginId is not yet known (set later via pairing/install).
+// Where: copy resolves through getPluginCopy(guildConfig) from @base/copy.
+//        Each method resolves the pack once and reads its title/description,
+//        responses, and COLORS off that single source. COLORS are byte
+//        identical across packs but read from the resolved pack too so a
+//        method never mixes copy sources.
 export const ChannelContent = {
-	introduction(): EmbedBuilder {
-		return infoEmbed(cc.introduction.title, cc.introduction.description, embedContent.COLORS.INTRODUCTION);
+	introduction(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		// setImage shows the large animated Dero below the welcome so new members
+		// see the mascot in action (gifs animate in the image slot, unlike the
+		// static author icon). Renders once the asset is deployed (see DERO_GIF_URL).
+		return infoEmbed(cc.introduction.title, cc.introduction.description, copy.COLORS.INTRODUCTION).setImage(DERO_GIF_URL);
 	},
 
-	// ── introduction invite button row ──────────────────────────────
-	// What:  link button row that sits beneath the introduction embed.
-	//        Opens Discord's OAuth consent screen for inviting ROK
-	//        Commander into another server. Link buttons do NOT require
-	//        an interaction handler — Discord opens the URL directly.
-	// Who:   outsiders who wander into the introductions channel and want
-	//        to run the bot in their own guild. Existing mortals will
-	//        mostly ignore the button; it is aimed at growth, not at
-	//        current members.
-	// When:  posted alongside the introduction embed on /setup, and re
-	//        attached during refreshIntroEmbeds on every boot so copy /
-	//        permission revisions land without a manual rebuild.
-	// Where: paired with ChannelContent.introduction() in
-	//        GuildSetupManager.populateChannels. The edit path in
-	//        refreshIntroEmbeds must pass this row alongside embeds or
-	//        the button gets silently dropped on boot (Discord clears
-	//        components on edit unless explicitly preserved).
-	// How:   single ButtonBuilder, ButtonStyle.Link, URL pulled from
-	//        @utils/config.botInviteLink so the client id + permissions
-	//        track the running environment automatically. Permissions
-	//        breakdown comment lives next to botInviteLink in config.ts;
-	//        BOT_CONSTANTS.MIN_PERMISSIONS_DOCS holds the audit-friendly
-	//        list for install docs. Label is in the godly voice — the
-	//        button is essentially a CTA written by the bot itself.
-	introductionComponents(): ActionRowBuilder<ButtonBuilder> {
-		return new ActionRowBuilder<ButtonBuilder>().addComponents(
-			new ButtonBuilder()
-				.setLabel("Summon me to your server, Mortal")
-				.setStyle(ButtonStyle.Link)
-				.setURL(botInviteLink)
-				.setEmoji("🔱")
-		);
+	// ── invite card ──────────────────────────────────────────────────
+	// What:  a standalone "summon Dero" growth card, pinned in #command-center as
+	//        its OWN message so the wide invite button gets its own embed instead
+	//        of crowding the command guide's button row. Short pitch + the bundled
+	//        animated Dero gif (setImage attachment://) + the Summon button. The
+	//        caller must also upload the gif file (buildDeroGifAttachment).
+	// Who:   populateChannels (initial post) + refreshIntroEmbeds (maintains it).
+	// How:   brand-indigo (COLORS.DERO) so it reads as a Dero card, not a channel
+	//        intro. NOTE: like buildInviteButton, the pitch is hardcoded kingdom
+	//        voice and is NOT pack-aware — a general-events guild sees ROK wording.
+	//        Same pre-existing debt as the button it pairs with; tracked separately.
+	inviteCard(): EmbedBuilder {
+		return infoEmbed(
+			"🔱 Summon Dero to Your Realm",
+			"Command a kingdom of your own? Dero answers the call. Bring him to your server and let the events, reminders, and rankings run themselves.",
+			COLORS.DERO
+		).setImage(DERO_GIF_REF);
 	},
 
-	commandGuide(): EmbedBuilder {
-		return infoEmbed(cc.commandGuide.title, cc.commandGuide.description, embedContent.COLORS.COMMANDS).addFields(
+	// ── invite button ────────────────────────────────────────────────
+	// What:  the "Summon me to your server" Link button. Opens Discord's OAuth
+	//        consent screen for inviting the bot into another server. Link buttons
+	//        need no interaction handler — Discord opens the URL directly.
+	// Who:   attached to the standalone invite card (ChannelContent.inviteCard), its
+	//        own pinned message in #command-center. MOVED off the introductions
+	//        intro (2026-06) because that channel is now member-writable and the
+	//        welcome would bury a pinned button there.
+	// When:  attached on first build (populateChannels) and re-attached on every
+	//        boot (refreshIntroEmbeds) so URL/permission revisions land without a
+	//        manual rebuild. Returned as a bare ButtonBuilder so it can share one
+	//        ActionRow with the other command-center buttons.
+	// How:   ButtonStyle.Link, URL from @utils/config.botInviteLink so the client
+	//        id + permissions track the running environment automatically.
+	// NOTE:  the label + emoji are hardcoded kingdom voice and are NOT pack-aware
+	//        (no pack field exists for them). A general-events guild would see this
+	//        ROK-voiced label until a pack field is added. Pre-existing limitation,
+	//        just relocated; tracked outside this pass.
+	buildInviteButton(): ButtonBuilder {
+		return new ButtonBuilder()
+			.setLabel("Summon me to your server, Mortal")
+			.setStyle(ButtonStyle.Link)
+			.setURL(botInviteLink)
+			.setEmoji("🔱");
+	},
+
+	commandGuide(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.commandGuide.title, cc.commandGuide.description, copy.COLORS.COMMANDS).addFields(
 			...cc.commandGuide.fields
 		);
 	},
 
 	// ── admin command guide ──────────────────────────────────────
-	// Posted as a SECOND pinned message inside #inner-sanctum, in
-	// addition to adminWelcome. Tracked on
-	// GuildConfig.introMessageIds.adminCommandGuideId so
-	// refreshIntroEmbeds edits it in place on boot when copy or the
-	// command list evolves. ADMIN color matches the rest of the inner
-	// sanctum surface so visual identity stays consistent with the
-	// welcome embed above it.
-	adminCommandGuide(): EmbedBuilder {
-		return infoEmbed(cc.adminCommandGuide.title, cc.adminCommandGuide.description, embedContent.COLORS.ADMIN).addFields(
+	// The pinned intro of the dedicated admin command center (its own
+	// homebase channel as of the 2026-06-19 split; previously a second
+	// pinned message inside #inner-sanctum next to adminWelcome). Tracked on
+	// GuildConfig.introMessageIds.adminCommandsChannelId so refreshIntroEmbeds
+	// edits/reposts it in place on boot when copy or the command list evolves.
+	// ADMIN color keeps it visually consistent with the rest of the admin surface.
+	adminCommandGuide(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.adminCommandGuide.title, cc.adminCommandGuide.description, copy.COLORS.ADMIN).addFields(
 			...cc.adminCommandGuide.fields
 		);
 	},
-	adminPending(): EmbedBuilder {
-		return infoEmbed(cc.adminWelcome.title, embedContent.responses.adminRolePending, embedContent.COLORS.ADMIN);
+	adminPending(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		return infoEmbed(copy.channelContent.adminWelcome.title, copy.responses.adminRolePending, copy.COLORS.ADMIN);
 	},
-	scheduleIntro(): EmbedBuilder {
-		return infoEmbed(cc.schedule.title, cc.schedule.description, embedContent.COLORS.SCHEDULE);
+	scheduleIntro(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.schedule.title, cc.schedule.description, copy.COLORS.SCHEDULE);
 	},
 
-	leaderboardIntro(): EmbedBuilder {
-		return infoEmbed(cc.leaderboard.title, cc.leaderboard.description, embedContent.COLORS.LEADERBOARD);
+	leaderboardIntro(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.leaderboard.title, cc.leaderboard.description, copy.COLORS.LEADERBOARD);
 	},
 
-	announcementsIntro(): EmbedBuilder {
-		return infoEmbed(cc.announcements.title, cc.announcements.description, embedContent.COLORS.ANNOUNCEMENTS);
+	announcementsIntro(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.announcements.title, cc.announcements.description, copy.COLORS.ANNOUNCEMENTS);
 	},
 
 	// Pinned intro above the NextUpBoard posts. Tells mortals that this
 	// channel grows over time on purpose (each upcoming event creates a
 	// permanent post) so they stop asking why it is not being "cleaned up".
-	nextDecreeIntro(): EmbedBuilder {
-		return infoEmbed(cc.nextDecree.title, cc.nextDecree.description, embedContent.COLORS.NEXT_DECREE);
+	nextDecreeIntro(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.nextDecree.title, cc.nextDecree.description, copy.COLORS.NEXT_DECREE);
 	},
 
-	adminWelcome(ownerId: string, adminRoleId: string): EmbedBuilder {
-		return infoEmbed(cc.adminWelcome.title, cc.adminWelcome.description(ownerId, adminRoleId), embedContent.COLORS.ADMIN);
+	adminWelcome(ownerId: string, adminRoleId: string, guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.adminWelcome.title, cc.adminWelcome.description(ownerId, adminRoleId), copy.COLORS.ADMIN);
 	},
 
 	// ── self heal notices ─────────────────────────────────────
@@ -101,12 +149,10 @@ export const ChannelContent = {
 	// notices fire for single channel restores; the castle rebuilt notice
 	// fires once after a full category reconstruction. both use the ADMIN
 	// color so they visually match the rest of the inner sanctum surface.
-	channelRepairNotice(channelName: string): EmbedBuilder {
-		return infoEmbed(
-			cc.channelRepairNotice.title,
-			cc.channelRepairNotice.description(channelName),
-			embedContent.COLORS.ADMIN
-		);
+	channelRepairNotice(channelName: string, guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.channelRepairNotice.title, cc.channelRepairNotice.description(channelName), copy.COLORS.ADMIN);
 	},
 	// Single summary embed when multiple channels are restored in one
 	// sweep. Replaces the "one embed per channel" spam previously emitted
@@ -117,12 +163,16 @@ export const ChannelContent = {
 	// channels were touched, not see N copies of the same warning
 	// paragraph. Reuses the existing repair-notice copy template via
 	// the locale's summaryTitle / summaryBody keys.
-	channelsRestoredSummary(channelNames: string[]): EmbedBuilder {
+	channelsRestoredSummary(channelNames: string[], guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
 		const list = channelNames.map((n) => `• ${n}`).join("\n");
 		const description = `${cc.channelRepairNotice.summaryBody(channelNames.length)}\n\n${list}`;
-		return infoEmbed(cc.channelRepairNotice.summaryTitle, description, embedContent.COLORS.ADMIN);
+		return infoEmbed(cc.channelRepairNotice.summaryTitle, description, copy.COLORS.ADMIN);
 	},
-	castleRebuiltNotice(): EmbedBuilder {
-		return infoEmbed(cc.castleRebuiltNotice.title, cc.castleRebuiltNotice.description, embedContent.COLORS.ADMIN);
+	castleRebuiltNotice(guildConfig?: ICopyConfig | null): EmbedBuilder {
+		const copy = getPluginCopy(guildConfig);
+		const cc = copy.channelContent;
+		return infoEmbed(cc.castleRebuiltNotice.title, cc.castleRebuiltNotice.description, copy.COLORS.ADMIN);
 	},
 };

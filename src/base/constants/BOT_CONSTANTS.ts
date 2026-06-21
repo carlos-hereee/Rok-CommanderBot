@@ -41,6 +41,13 @@ export const BOT_CONSTANTS = {
 	// scheduler
 	SCHEDULER_CRON: "* * * * *", // every minute
 	REMINDER_FIRE_WINDOW_MS: 60_000, // how close to reminder time before we fire it
+	// Max number of guilds the per-minute tick reads in parallel. The tick fans
+	// out one events+config read per guild; without a ceiling, thousands of
+	// guilds means thousands of simultaneous DB/HTTP calls in one tick, which
+	// saturates the connection pool (or Heroku, under USE_REMOTE_EVENTS) and can
+	// blow the 60s budget. 20 keeps the pool busy without stampeding it. Read by
+	// ReminderScheduler via mapWithConcurrency.
+	SCHEDULER_GUILD_CONCURRENCY: 20,
 
 	// ── reminder log sentinel offsets ──────────────────────────────
 	// offsetMinutes values that aren't real "N minutes before event" markers.
@@ -55,6 +62,13 @@ export const BOT_CONSTANTS = {
 	// ── dashboard test reminder ───────────────────────────────────
 	// rate limit so a jumpy admin cannot spam their alliance channel
 	TEST_REMINDER_COOLDOWN_MS: 60_000, // one test per event per 60 seconds
+
+	// ── leaderboard board refresh debounce (v1.6 Phase 2, item 13) ──
+	// Activity writes (✅ reactions, voice sessions) trigger a LeaderboardBoard
+	// refresh, but a busy event produces a flurry of writes. Collapse them to
+	// one edit per guild per window so the board updates promptly without
+	// hammering Discord with dozens of edits. Read by scheduleLeaderboardRefresh.
+	LEADERBOARD_REFRESH_DEBOUNCE_MS: 60_000, // at most one activity-driven refresh per guild per 60s
 
 	// ── invite URL provenance ─────────────────────────────────────
 	// The actual OAuth install URL is composed in @utils/config as

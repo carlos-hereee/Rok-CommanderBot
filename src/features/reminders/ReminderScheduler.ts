@@ -10,9 +10,13 @@ import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { IGameEvent } from "../events/event.types.js";
 import { seasonEndEmbed } from "@utils/embedBuilder.js";
 import { refreshAllSchedules, refreshSchedule } from "@features/schedule/ScheduleBoard.js";
+import { refreshAllLeaderboards } from "@features/leaderboard/LeaderboardBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { getOutboundLatencyStats } from "@utils/serverApi.js";
 import { noteFailure as noteServerFailure, noteSuccess as noteServerSuccess } from "./serverHealthNotifier.js";
+import { mapWithConcurrency } from "@utils/mapWithConcurrency.js";
+import { activityStore } from "@db/stores/activityStore.js";
+import { playerActivityRetentionDays } from "@utils/config.js";
 
 // ── resolveOverride ────────────────────────────────────────────────
 // What:  given an event + an original occurrence (the cron-computed fire
@@ -100,6 +104,35 @@ const logHourlyMetrics = (): void => {
 	fireFailureCount = 0;
 };
 
+// ── overlapping-tick guard ───────────────────────────────────────────
+// node-cron does NOT skip a scheduled run when the previous one is still
+// going. At scale a single per-minute tick can exceed its 60s budget (large
+// guild fan-out, remote-event HTTP latency under USE_REMOTE_EVENTS, or an
+// unindexed Event scan), and the next minute's tick would then start
+// concurrently. Two concurrent ticks both pass the reminderStore.exists()
+// dedup check before either writes its row, so both call fireReminder and the
+// alliance gets a DUPLICATE ping — the compound unique index only catches the
+// second reminderStore.create, after the duplicate Discord post is already
+// live. This boolean serializes the per-minute tick within the process: if a
+// tick is still running when the next fires, the new one is skipped and the
+// in-flight one is allowed to finish. Single-process only; a sharded
+// deployment would need a shared lock (Mongo/Redis) keyed per shard.
+let reminderTickInProgress = false;
+
+// ── scheduled-task registry ──────────────────────────────────────────
+// Holds the node-cron tasks startScheduler creates so stopScheduler can halt
+// them on graceful shutdown (SIGTERM from Railway on every deploy). Without
+// this, the cron keeps firing while main.ts tears down the client and Mongo
+// connection, which can cut a reminder fire between its Discord post and its
+// dedup-row write (→ a duplicate on the next boot).
+const scheduledTasks: ReturnType<typeof cron.schedule>[] = [];
+
+// ── last tick timestamp (audit L2) ──────────────────────────────────
+// Set at the start of every per-minute tick. Exported so the readiness probe
+// (/api/health/ready) can report whether the scheduler is actually ticking, not
+// just whether the process is up. null until the first tick after boot.
+export let lastReminderTickAt: Date | null = null;
+
 export function startScheduler(client: Client): void {
 	// ── hourly schedule board safety tick ──
 	// every event mutation and reminder fire already triggers a board
@@ -107,18 +140,58 @@ export function startScheduler(client: Client): void {
 	// silently (Discord hiccup, stored messageId deleted, etc) the next
 	// hour at minute :00 will re synchronize every guild. node-cron's
 	// "0 * * * *" fires at the top of every hour.
-	cron.schedule("0 * * * *", async () => {
+	scheduledTasks.push(cron.schedule("0 * * * *", async () => {
 		try {
 			await refreshAllSchedules(client);
 		} catch (error) {
 			console.error(LOG_MESSAGES.schedule.hourlyRefreshFailed, error);
 		}
-		// Emit hourly metrics line right after the schedule sweep so a single
+		// Leaderboard board floor. Beyond catching silent failures like the
+		// schedule sweep, this is what resets the weekly window after a week
+		// rollover when no activity happened to trigger a refresh on its own.
+		try {
+			await refreshAllLeaderboards(client);
+		} catch (error) {
+			console.error(LOG_MESSAGES.leaderboard.hourlyRefreshFailed, error);
+		}
+		// Emit hourly metrics line right after the board sweeps so a single
 		// log timestamp captures both. The metrics function never throws.
 		logHourlyMetrics();
-	});
+	}));
 
-	cron.schedule(BOT_CONSTANTS.SCHEDULER_CRON, async () => {
+	// ── daily PlayerActivity retention sweep (audit H7) ──
+	// Off unless the owner sets PLAYER_ACTIVITY_RETENTION_DAYS (> 0). PlayerActivity
+	// is leaderboard history, so deletion is opt-in: nothing is pruned until a window
+	// is chosen. Runs at 04:00 (low traffic) and only deletes rows whose occurrence is
+	// older than the window. Pushed to scheduledTasks so stopScheduler halts it on
+	// shutdown. The whole branch is skipped (no cron registered) when the window is 0.
+	if (playerActivityRetentionDays > 0) {
+		scheduledTasks.push(
+			cron.schedule("0 4 * * *", async () => {
+				try {
+					const cutoff = new Date(Date.now() - playerActivityRetentionDays * 24 * 60 * 60 * 1000);
+					const deleted = await activityStore.deleteOlderThan(cutoff);
+					console.log(
+						`[retention] pruned ${deleted} PlayerActivity row(s) older than ${playerActivityRetentionDays}d (before ${cutoff.toISOString()})`
+					);
+				} catch (err) {
+					console.error("[retention] PlayerActivity cleanup failed", err);
+				}
+			})
+		);
+	}
+
+	scheduledTasks.push(cron.schedule(BOT_CONSTANTS.SCHEDULER_CRON, async () => {
+		// Skip this run if the previous minute's tick has not finished. See the
+		// reminderTickInProgress comment above for why a concurrent tick would
+		// double-fire reminders. A skipped minute is self-correcting: the next
+		// tick re-scans the same fire window and catches anything still due.
+		if (reminderTickInProgress) {
+			console.warn(LOG_MESSAGES.scheduler.tickOverlapSkipped);
+			return;
+		}
+		reminderTickInProgress = true;
+		lastReminderTickAt = new Date(); // audit L2: the readiness probe reads this
 		try {
 			// ① Fetch all active events for every guild this bot is in.
 			//
@@ -146,8 +219,14 @@ export function startScheduler(client: Client): void {
 			// honor BEFORE the per-event paused check below — when the
 			// schedule is paused, every event in this guild is skipped this
 			// tick regardless of its individual paused flag.
-			const guildDataByGuild = await Promise.all(
-				guildIds.map(async (guildId) => {
+			// Bounded fan-out: read at most SCHEDULER_GUILD_CONCURRENCY guilds at
+			// once instead of one unbounded Promise.all over every guild. At scale
+			// the unbounded form opened one DB/HTTP call per guild simultaneously,
+			// saturating the pool and risking a tick that overruns its 60s budget.
+			const guildDataByGuild = await mapWithConcurrency(
+				guildIds,
+				BOT_CONSTANTS.SCHEDULER_GUILD_CONCURRENCY,
+				async (guildId) => {
 					try {
 						const [e, config] = await Promise.all([
 							eventStore.findByGuildId(guildId),
@@ -166,7 +245,7 @@ export function startScheduler(client: Client): void {
 						anyUnreachable = true;
 						return { guildId, events: [] as IGameEvent[], config: null };
 					}
-				})
+				}
 			);
 
 			// Apply schedule-level pause filtering. For each guild whose
@@ -176,6 +255,12 @@ export function startScheduler(client: Client): void {
 			// events flow through this tick.
 			const eventsByGuild: IGameEvent[][] = [];
 			for (const { guildId, events: guildEvents, config } of guildDataByGuild) {
+				// Skip self-destructed guilds entirely. Their homebase channels are
+				// gone, so every fire would throw fetching the deleted announcements
+				// channel and log a failure each tick (tripping the F5 alarm). Mirrors
+				// the ensureHomebase / ChannelDeleteWatcher gates; cleared by /setup.
+				if ((config as unknown as { homebaseDestroyed?: boolean } | null)?.homebaseDestroyed) continue;
+
 				const schedulePaused = (config as unknown as { schedulePaused?: { paused?: boolean; pausedUntil?: Date | null } } | null)?.schedulePaused;
 				if (schedulePaused?.paused) {
 					const pausedUntil = schedulePaused.pausedUntil;
@@ -343,8 +428,29 @@ export function startScheduler(client: Client): void {
 			}
 		} catch (error) {
 			console.error(LOG_MESSAGES.scheduler.tickError, error);
+		} finally {
+			// Always clear the guard, even if the tick threw, so a single failed
+			// tick cannot wedge the scheduler permanently in the "in progress"
+			// state and silence every future reminder.
+			reminderTickInProgress = false;
 		}
-	});
+	}));
+}
+
+// ── stopScheduler ────────────────────────────────────────────────────
+// Halt every cron task started by startScheduler. Called from main.ts'
+// graceful-shutdown handler so no new tick begins while the bot is tearing
+// down its Discord client and Mongo connection. Best-effort: a task that
+// refuses to stop is logged-and-skipped rather than blocking shutdown.
+export function stopScheduler(): void {
+	for (const task of scheduledTasks) {
+		try {
+			task.stop();
+		} catch (err) {
+			console.warn("[scheduler] failed to stop a cron task during shutdown", err);
+		}
+	}
+	scheduledTasks.length = 0;
 }
 
 export async function announceSeasonEnd(client: Client, event: IGameEvent): Promise<void> {

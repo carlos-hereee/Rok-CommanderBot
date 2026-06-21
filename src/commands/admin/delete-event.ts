@@ -9,10 +9,10 @@ import {
 	MessageFlags,
 } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { infoEmbed, errorEmbed } from "@utils/embedBuilder.js";
 
-const c = embedContent.deleteEvent;
+const c = rokCommanderCopy.deleteEvent;
 
 export const data = new SlashCommandBuilder()
 	.setName("delete-event")
@@ -81,7 +81,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(cancel, confirm);
 
 	const confirmMessage = await interaction.reply({
-		embeds: [infoEmbed(c.confirmTitle, c.confirmDescription(event.name), embedContent.COLORS.ERROR)],
+		embeds: [infoEmbed(c.confirmTitle, c.confirmDescription(event.name), rokCommanderCopy.COLORS.ERROR)],
 		components: [row],
 		flags: MessageFlags.Ephemeral,
 	});
@@ -100,7 +100,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 		// confirmed — soft delete
 		await eventStore.deleteInGuild(event.eventId, guildId);
 		await button.update({
-			embeds: [infoEmbed(c.confirmTitle, c.successDescription(event.name), embedContent.COLORS.SCHEDULE)],
+			embeds: [infoEmbed(c.confirmTitle, c.successDescription(event.name), rokCommanderCopy.COLORS.SCHEDULE)],
 			components: [],
 		});
 	} catch {

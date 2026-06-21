@@ -4,18 +4,21 @@ import clientReady from "@commands/utility/ready.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
-import { startScheduler } from "@features/reminders/ReminderScheduler.js";
-import { connectMongoose } from "@db/db.js";
+import type { Server } from "http";
+import dns from "dns";
+import { startScheduler, stopScheduler } from "@features/reminders/ReminderScheduler.js";
+import { connectMongoose, disconnectMongoose } from "@db/db.js";
 import { registerActivityListeners } from "@features/activity-tracking/ActivityTracker.js";
 import { startApiServer } from "@api/server.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
-import { arrivalEmbed, errorEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { arrivalEmbed, errorEmbed, pairingCodeEmbed } from "@utils/embedBuilder.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { GuildSetupManager } from "@features/setup/GuildSetupManager.js";
 import { registerChannelDeleteWatcher } from "@features/setup/ChannelDeleteWatcher.js";
 import { checkOnboardingAndNotifyOwner } from "@features/setup/OnboardingCheck.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
+import { pendingPairingStore } from "@db/stores/pendingPairingStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 import { refreshAllSchedules } from "@features/schedule/ScheduleBoard.js";
 import { postFeatureAnnouncements } from "@features/announcements/postFeatureAnnouncement.js";
@@ -25,8 +28,29 @@ import { dispatchButton, dispatchModal } from "@handlers/interactionRegistry.js"
 import { registerDecreeEditHandlers } from "@features/schedule/decreeEditHandlers.js";
 import { registerLeaderboardChannelHandlers } from "@features/leaderboard/leaderboardChannelHandlers.js";
 import { refreshAllNextUp } from "@features/schedule/NextUpBoard.js";
-import { ensureGoLiveButtonOnScheduleBoard, registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
+import { refreshAllLeaderboards } from "@features/leaderboard/LeaderboardBoard.js";
+import { registerScheduleControlHandlers } from "@features/schedule/ScheduleControls.js";
 import { registerSuggestionBoxHandlers } from "@features/suggestion-box/SuggestionBox.js";
+import { registerPollHandlers, dispatchPolls, logPollTallies } from "@features/polls/PollDispatcher.js";
+import { registerSelfDestructHandlers } from "@features/setup/selfDestruct.js";
+import { registerPowerUpHandlers, removeAllPowerUpPanels } from "@features/power-ups/PowerUps.js";
+import { registerGreeter, ensureIntroChannelsWritable } from "@features/greeter/welcomeNewMember.js";
+
+// ── DNS resolver guard ─────────────────────────────────────────────────────
+// Some dev machines leave node's DNS library (c-ares) unable to read the system
+// resolver config, so it falls back to its hard-coded 127.0.0.1 default where
+// nothing is listening — and EVERY lookup fails with ECONNREFUSED, including the
+// Atlas SRV record mongoose needs at startup. Detect that loopback-only fallback
+// and point node at public resolvers instead. Runs at module load, before
+// connectMongoose (the first DNS consumer) is called below. No-op in production:
+// Heroku / Railway report real resolvers, so the condition is false there.
+const dnsResolvers = dns.getServers();
+if (dnsResolvers.length === 0 || dnsResolvers.every((server) => server === "127.0.0.1" || server === "::1")) {
+	console.warn(
+		`[dns] system resolver was loopback-only (${dnsResolvers.join(", ") || "none"}); falling back to public DNS so SRV lookups work`
+	);
+	dns.setServers(["1.1.1.1", "1.0.0.1", "8.8.8.8"]);
+}
 
 // paths
 const __filename = fileURLToPath(import.meta.url);
@@ -39,7 +63,12 @@ const client = new Client({
 		GatewayIntentBits.GuildMessages,
 		GatewayIntentBits.GuildVoiceStates, // ← needed for VoiceStateUpdate
 		GatewayIntentBits.GuildPresences, // ← needed for PresenceUpdate
-		GatewayIntentBits.MessageContent,
+		// MessageContent intent intentionally NOT requested: the bot reads no
+		// message text (every message.content reference is commented-out legacy
+		// code, and there is no messageCreate listener). MessageContent is a
+		// privileged intent gated by Discord verification at 100+ guilds, so
+		// requesting it while unused is pure verification risk. Re-add only if a
+		// feature genuinely needs to read message bodies.
 		GatewayIntentBits.GuildMessageReactions, // ← needed for MessageReactionAdd
 	],
 	// Discord only sends full data for recent messages.
@@ -55,6 +84,62 @@ const client = new Client({
 });
 
 clientReady(client);
+
+// ── process lifecycle: graceful shutdown + global error nets ──────────
+// Railway sends SIGTERM on every deploy. Without a handler the cron keeps
+// firing while the client and Mongo connection are torn down, which can cut a
+// reminder fire between its Discord post and its dedup-row write (→ a duplicate
+// on the next boot). The shutdown sequence stops new work first, then tears
+// down in dependency order so an in-flight write has a chance to flush.
+let apiServer: Server | undefined;
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal: string, exitCode = 0): Promise<void> {
+	if (isShuttingDown) return; // a second signal during teardown is a no-op
+	isShuttingDown = true;
+	console.log(`[shutdown] received ${signal} — shutting down gracefully`);
+	// ① stop cron so no new reminder tick begins mid-teardown.
+	try {
+		stopScheduler();
+	} catch (err) {
+		console.error("[shutdown] stopScheduler failed", err);
+	}
+	// ② stop accepting new HTTP requests.
+	try {
+		apiServer?.close();
+	} catch (err) {
+		console.error("[shutdown] api server close failed", err);
+	}
+	// ③ disconnect the gateway (halts interaction + event handling).
+	try {
+		await client.destroy();
+	} catch (err) {
+		console.error("[shutdown] client.destroy failed", err);
+	}
+	// ④ close Mongo last so any in-flight write lands before the socket drops.
+	try {
+		await disconnectMongoose();
+	} catch (err) {
+		console.error("[shutdown] mongoose disconnect failed", err);
+	}
+	console.log("[shutdown] complete");
+	process.exit(exitCode);
+}
+
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+
+// The bot has many fire-and-forget side effects; an unhandled rejection should
+// be logged, not crash the process. An uncaught exception leaves an undefined
+// state, so we tear down cleanly and let Railway restart us with a non-zero
+// code rather than limp along corrupted.
+process.on("unhandledRejection", (reason) => {
+	console.error("[process] unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+	console.error("[process] uncaughtException:", err);
+	void gracefulShutdown("uncaughtException", 1);
+});
 
 // load commands first
 (async () => {
@@ -120,6 +205,22 @@ clientReady(client);
 				// feature shipped may have Onboarding enabled and would not have
 				// been DM'd yet; the idempotency log gates duplicates.
 				await checkOnboardingAndNotifyOwner(client, guild);
+				// ── pairing code DM (FUTURE_PLANS item 63, Phase 1) ──
+				// On a re-invite the owner may be following the dashboard panel's
+				// instruction to claim this guild, so the pairing code is the ONLY
+				// DM here: INTRO_DM_SENT is already set from the original install,
+				// so no arrival DM fires. Self-contained try/catch because some
+				// owners block DMs and a failed pairing DM must not abort
+				// guildCreate. PAIRING_CODE_SENT is logged only after the DM
+				// actually leaves so the funnel counts delivered codes.
+				try {
+					const owner = await guild.fetchOwner();
+					const pairingCode = await pendingPairingStore.issue(guild.id, guild.ownerId);
+					await owner.send({ embeds: [pairingCodeEmbed(pairingCode)] });
+					await botLogStore.log(guild.id, BOT_LOG_EVENTS.PAIRING_CODE_SENT, { ownerId: guild.ownerId });
+				} catch (pairingError) {
+					console.warn(`[main] pairing code DM failed for guild ${guild.id}`, pairingError);
+				}
 				return;
 			}
 
@@ -128,6 +229,19 @@ clientReady(client);
 			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
 			await owner.send({ embeds: [arrivalEmbed(guild.name, owner.id)] });
 			await botLogStore.log(guild.id, BOT_LOG_EVENTS.INTRO_DM_SENT, { ownerId: guild.ownerId });
+			// ── pairing code DM (FUTURE_PLANS item 63, Phase 1) ──
+			// A second DM right after the arrival embed so a brand-new owner can
+			// claim this guild from the plugin dashboard with no slash command.
+			// Self-contained try/catch so a blocked-DM owner does not abort the
+			// rest of guildCreate, and PAIRING_CODE_SENT is logged only when the
+			// DM actually leaves so the funnel counts delivered codes.
+			try {
+				const pairingCode = await pendingPairingStore.issue(guild.id, guild.ownerId);
+				await owner.send({ embeds: [pairingCodeEmbed(pairingCode)] });
+				await botLogStore.log(guild.id, BOT_LOG_EVENTS.PAIRING_CODE_SENT, { ownerId: guild.ownerId });
+			} catch (pairingError) {
+				console.warn(`[main] pairing code DM failed for guild ${guild.id}`, pairingError);
+			}
 			// Onboarding compat heads-up. Fires AFTER the arrival DM so the
 			// owner gets the welcome before the operational notice. The
 			// helper bails silently when Onboarding is off or our category
@@ -153,6 +267,9 @@ clientReady(client);
 	registerLeaderboardChannelHandlers();
 	registerScheduleControlHandlers();
 	registerSuggestionBoxHandlers();
+	registerPollHandlers();
+	registerSelfDestructHandlers();
+	registerPowerUpHandlers();
 
 	// then register the interaction  listerner
 	client.on(Events.InteractionCreate, async (interaction) => {
@@ -185,7 +302,7 @@ clientReady(client);
 				if (!interaction.replied && !interaction.deferred) {
 					await interaction
 						.reply({
-							embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+							embeds: [errorEmbed(rokCommanderCopy.responses.commandExecuteFailure)],
 							flags: MessageFlags.Ephemeral,
 						})
 						.catch(() => undefined);
@@ -207,7 +324,7 @@ clientReady(client);
 				if (!interaction.replied && !interaction.deferred) {
 					await interaction
 						.reply({
-							embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+							embeds: [errorEmbed(rokCommanderCopy.responses.commandExecuteFailure)],
 							flags: MessageFlags.Ephemeral,
 						})
 						.catch(() => undefined);
@@ -233,19 +350,28 @@ clientReady(client);
 				// guild hasn't run /setup yet — no config means no admin role is defined
 				if (!config) {
 					await interaction.reply({
-						embeds: [errorEmbed(embedContent.responses.setupRequired)],
+						embeds: [errorEmbed(rokCommanderCopy.responses.setupRequired)],
 						flags: MessageFlags.Ephemeral,
 					});
 					return;
 				}
 
-				const member = interaction.guild?.members.cache.get(interaction.user.id);
 				const isOwner = interaction.user.id === interaction.guild?.ownerId;
+				// Resolve the invoking member cache-first, then fall back to a fetch.
+				// The members cache can be cold (large guild, fresh restart, gateway
+				// gap), and a cache miss previously denied a legitimate admin with
+				// "no wizard powers." Only pay the fetch when there is an adminRoleId
+				// to check and the actor is not already the owner, so the hot paths
+				// (owner, or guild with no admin role) stay cache-only.
+				let member = interaction.guild?.members.cache.get(interaction.user.id) ?? null;
+				if (!member && !isOwner && config.adminRoleId) {
+					member = (await interaction.guild?.members.fetch(interaction.user.id).catch(() => null)) ?? null;
+				}
 				const hasAdminRole = (config.adminRoleId && member?.roles.cache.has(config.adminRoleId)) ?? false;
 
 				if (!isOwner && !hasAdminRole) {
 					await interaction.reply({
-						embeds: [errorEmbed(embedContent.responses.noWizardPowers)],
+						embeds: [errorEmbed(rokCommanderCopy.responses.noWizardPowers)],
 						flags: MessageFlags.Ephemeral,
 					});
 					return;
@@ -261,12 +387,12 @@ clientReady(client);
 			// interaction might already be replied to
 			if (interaction.replied || interaction.deferred) {
 				await interaction.followUp({
-					embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+					embeds: [errorEmbed(rokCommanderCopy.responses.commandExecuteFailure)],
 					flags: MessageFlags.Ephemeral,
 				});
 			} else {
 				await interaction.reply({
-					embeds: [errorEmbed(embedContent.responses.commandExecuteFailure)],
+					embeds: [errorEmbed(rokCommanderCopy.responses.commandExecuteFailure)],
 					flags: MessageFlags.Ephemeral,
 				});
 			}
@@ -282,7 +408,7 @@ clientReady(client);
 		// start scheduler and activity tracker, and API server
 		startScheduler(client);
 		registerActivityListeners(client);
-		startApiServer(client);
+		apiServer = startApiServer(client);
 
 		// ── outage watcher ────────────────────────────────────────
 		// Polls serverApi reachability state every 60s. DMs the platform
@@ -301,6 +427,14 @@ clientReady(client);
 		// while the bot was offline. See ChannelDeleteWatcher.ts for the
 		// cooldown + ownership probe contract.
 		registerChannelDeleteWatcher(client);
+
+		// ── new-member greeter ────────────────────────────────────
+		// Attach the guildMemberAdd listener so new joins get welcomed (ping +
+		// random icebreaker) in the introductions channel. Needs the GuildMembers
+		// intent, already enabled above. ensureIntroChannelsWritable (after the
+		// homebase sweep) makes existing guilds' intro channels member-writable
+		// so newcomers can actually answer.
+		registerGreeter(client);
 
 		// ── homebase self heal on wake up ──────────────────────────
 		// What: every guild the bot is cached in gets an ensureHomebase pass.
@@ -359,26 +493,16 @@ clientReady(client);
 					console.warn(`[main] onboarding compat check failed for guild ${guild.id}`, onboardingError);
 				}
 
-				// ── Schedule board Go Live Now button (FUTURE_PLANS item 36 partial) ─
-				// Defensive check: if the schedule board message already
-				// carries the button, no-op. Otherwise attach. Covers
-				// guilds whose schedule message was posted before this
-				// feature shipped. refreshAllSchedules below ALSO re-
-				// attaches components via ScheduleBoard's edit path, so
-				// this helper is belt-and-suspenders rather than load-
-				// bearing. Cheap (one fetch per guild), idempotent.
-				try {
-					await ensureGoLiveButtonOnScheduleBoard(client, guild);
-				} catch (controlError) {
-					console.warn(`[main] schedule board button ensure failed for guild ${guild.id}`, controlError);
-				}
+				// Schedule board control row (Go Live + phase-gated Pause/Resume
+				// toggle) is rebuilt by refreshAllSchedules below on every boot, so
+				// no separate boot-time attach step is needed anymore.
 
 				// ── intro embed refresh ───────────────────────────────
 				// What: after ensureHomebase has confirmed (or rebuilt) the
 				//       homebase for this guild, sweep the six stored intro
 				//       messages and edit them in place so copy changes in
-				//       embed-content.ts land on the next boot without
-				//       forcing an admin to rebuild.
+				//       the copy packs (@base/copy/packs) land on the next
+				//       boot without forcing an admin to rebuild.
 				// When: only after ensureHomebase finishes so we never edit
 				//       a channel that was just deleted. A fresh "built"
 				//       already wrote the latest copy so this call is a no
@@ -451,6 +575,17 @@ clientReady(client);
 		//       guild id) so errors on one guild cannot stall the rest.
 		await refreshAllSchedules(client);
 
+		// ── startup rehydration of the leaderboard board ──
+		// What: refresh every guild's pinned leaderboard message so this week's
+		//       standings are current after any downtime, and so the weekly
+		//       window reflects the right week on boot (a bot that was offline
+		//       across a week rollover would otherwise show last week until the
+		//       next activity or reminder fire).
+		// Where: mirrors refreshAllSchedules above. Per-guild errors are logged
+		//        and swallowed inside refreshLeaderboard so one bad guild cannot
+		//        stall the rest.
+		await refreshAllLeaderboards(client);
+
 		// ── startup sweep of next-decree boards ──
 		// What: posts every upcoming decree in the next 24h horizon to each
 		//       guild's nextDecreeChannelId. Pairs with refreshAllSchedules:
@@ -462,6 +597,21 @@ clientReady(client);
 		// Where: failures per-guild are logged and swallowed inside
 		//        refreshAllNextUp; one bad guild does not stall the others.
 		await refreshAllNextUp(client);
+
+		// ── retire the old standalone control panels (2026-06 fold-in) ──
+		// What: the channel controls (toggle pings, say hello, refresh) moved
+		//       off standalone "power-up" panels onto the pinned intro guides.
+		//       This one-time sweep deletes any leftover panel + clears its id.
+		// When: after the homebase sweep so the channels still exist to clean.
+		//       Idempotent; per-guild failures are logged and swallowed inside
+		//       the sweep so one bad guild cannot stall the rest.
+		await removeAllPowerUpPanels(client);
+
+		// ── make existing guilds' introductions channels member-writable ──
+		// New guilds get this from createChannels' introOverwrites; this
+		// idempotent sweep brings guilds set up before the greeter shipped into
+		// line so newcomers can post their answer to the welcome icebreaker.
+		await ensureIntroChannelsWritable(client);
 
 		// ── feature announcement sweep ─────────────────────────────
 		// What: once-per-version broadcast to every setup-complete guild.
@@ -477,6 +627,17 @@ clientReady(client);
 		//        guild is isolated so one failure cannot stall others.
 		//        Errors are logged and swallowed inside the helper.
 		await postFeatureAnnouncements(client);
+
+		// ── audience poll broadcast ──────────────────────────────
+		// What: broadcast each active poll to eligible guilds once (idempotent
+		//       per poll via the poll_sent botLog key), then log the cross-guild
+		//       tally so the platform owner can read accumulating results from
+		//       Railway logs.
+		// When: boot tail, after postFeatureAnnouncements, so channel ids in
+		//       GuildConfig are freshest. Same per-guild isolation — one guild's
+		//       failure cannot stall the rest (handled inside dispatchPolls).
+		await dispatchPolls(client);
+		await logPollTallies();
 
 		console.log(LOG_MESSAGES.main.readyBanner(client.user?.tag ?? "unknown"));
 	});

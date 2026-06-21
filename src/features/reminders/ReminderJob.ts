@@ -5,6 +5,7 @@ import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { reminderEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { refreshNextUp } from "@features/schedule/NextUpBoard.js";
+import { refreshLeaderboard } from "@features/leaderboard/LeaderboardBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
 export async function fireReminder(client: Client, event: IGameEvent, occurrence: Date, offsetMinutes: number): Promise<void> {
@@ -25,8 +26,11 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 		return;
 	}
 
-	// ② build the embed
-	const embed = reminderEmbed(event, occurrence, offsetMinutes);
+	// ② build the embed. Resolve the event image with the guild default as the
+	// fallback (media attachments). null when neither is set, in which case
+	// reminderEmbed renders no thumbnail and the embed is unchanged from before.
+	const img = event.imageUrl ?? config.defaultEventImageUrl ?? null;
+	const embed = reminderEmbed(event, occurrence, offsetMinutes, img, config);
 
 	// ③ compose the mention. precedence is event override → guild member
 	// role → @here. The per-event override (event.mentionRoleId) lets a
@@ -73,6 +77,12 @@ export async function fireReminder(client: Client, event: IGameEvent, occurrence
 	// the NextUpBoard channel is append-only and a missed post just means
 	// the next refresh trigger (next fire, next boot) catches up.
 	refreshNextUp(client, event.guildId).catch((err) => console.error("[reminder] refreshNextUp failed after fire", err));
+
+	// ⑨ refresh the pinned leaderboard board so this week's standings reflect
+	// the fresh acknowledgement window. Fire-and-forget for the same reason as
+	// the two refreshes above — a Discord hiccup here must not undo the
+	// successful reminder fire.
+	refreshLeaderboard(client, event.guildId).catch((err) => console.error(LOG_MESSAGES.leaderboard.refreshAfterReminderFailed, err));
 }
 
 /*

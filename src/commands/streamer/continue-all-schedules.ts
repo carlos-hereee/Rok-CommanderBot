@@ -5,7 +5,7 @@ import {
 	MessageFlags,
 } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
@@ -15,7 +15,7 @@ import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 // set. The intent of running this command is "everything back on right
 // now", so clearing pausedUntil alongside paused is correct.
 
-const c = embedContent.continueAllSchedules;
+const c = rokCommanderCopy.continueAllSchedules;
 
 export const data = new SlashCommandBuilder()
 	.setName("continue-all-schedules")
@@ -68,14 +68,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
 	if (failed > 0) {
 		await interaction.reply({
-			embeds: [infoEmbed("▶️ Partially resumed", c.partialFailure(succeeded, failed), embedContent.COLORS.SCHEDULE)],
+			embeds: [infoEmbed("▶️ Partially resumed", c.partialFailure(succeeded, failed), rokCommanderCopy.COLORS.SCHEDULE)],
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
 	await interaction.reply({
-		embeds: [infoEmbed("▶️ All schedules resumed", c.resumed(succeeded), embedContent.COLORS.SCHEDULE)],
+		embeds: [infoEmbed("▶️ All schedules resumed", c.resumed(succeeded), rokCommanderCopy.COLORS.SCHEDULE)],
 		flags: MessageFlags.Ephemeral,
 	});
 }

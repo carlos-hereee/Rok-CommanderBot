@@ -7,6 +7,7 @@ import { isEventWindowOpen } from "@features/events/occurrenceCalculator.js";
 import { getUpcomingOccurrences } from "@features/events/occurrenceCalculator.js";
 import { IVoiceSession } from "./activity.types.js";
 import { computeScore } from "./ParticipationStore.js";
+import { scheduleLeaderboardRefresh } from "@features/leaderboard/LeaderboardBoard.js";
 import { BOT_CONSTANTS } from "@base/constants/BOT_CONSTANTS.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 
@@ -95,6 +96,11 @@ export function registerActivityListeners(client: Client): void {
 				});
 
 				await updateScore(log.eventId, log.eventOccurrence, fullUser.id);
+
+				// nudge the pinned leaderboard board so this week's standings
+				// reflect the new acknowledgement. Coalesced per guild so a flurry
+				// of ✅ reactions produces one edit, not dozens.
+				if (reactionGuildId) scheduleLeaderboardRefresh(client, reactionGuildId);
 			} catch (error) {
 				console.error(LOG_MESSAGES.activity.reactionError, error);
 			}
@@ -160,6 +166,9 @@ export function registerActivityListeners(client: Client): void {
 					username,
 					data: { joinedVoiceDuring: true },
 				});
+
+				// coalesced leaderboard refresh — see the reaction listener note.
+				scheduleLeaderboardRefresh(client, guildId);
 			}
 
 			// ── player left voice ──
@@ -186,6 +195,9 @@ export function registerActivityListeners(client: Client): void {
 				});
 
 				await updateScore(session.eventId, session.eventOccurrence, userId);
+
+				// coalesced leaderboard refresh — see the reaction listener note.
+				if (voiceGuildId) scheduleLeaderboardRefresh(client, voiceGuildId);
 			}
 		} catch (error) {
 			console.error(LOG_MESSAGES.activity.voiceError, error);

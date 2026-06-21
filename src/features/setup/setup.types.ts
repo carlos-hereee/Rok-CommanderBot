@@ -29,6 +29,10 @@ export interface ICreatedChannels {
 	// the NextUpBoard's permanent-post audit trail does not drown the
 	// 15/30 minute reminder pings.
 	nextDecreeChannelId: string;
+	// id of the admin-only command channel. Holds the relocated admin command
+	// guide + the admin power-up panel; kept out of inner-sanctum so daily
+	// announcements there do not bury the quick-action controls.
+	adminCommandsChannelId: string;
 }
 
 // live channel objects returned from createChannels
@@ -41,6 +45,7 @@ export interface IChannelObjects {
 	announcementsChannel: TextChannel;
 	adminChannel: TextChannel;
 	nextDecreeChannel: TextChannel;
+	adminCommandsChannel: TextChannel;
 }
 
 // return shape of GuildSetupManager.ensureHomebase. the ready sweep in main.ts
@@ -53,7 +58,7 @@ export interface IChannelObjects {
 //   • "repaired" — category was intact and owned by this bot, but one or
 //                  more individual channels were missing and were rebuilt.
 //                  repairedChannels lists the human readable names (same
-//                  strings embedContent.setup.channels exposes). A per
+//                  strings the copy pack's setup.channels exposes). A per
 //                  channel notice is posted to the inner sanctum.
 //   • "skipped"  — stored homebase exists in full and is owned by this bot.
 export interface IEnsureHomebaseResult {

@@ -15,6 +15,22 @@ const eventSchema = new Schema(
 		eventId: { type: String, required: true, unique: true, default: v4 },
 		name: { type: String, required: true }, // e.g. "Ruins"
 		description: { type: String, default: "" },
+		// ── optional event image (v1.6 Phase 4, media attachments) ──────
+		// What:  public https URL of an image rendered in this event's Discord
+		//        embeds — a large banner on go-live and decree posts, a small
+		//        thumbnail on reminders. null means no image and the embeds post
+		//        as text exactly as before.
+		// Who:   set by the dashboard upload flow (the client + server half of
+		//        the media-attachments feature). The bot only persists and
+		//        renders it; the create/update handler passes it straight through
+		//        and the embed sites read it with GuildConfig.defaultEventImageUrl
+		//        as the fallback.
+		// When:  optional and additive — legacy events load null and render
+		//        unchanged, so no backfill.
+		// How:   plain nullable String. URL validation / whitelisting is the
+		//        server-and-client half's responsibility; the bot trusts the
+		//        stored value (it only ever reaches setImage/setThumbnail).
+		imageUrl: { type: String, default: null },
 		type: { type: String, required: true, enum: ["recurring", "one-time"] },
 		intervalHours: { type: Number, required: true }, // e.g. 36 or 84
 		firstOccurrence: { type: Date, required: true }, // anchor point for schedule calculation
@@ -101,6 +117,18 @@ const eventSchema = new Schema(
 	},
 	{ timestamps: true } // adds createdAt + updatedAt automatically
 );
+
+// Hot-path index for the reminder scheduler. Every per-minute cron tick runs
+// EventModel.find({ guildId, active: true }) once per guild (see eventStore
+// .findByGuildId / .findAll). Without this compound index those are collection
+// scans, so tick duration grows linearly with the Event collection and
+// eventually overruns the 60s budget — the condition the overlap guard in
+// ReminderScheduler exists to survive. The field order is { guildId, active }
+// because guildId is the high-selectivity equality match and active narrows
+// within it; this same index also serves the guild-scoped findByGuildId reads
+// the dashboard and ActivityTracker issue. Not unique: a guild legitimately
+// has many active events.
+eventSchema.index({ guildId: 1, active: 1 });
 
 const EventModel = mongoose.model("Event", eventSchema);
 export default EventModel;

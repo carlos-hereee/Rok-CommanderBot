@@ -31,6 +31,11 @@ export interface RemoteEvent {
 	guildId: string;
 	name: string;
 	description: string;
+	// public https image URL or null. Carried verbatim through hydrate (it is a
+	// string, not a date) so consumers read the same imageUrl under the remote
+	// path as under the local Mongoose path. RemoteEventHydrated inherits it
+	// because it is not in the Omit list below.
+	imageUrl: string | null;
 	type: "recurring" | "one-time";
 	intervalHours: number;
 	firstOccurrence: string;
@@ -192,6 +197,7 @@ export const remoteEventStore = {
 		reminderOffsets?: number[];
 		prepSteps?: { id: string; label: string; order: number }[];
 		mentionRoleId?: string | null;
+		imageUrl?: string | null;
 	}): Promise<RemoteEventHydrated> {
 		// Normalize Date → ISO string so the wire payload is JSON-serializable and matches
 		// the server's expected input shape.
@@ -210,6 +216,7 @@ export const remoteEventStore = {
 			reminderOffsets: data.reminderOffsets ?? [30, 15],
 			prepSteps: data.prepSteps ?? [],
 			mentionRoleId: data.mentionRoleId ?? null,
+			imageUrl: data.imageUrl ?? null,
 		};
 		const result = await serverApi.post<{ event: RemoteEvent }>("/api/events", body, { guildId: data.guildId });
 		invalidateGuild(data.guildId);
@@ -226,6 +233,7 @@ export const remoteEventStore = {
 		reminderOffsets: number[];
 		prepSteps: { id: string; label: string; order: number }[];
 		mentionRoleId: string | null;
+		imageUrl: string | null;
 		paused: boolean;
 		pausedUntil: Date | string | null;
 	}>): Promise<RemoteEventHydrated | null> {

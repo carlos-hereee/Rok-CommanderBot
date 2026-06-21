@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
 
 // ── /configure-auto-heal ──────────────────────────────────────────────
 // What:  master switch for the bot's channel auto-repair behavior.
@@ -72,7 +72,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 				infoEmbed(
 					"Auto-heal already that way",
 					`Channel auto-repair is already ${enabled ? "ON" : "OFF"}. No change made.`,
-					embedContent.COLORS.SCHEDULE
+					COLORS.SCHEDULE
 				),
 			],
 			flags: MessageFlags.Ephemeral,
@@ -87,7 +87,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 			? "The bot will rebuild any homebase channel that goes missing. This is the default behavior."
 			: "The bot will no longer rebuild deleted homebase channels. A single summary line per boot will note which channels would have been repaired, so check the bot's Railway logs if something feels off. Run this command again with `enabled:True` to restore.";
 		await interaction.reply({
-			embeds: [infoEmbed(heading, body, embedContent.COLORS.SCHEDULE)],
+			embeds: [infoEmbed(heading, body, COLORS.SCHEDULE)],
 			flags: MessageFlags.Ephemeral,
 		});
 	} catch (err) {

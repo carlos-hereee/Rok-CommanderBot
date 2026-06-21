@@ -1,5 +1,5 @@
-import { ColorResolvable } from "discord.js";
 import type { IEmbedField, IPluginCopy } from "../types.js";
+import { COLORS, FOOTER, AUTHOR } from "../brand.js";
 
 // ── general-events copy pack (streamer-plugin spec Phase 2 scaffold) ─────
 // What:  the plain-English / streamer-tone alternative to rok-commander.
@@ -33,28 +33,28 @@ import type { IEmbedField, IPluginCopy } from "../types.js";
 const STUB = "[unused in this plugin]";
 
 export const generalEventsCopy: IPluginCopy = {
-	// Platform brand, not bot brand. Same rationale as rok-commander
-	// pack — see that pack's FOOTER comment.
-	FOOTER: "Company Uno",
+	// Brand identity (footer, Dero author, color palette) is shared across all
+	// packs — see @base/copy/brand. Identical to every other pack by design
+	// (the kingdom vs neutral split is words, not chrome).
+	FOOTER,
+	AUTHOR,
+	COLORS,
 
-	// Same palette as rok-commander. Color is neutral by design — the kingdom
-	// vs streamer split happens in words, not in chrome. Keeping the same
-	// keys means embed builders that read `c.COLORS.REMINDER` work without a
-	// branch on plugin id.
-	COLORS: {
-		REMINDER: "Red",
-		SEASON_END: "DarkGrey",
-		LEADERBOARD: "Gold",
-		CONFIRMATION: "Yellow",
-		ERROR: "DarkRed",
-		ARRIVAL: "DarkGold",
-		INTRODUCTION: "DarkGold",
-		COMMANDS: "DarkBlue",
-		SCHEDULE: "DarkGreen",
-		ANNOUNCEMENTS: "DarkRed",
-		ADMIN: "DarkPurple",
-		NEXT_DECREE: "DarkNavy",
-	} satisfies Record<string, ColorResolvable>,
+	// ── new-member greeter (v1.6) ──────────────────────────────────────
+	// Same role as the rok-commander greeter, in neutral voice. Welcome
+	// framings woven with a random icebreaker from the shared bank
+	// (@features/greeter/icebreakers), posted as message content so the ping
+	// notifies. See the rok-commander pack's greeter comment for the rationale.
+	greeter: {
+		framings: [
+			(user: string, q: string) => `👋 Welcome, ${user}! Let's break the ice: ${q}`,
+			(user: string, q: string) => `🎉 New face alert. Welcome ${user}. ${q}`,
+			(user: string, q: string) => `👋 Hey ${user}, welcome in. Quick one: ${q}`,
+			(user: string, q: string) => `✨ Welcome ${user}! ${q}`,
+			(user: string, q: string) => `🙌 Glad you're here, ${user}. ${q}`,
+			(user: string, q: string) => `☕ Welcome aboard, ${user}. ${q}`,
+		] as Array<(user: string, q: string) => string>,
+	},
 
 	listEvents: {
 		title: "📅 Active Events",
@@ -116,6 +116,12 @@ export const generalEventsCopy: IPluginCopy = {
 		row: (medal: string, username: string, score: number, events: number, acknowledged: number) =>
 			`${medal} **${username}**\n` + `Score: ${score} | ` + `Events: ${events} | ` + `Reminders acknowledged: ${acknowledged}`,
 		medals: ["🥇", "🥈", "🥉"],
+		// Shown on the pinned LeaderboardBoard when no member has earned a
+		// standing in the current window yet. Neutral streamer voice; points
+		// members at the two ways to climb so an empty board reads as an
+		// invitation rather than a dead feature.
+		boardEmptyState:
+			"No standings yet this week. React ✅ to event reminders and hop in voice during events to climb the board.",
 	},
 
 	// Public schedule board pinned in the schedule channel. Title
@@ -130,8 +136,9 @@ export const generalEventsCopy: IPluginCopy = {
 				? `📺 Reminders post in <#${announcementsChannelId}>. Keep an eye on this channel.`
 				: "⚠️ No announcements channel configured yet. An admin needs to finish `/setup` before reminders can fire.",
 		noEvents:
-			"📭 No events configured.\n\n" +
-			"An admin can run `/configure-stream-schedule` to set up a recurring stream or `/announce-stream` for a one-off.",
+			"The future has yet to be written.\n\n" +
+			"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
+			"Admins run the slash command `/configure-stream-schedule` to establish the server's schedule.",
 		// `seasonEnded` is reused for general-events as "season ended" wording but
 		// kept as a stub since general-events guilds do not use the season concept.
 		// Code paths that try to render this string are bugs; sentinel surfaces them.
@@ -217,6 +224,19 @@ export const generalEventsCopy: IPluginCopy = {
 			"Once that is done I will build the home channels and start posting reminders for any events you configure.",
 	},
 
+	// ── pairing claim code DM (FUTURE_PLANS item 63) ──
+	// Same role as the rok-commander pairingCode, in plain streamer voice.
+	// Names the code, the 15 minute expiry, where to paste it, and that
+	// re-inviting the bot issues a fresh code.
+	pairingCode: {
+		title: "🔑 Connect this server",
+		description: (code: string) =>
+			"Use this code to connect this server to your dashboard:\n\n" +
+			`**\`${code}\`**\n\n` +
+			"Open the plugin panel on your Company Uno dashboard at companyuno.com and paste it in.\n\n" +
+			"The code expires in **15 minutes**. Re-invite the bot to get a fresh code.",
+	},
+
 	setup: {
 		// Universal category name across packs. Decision 2026-05-22: the category
 		// name is the first field that goes universal across packs (the rest of
@@ -237,7 +257,9 @@ export const generalEventsCopy: IPluginCopy = {
 			schedule: "📅event-schedule",
 			announcements: "📢announcements",
 			admin: "🔒admin",
-			nextDecree: "🛡️up-next",
+			nextDecree: "🔜upcoming-events",
+			// Eighth channel: admin-only command + control surface (mirrors rok-commander).
+			adminCommands: "🎛️admin-controls",
 		},
 	},
 
@@ -308,9 +330,9 @@ export const generalEventsCopy: IPluginCopy = {
 		schedule: {
 			title: "📅 Event Schedule",
 			description:
-				"Upcoming events appear here once configured.\n\n" +
-				"An admin can run `/configure-stream-schedule` to add a recurring stream " +
-				"or `/announce-stream` to schedule a one-off.",
+				"The future has yet to be written.\n\n" +
+				"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
+				"Admins run the slash command `/configure-stream-schedule` to establish the server's schedule.",
 		},
 
 		leaderboard: {
@@ -328,11 +350,11 @@ export const generalEventsCopy: IPluginCopy = {
 		},
 
 		nextDecree: {
-			title: "🛡️ Up Next",
+			title: "🔜 Upcoming Events",
 			description:
-				"A heads-up for the next event on the schedule.\n\n" +
-				"As each event nears within the next day, a fresh post appears here with the time and any prep notes.\n\n" +
-				"*Posts stay around so you can scroll back to confirm what was announced.*",
+				"A heads-up for what is coming next.\n\n" +
+				"As each event moves within the next day, a fresh post appears here with its time and any prep notes.\n\n" +
+				"*Posts stay so you can scroll back to confirm what was announced.*",
 		},
 
 		adminWelcome: {

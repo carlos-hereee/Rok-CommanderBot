@@ -2,7 +2,7 @@ import { ButtonInteraction, PermissionFlagsBits, MessageFlags, TextChannel } fro
 import { registerButton } from "@handlers/interactionRegistry.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { COLORS } from "@base/copy/brand.js";
 
 // ── leaderboard channel handlers ──────────────────────────────────────
 // What:  persistent button handlers that follow up the
@@ -94,7 +94,7 @@ async function handleLeaderboardChannelDelete(interaction: ButtonInteraction): P
 				infoEmbed(
 					"Already removed",
 					"The leaderboard channel is already gone from this server. To restore it later, run /configure-leaderboard-tracking enabled:True with auto-heal enabled.",
-					embedContent.COLORS.SCHEDULE
+					COLORS.SCHEDULE
 				),
 			],
 			flags: MessageFlags.Ephemeral,
@@ -151,7 +151,7 @@ async function handleLeaderboardChannelDelete(interaction: ButtonInteraction): P
 						infoEmbed(
 							"🗑️ Leaderboard channel removed",
 							`**${actor}** removed the leaderboard channel via /configure-leaderboard-tracking.\n\nTo restore it later, an admin can run /configure-leaderboard-tracking enabled:True. Auto-heal will rebuild the channel on the next boot sweep as long as autoHealEnabled is on.`,
-							embedContent.COLORS.SCHEDULE
+							COLORS.SCHEDULE
 						),
 					],
 				});
@@ -165,7 +165,7 @@ async function handleLeaderboardChannelDelete(interaction: ButtonInteraction): P
 				infoEmbed(
 					"🗑️ Leaderboard channel removed",
 					"The leaderboard channel has been deleted from this server and flagged so auto-heal will not rebuild it. To restore it later, run /configure-leaderboard-tracking enabled:True — that re-enables tracking AND clears the removal flag, so the channel rebuilds on the next boot sweep (assuming autoHealEnabled is on).",
-					embedContent.COLORS.SCHEDULE
+					COLORS.SCHEDULE
 				),
 			],
 			flags: MessageFlags.Ephemeral,

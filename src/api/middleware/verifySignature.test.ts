@@ -64,11 +64,14 @@ function signLike(opts: {
 // Loader helper: mocks config with the given values and returns a fresh middleware
 // import. Must run inside tests (not at top level) so vi.resetModules() isolates each
 // configuration cleanly.
-async function loadMiddleware(config: { signingSecret: string; apiKey: string }) {
+async function loadMiddleware(config: { signingSecret: string; apiKey: string; requireSigned?: boolean }) {
 	vi.resetModules();
 	vi.doMock("@utils/config.js", () => ({
 		dashboardSigningSecret: config.signingSecret,
 		dashboardApiKey: config.apiKey,
+		// Strict mode defaults off so existing tests exercise the rollout-era
+		// fallback behavior; the strict-mode tests opt in explicitly.
+		requireSignedRequests: config.requireSigned ?? false,
 	}));
 	const mod = await import("./verifySignature.js");
 	return mod.verifySignature;
@@ -283,5 +286,47 @@ describe("verifySignature", () => {
 		verifySignature(req, res, next);
 		expect(next).not.toHaveBeenCalled();
 		expect(res.status).toHaveBeenCalledWith(401);
+	});
+
+	// ── strict mode (REQUIRE_SIGNED_REQUESTS=true), audit item C2 ──────
+	it("strict mode: rejects an unsigned request even with a valid api key", async () => {
+		// The whole point of strict mode: once both sides sign, a caller holding
+		// only the shared static api key can no longer pass an arbitrary ?guildId=.
+		const verifySignature = await loadMiddleware({ signingSecret: SECRET, apiKey: API_KEY, requireSigned: true });
+		const req = makeReq({ headers: { "x-api-key": API_KEY } });
+		const res = makeRes();
+		const next = vi.fn() as unknown as NextFunction;
+
+		verifySignature(req, res, next);
+		expect(next).not.toHaveBeenCalled();
+		expect(res.status).toHaveBeenCalledWith(401);
+	});
+
+	it("strict mode with no signing secret fails closed (no api-key fallback)", async () => {
+		// Misconfiguration: strict mode promises signature verification but no
+		// secret is configured to verify with. Fail closed rather than silently
+		// downgrade to api-key auth.
+		const verifySignature = await loadMiddleware({ signingSecret: "", apiKey: API_KEY, requireSigned: true });
+		const req = makeReq({ headers: { "x-api-key": API_KEY } });
+		const res = makeRes();
+		const next = vi.fn() as unknown as NextFunction;
+
+		verifySignature(req, res, next);
+		expect(next).not.toHaveBeenCalled();
+		expect(res.status).toHaveBeenCalledWith(401);
+	});
+
+	it("strict mode still admits a fully valid signed request", async () => {
+		const verifySignature = await loadMiddleware({ signingSecret: SECRET, apiKey: API_KEY, requireSigned: true });
+		const timestamp = String(now);
+		const signature = signLike({ method: "GET", path: "/api/events", query: "", body: "", timestamp });
+		const req = makeReq({
+			headers: { "x-timestamp": timestamp, "x-signature": signature, "x-api-key": API_KEY },
+		});
+		const res = makeRes();
+		const next = vi.fn() as unknown as NextFunction;
+
+		verifySignature(req, res, next);
+		expect(next).toHaveBeenCalledTimes(1);
 	});
 });

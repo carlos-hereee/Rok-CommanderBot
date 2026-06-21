@@ -16,8 +16,12 @@ import {
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { ISetupConfig, IAdminRoleConfig, ICreatedChannels, IChannelObjects, IEnsureHomebaseResult } from "./setup.types.js";
 import { ChannelContent } from "./ChannelContent.js";
-import { buildSuggestionBoxButtonRow } from "@features/suggestion-box/SuggestionBox.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import type { ICopyConfig } from "@base/copy/getCopy.js";
+import { buildSuggestionBoxButton } from "@features/suggestion-box/SuggestionBox.js";
+import { buildSelfDestructButton } from "@features/setup/selfDestruct.js";
+import { buildMemberControlButtons, buildAdminControlButtons, buildIcebreakerButton } from "@features/power-ups/PowerUps.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
+import { buildDeroGifAttachment } from "@base/copy/brand.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
@@ -31,7 +35,7 @@ import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
 const AUTO_LEAVE_GRACE_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const { channels } = embedContent.setup;
+const { channels } = rokCommanderCopy.setup;
 
 // What: compose the home base category name, appending the dev suffix
 //       when NODE_ENV === "development".
@@ -39,16 +43,16 @@ const { channels } = embedContent.setup;
 //       prod creates a visually distinct category instead of colliding.
 // When: once per autoSetup call. evaluated at runtime, not module load,
 //       so env changes between runs are respected.
-// Where: embed-content.ts owns the base name and suffix string. this
-//        helper owns the env branching so the constants file stays free
+// Where: the copy packs (@base/copy/packs) own the base name and suffix
+//        string. this helper owns the env branching so the pack stays free
 //        of environment logic.
 // How:   plain string concat. devSuffix is an empty string in prod or any
 //        non-development value, so we could always concat, but the env
 //        check keeps the production name pristine.
 function resolveCategoryName(): string {
 	return process.env.NODE_ENV === "development"
-		? embedContent.setup.categoryName + embedContent.setup.devSuffix
-		: embedContent.setup.categoryName;
+		? rokCommanderCopy.setup.categoryName + rokCommanderCopy.setup.devSuffix
+		: rokCommanderCopy.setup.categoryName;
 }
 
 export class GuildSetupManager {
@@ -229,6 +233,11 @@ export class GuildSetupManager {
 			scheduleChannelId: ids.scheduleChannelId,
 			announcementsChannelId: ids.announcementsChannelId,
 			adminChannelId: ids.adminChannelId,
+			// Persisted immediately (unlike nextDecreeChannelId, which relies on
+			// boot-sweep adoption) so the admin power-up panel — which keys off
+			// adminCommandsChannelId — can post as soon as ensurePowerUps runs
+			// after /setup, without waiting for a reboot.
+			adminCommandsChannelId: ids.adminCommandsChannelId,
 			// v1.5.1 item 9: clear any previously-tracked permission failure
 			// so a guild that recovered from missing-permissions state stops
 			// being on the auto-leave countdown. Safe to set unconditionally
@@ -241,7 +250,7 @@ export class GuildSetupManager {
 			scheduleMessageId,
 			// introMessageIds anchors every other intro embed so
 			// refreshIntroEmbeds can edit them in place on subsequent boots
-			// when embed-content.ts copy changes. This is the field that
+			// when the copy packs (@base/copy/packs) change. This is the field that
 			// makes "rebuild the bot copy without nuking the homebase"
 			// possible.
 			introMessageIds,
@@ -444,6 +453,14 @@ export class GuildSetupManager {
 
 		const stored = await guildConfigStore.findByGuildId(guild.id);
 
+		// ⓪ self-destructed → the owner demolished this homebase and it must stay
+		//    gone until /setup rebuilds it. Skip all build/repair so the boot
+		//    sweep does not resurrect what was deliberately torn down.
+		if (stored?.homebaseDestroyed) {
+			console.log(`[ensureHomebase] guild ${guild.id} homebase is self-destructed; skipping (run /setup to rebuild)`);
+			return { action: "skipped", repairedChannels: [] };
+		}
+
 		// ① no config at all → never built for this guild. build fresh.
 		if (!stored) {
 			await GuildSetupManager.autoSetup(guild, { guildId: guild.id, ownerId: guild.ownerId });
@@ -468,8 +485,14 @@ export class GuildSetupManager {
 		//    stored scheduleMessageId and compare authors. Every autoSetup
 		//    posts exactly this message, so it is a reliable provenance
 		//    marker for the whole homebase.
-		const ownedByUs = await GuildSetupManager.isHomebaseOwnedByThisBot(client, guild.id, stored);
-		if (!ownedByUs) {
+		const ownership = await GuildSetupManager.isHomebaseOwnedByThisBot(client, guild.id, stored);
+		// Rebuild ONLY when the homebase is positively foreign (anchor exists,
+		// authored by a different bot). "unknown" (missing/deleted anchor) falls
+		// through to repair-in-place: rebuilding there would duplicate our OWN
+		// homebase on a benign missing schedule message, and clobber any
+		// /rename-channel names (the rebuild path uses pack defaults). The schedule
+		// board reposts its missing message on the next refresh.
+		if (ownership === "foreign") {
 			console.warn(LOG_MESSAGES.setup.homebaseNotOwned(guild.id));
 			await GuildSetupManager.rebuildFromStaleConfig(guild);
 			await GuildSetupManager.postCastleRebuiltNotice(client, guild.id);
@@ -536,6 +559,11 @@ export class GuildSetupManager {
 		// horizon, so leaders get a scrollable audit trail separate from
 		// the living calendar in scheduleChannelId.
 		"nextDecreeChannelId",
+		// eighth homebase channel. admin-only command + control surface:
+		// the relocated admin command guide (out of inner-sanctum) plus the
+		// admin power-up panel. kept separate so daily inner-sanctum notices
+		// never bury the quick-action controls.
+		"adminCommandsChannelId",
 	] as const;
 
 	// exported so ChannelDeleteWatcher can map a deleted channel id to its
@@ -560,6 +588,9 @@ export class GuildSetupManager {
 		// posts, bot only writes (the category level overwrites already
 		// gate SendMessages for "public" kind).
 		{ configField: "nextDecreeChannelId", displayName: channels.nextDecree, kind: "public" },
+		// 🛡️ eighth — admin command center. admin-only (same gating as the
+		// admin channel); hosts the command guide + admin power-up panel.
+		{ configField: "adminCommandsChannelId", displayName: channels.adminCommands, kind: "admin" },
 	];
 
 	// ── intro content resolver ────────────────────────────────
@@ -572,64 +603,87 @@ export class GuildSetupManager {
 	private static resolveIntroEmbed(
 		field: (typeof GuildSetupManager.CHANNEL_FIELDS)[number],
 		guild: Guild,
-		adminRoleId: string | null
+		adminRoleId: string | null,
+		// Pack selector. Callers that have the loaded GuildConfig (repairOneChannel,
+		// refreshIntroEmbeds) pass it so a non-ROK guild renders neutral intros;
+		// undefined falls back to the rok-commander default (correct on first build).
+		guildConfig?: ICopyConfig | null
 	): EmbedBuilder {
 		switch (field) {
 			case "introChannelId":
-				return ChannelContent.introduction();
+				return ChannelContent.introduction(guildConfig);
 			case "commandsChannelId":
-				return ChannelContent.commandGuide();
+				return ChannelContent.commandGuide(guildConfig);
 			case "leaderboardChannelId":
-				return ChannelContent.leaderboardIntro();
+				return ChannelContent.leaderboardIntro(guildConfig);
 			case "scheduleChannelId":
-				return ChannelContent.scheduleIntro();
+				return ChannelContent.scheduleIntro(guildConfig);
 			case "announcementsChannelId":
-				return ChannelContent.announcementsIntro();
+				return ChannelContent.announcementsIntro(guildConfig);
 			case "adminChannelId":
 				// after Phase 2 the admin channel's intro is the populated
 				// adminWelcome with the real adminRoleId. before Phase 2 it is
 				// the "role pending" placeholder.
-				return adminRoleId ? ChannelContent.adminWelcome(guild.ownerId, adminRoleId) : ChannelContent.adminPending();
+				return adminRoleId
+					? ChannelContent.adminWelcome(guild.ownerId, adminRoleId, guildConfig)
+					: ChannelContent.adminPending(guildConfig);
 			case "nextDecreeChannelId":
 				// pinned header above the NextUpBoard audit trail posts.
 				// Does not depend on adminRoleId because this is a public
 				// channel — mortals read, bot writes.
-				return ChannelContent.nextDecreeIntro();
+				return ChannelContent.nextDecreeIntro(guildConfig);
+			case "adminCommandsChannelId":
+				// the relocated admin command guide is this channel's standard
+				// pinned intro (was a second message in the admin channel before
+				// the 2026-06-19 split). Self-destruct button rides along via
+				// resolveIntroComponents.
+				return ChannelContent.adminCommandGuide(guildConfig);
 		}
 	}
 
 	// ── resolveIntroComponents ────────────────────────────────────
-	// What:  returns the action row(s) that should accompany a given
-	//        channel's intro embed, or null if the channel has no
-	//        component surface (the common case). Only the introductions
-	//        channel currently has a component row (the "Summon me to
-	//        your server, Mortal" invite button).
-	// Who:   populateChannels on first build (via the send() call for
-	//        the intro channel) and refreshIntroEmbeds on every boot
-	//        (both the edit-in-place and repost paths must pass
-	//        components or Discord silently drops them).
+	// What:  returns the action row(s) that accompany a given channel's intro
+	//        embed, or null if it has no buttons (the common case). Two channels
+	//        carry a folded control row (2026-06): the #command-center guide and
+	//        the admin-controls guide. The standalone "power-up" panels were
+	//        retired — every button now rides on these pinned guides.
+	// Who:   populateChannels on first build and refreshIntroEmbeds on every boot
+	//        (both the edit-in-place and repost paths must pass components or
+	//        Discord silently drops them).
 	// When:  called per spec during the intro sweep.
-	// Where: parallels resolveIntroEmbed so a future channel that grows
-	//        a component row (eg. an invite button for a central
-	//        announcement channel) can be added with a single new case.
-	// How:   switch on the spec. Returning null means "do not touch
-	//        components"; returning an array means "replace components
-	//        with this array."
+	// Where: the powerup-prefixed buttons (toggle pings, say hello, refresh) keep
+	//        their customIds so PowerUps.handlePowerUpButton still routes them;
+	//        suggestion-box / invite / self-destruct each expose a bare button
+	//        factory so all of a channel's buttons fit in ONE ActionRow.
+	// How:   compose the ActionRow(s) per channel (command-center uses two rows so
+	//        the wide invite button sits on its own line). null means "no buttons."
 	private static resolveIntroComponents(
 		field: (typeof GuildSetupManager.CHANNEL_FIELDS)[number]
 	): ActionRowBuilder<ButtonBuilder>[] | null {
 		switch (field) {
-			case "introChannelId":
-				return [ChannelContent.introductionComponents()];
 			case "commandsChannelId":
-				// Suggestion Box button on the pinned commandGuide so
-				// members can open the modal with one click instead of
-				// typing /suggestion-box. Returned as ActionRowBuilder
-				// to match the existing component contract.
-				return [buildSuggestionBoxButtonRow()];
+				// #command-center guide row: the member actions — Suggestion Box +
+				// Toggle pings. The invite button and the Icebreaker button are NOT here:
+				// they live on the standalone Summon Dero card (inviteCardComponents) so
+				// they do not crowd this row.
+				return [new ActionRowBuilder<ButtonBuilder>().addComponents(buildSuggestionBoxButton(), ...buildMemberControlButtons())];
+			case "adminCommandsChannelId":
+				// admin-controls guide row (2 buttons): owner-only Self destruct + the
+				// admin controls (Refresh standings).
+				return [new ActionRowBuilder<ButtonBuilder>().addComponents(buildSelfDestructButton(), ...buildAdminControlButtons())];
 			default:
+				// introductions + every other channel: intro embed only, no buttons.
 				return null;
 		}
+	}
+
+	// ── invite card button row ────────────────────────────────────
+	// The Summon Dero card's buttons: the Summon (Link) button + the "Icebreaker"
+	// button (moved off the command guide row 2026-06). Shared by the initial post
+	// (populateChannels) and boot maintenance (refreshIntroEmbeds) so the two stay
+	// in lockstep — the componentsAreEquivalent check on boot keys off this exact row.
+	private static inviteCardComponents(): ActionRowBuilder<ButtonBuilder>[] {
+		return [new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton(), buildIcebreakerButton())];
 	}
 
 	// ── embed equivalence check ──────────────────────────────────
@@ -666,6 +720,20 @@ export class GuildSetupManager {
 
 		if ((a.title ?? null) !== (stored.title ?? null)) return false;
 		if ((a.description ?? null) !== (stored.description ?? null)) return false;
+		// Image comparison. A bundled-attachment image (setImage("attachment://x"))
+		// comes back from a posted message as a Discord CDN url ending in the same
+		// filename, so a literal compare would never match and the embed would
+		// re-post/re-edit every boot. For attachment refs, compare by filename; for
+		// plain urls (e.g. the introductions Dero gif), compare literally so a real
+		// image change still counts as drift worth reposting.
+		const freshImageUrl = a.image?.url ?? null;
+		const storedImageUrl = stored.image?.url ?? null;
+		if (freshImageUrl?.startsWith("attachment://")) {
+			const fileName = freshImageUrl.slice("attachment://".length);
+			if (!storedImageUrl || !storedImageUrl.includes(fileName)) return false;
+		} else if (freshImageUrl !== storedImageUrl) {
+			return false;
+		}
 		if (aFields.length !== bFields.length) return false;
 
 		// Field-by-field compare. Name + value are the only fields that
@@ -680,6 +748,37 @@ export class GuildSetupManager {
 			if ((af.inline ?? false) !== (bf.inline ?? false)) return false;
 		}
 		return true;
+	}
+
+	// ── component equivalence check ──────────────────────────────
+	// What: returns true when the resolved button rows already match the rows on
+	//       a posted message. embedsAreEquivalent compares only the EMBED, so
+	//       without this a button relocation (same copy, different buttons — e.g.
+	//       the 2026-06 controls fold-in) would never reach existing guilds:
+	//       refreshIntroEmbeds short-circuits on embed equivalence and never
+	//       re-sends components.
+	// How:  reduce each side to a per-row, per-button signature (customId | url |
+	//       label | style | emoji) via toJSON so a Builder and a live message
+	//       component compare on the same API shape. Row boundaries are part of
+	//       the signature, so a pure row-restructure (same buttons, regrouped
+	//       across rows — e.g. the 4-in-one-row → 3+1 split) is also detected.
+	private static componentsAreEquivalent(
+		resolved: ActionRowBuilder<ButtonBuilder>[] | null,
+		current: ReadonlyArray<{ toJSON(): unknown }>
+	): boolean {
+		const signature = (rows: ReadonlyArray<{ toJSON(): unknown }>): string =>
+			rows
+				.map((row) => {
+					const json = row.toJSON() as { components?: Array<Record<string, unknown>> };
+					return (json.components ?? [])
+						.map((c) => {
+							const emoji = c.emoji as { name?: string; id?: string } | undefined;
+							return `${c.custom_id ?? ""}|${c.url ?? ""}|${c.label ?? ""}|${c.style ?? ""}|${emoji?.name ?? emoji?.id ?? ""}`;
+						})
+						.join("~~");
+				})
+				.join(" ;; ");
+		return signature(resolved ?? []) === signature(current);
 	}
 
 	// ── single channel repair primitive ───────────────────────
@@ -781,14 +880,14 @@ export class GuildSetupManager {
 		// branch have NO messages (the channel was just created but
 		// never had its id persisted).
 		let introMessageId: string | null = null;
-		const introEmbed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null);
+		const introEmbed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null, stored as unknown as ICopyConfig);
 		const introComponents = GuildSetupManager.resolveIntroComponents(spec.configField);
 
 		try {
 			if (existingByName) {
 				// Scan for an existing bot-authored intro embed with a
 				// matching title. Embed titles are stable identifiers
-				// for each intro (nextDecreeIntro → "🛡️ The Next Decree",
+				// for each intro (nextDecreeIntro → "🔜 Upcoming Events",
 				// etc.) so title comparison is the cheapest way to
 				// recognize our own prior post without storing a hash.
 				const selfId = guild.client.user?.id;
@@ -804,8 +903,9 @@ export class GuildSetupManager {
 
 				if (existingIntro) {
 					// Adopt the existing intro. Also run an in-place
-					// edit so any copy changes in embed-content.ts since
-					// the prior post land immediately (same contract as
+					// edit so any copy changes in the copy packs
+					// (@base/copy/packs) since the prior post land
+					// immediately (same contract as
 					// refreshIntroEmbeds but scoped to this one message).
 					introMessageId = existingIntro.id;
 					try {
@@ -825,15 +925,8 @@ export class GuildSetupManager {
 					components: introComponents ?? [],
 				});
 				introMessageId = introMessage.id;
-				// schedule channel's intro doubles as the pinned board
-				// anchor — repin on repair to preserve that invariant.
-				if (spec.configField === "scheduleChannelId") {
-					try {
-						await introMessage.pin();
-					} catch (pinError) {
-						console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
-					}
-				}
+				// No pin: the schedule channel is read-only, so the board stays put
+				// without one (2026-06 pinning policy — only introductions is pinned).
 			}
 		} catch (error) {
 			console.warn(LOG_MESSAGES.setup.channelRepairFailed(spec.displayName, guild.id), error);
@@ -1103,6 +1196,11 @@ export class GuildSetupManager {
 		try {
 			const channel = await client.channels.fetch(adminChannelId).catch(() => null);
 			if (!channel || !(channel instanceof TextChannel)) return;
+			// Resolve the repair-notice copy in the guild's pack voice. Self-contained
+			// load (mirrors postCastleRebuiltNotice) so both callers — the boot repair
+			// sweep and ChannelDeleteWatcher — get neutral copy on a non-ROK guild
+			// without threading config through every call site. Null → rok default.
+			const config = await guildConfigStore.findByGuildId(guildId);
 			// Single summary embed instead of one-per-channel. When the bot
 			// rebuilds several channels in a single sweep (eg after a
 			// toggle clears userRemovedChannels and auto-heal restores
@@ -1110,7 +1208,7 @@ export class GuildSetupManager {
 			// audit signal without flooding the channel. Single-channel
 			// repairs keep the same shape — the summary template handles
 			// the count===1 case gracefully via singular/plural copy.
-			await channel.send({ embeds: [ChannelContent.channelsRestoredSummary(repairedChannelNames)] });
+			await channel.send({ embeds: [ChannelContent.channelsRestoredSummary(repairedChannelNames, config)] });
 		} catch (error) {
 			console.warn(LOG_MESSAGES.setup.repairNoticePostFailed(guildId), error);
 		}
@@ -1134,7 +1232,7 @@ export class GuildSetupManager {
 			if (!fresh?.adminChannelId) return;
 			const channel = await client.channels.fetch(fresh.adminChannelId).catch(() => null);
 			if (!channel || !(channel instanceof TextChannel)) return;
-			await channel.send({ embeds: [ChannelContent.castleRebuiltNotice()] });
+			await channel.send({ embeds: [ChannelContent.castleRebuiltNotice(fresh)] });
 		} catch (error) {
 			console.warn(LOG_MESSAGES.setup.castleRebuiltNoticePostFailed(guildId), error);
 		}
@@ -1155,33 +1253,46 @@ export class GuildSetupManager {
 	// How:  bail early on any missing piece. Swallow 10008 / 10003 /
 	//       cache misses as "not ours" so a single bad fetch does not crash
 	//       the ready sweep for every other guild.
+	// Tri-state ownership probe. "owned" = the schedule anchor exists and this bot
+	// authored it. "foreign" = the anchor exists but a DIFFERENT bot authored it
+	// (the only positive signal of someone else's homebase). "unknown" = we cannot
+	// check (no anchor stored, the message was deleted, or a fetch failed).
+	//
+	// Callers MUST rebuild only on "foreign" and repair-in-place on "unknown".
+	// Treating "unknown" as "rebuild" was the auto-heal duplicate-homebase bug: a
+	// benign missing/deleted schedule message looked identical to a foreign one,
+	// so a deleted pinned message triggered a full rebuild (new duplicate category
+	// + fresh channels, losing /rename-channel overrides). A missing anchor is not
+	// evidence the homebase is someone else's; ScheduleBoard reposts the message on
+	// its next refresh.
 	static async isHomebaseOwnedByThisBot(
 		client: Client,
 		guildId: string,
 		stored: { scheduleChannelId: string; scheduleMessageId?: string | null }
-	): Promise<boolean> {
+	): Promise<"owned" | "foreign" | "unknown"> {
 		const selfId = client.user?.id;
-		// without our own bot id we cannot compare. treat as not owned so
-		// the caller rebuilds rather than falsely adopting the config.
-		if (!selfId) return false;
-		if (!stored.scheduleMessageId) return false;
+		// No self id or no stored anchor → cannot disprove ownership. "unknown" so
+		// the caller repairs in place instead of doing a destructive rebuild.
+		if (!selfId) return "unknown";
+		if (!stored.scheduleMessageId) return "unknown";
 
 		const channel = await client.channels.fetch(stored.scheduleChannelId).catch(() => null);
-		if (!channel || !(channel instanceof TextChannel)) return false;
+		if (!channel || !(channel instanceof TextChannel)) return "unknown";
 
 		try {
 			const message = await channel.messages.fetch(stored.scheduleMessageId);
-			return message.author.id === selfId;
+			return message.author.id === selfId ? "owned" : "foreign";
 		} catch (error) {
-			// 10008 Unknown Message, 10003 Unknown Channel → stored anchor is
-			// gone. Any other Discord error also means we cannot confirm
-			// ownership, so err on the side of rebuilding.
+			// 10008 Unknown Message / 10003 Unknown Channel → the anchor is gone.
+			// We cannot confirm OR disprove ownership, so "unknown" (repair in
+			// place), NOT a rebuild. A deleted schedule message must never
+			// duplicate the homebase.
 			if (error instanceof DiscordAPIError) {
 				console.warn(LOG_MESSAGES.setup.homebaseOwnershipProbeFailed(guildId, error.code));
 			} else {
 				console.warn(LOG_MESSAGES.setup.homebaseOwnershipProbeFailed(guildId, "unknown"));
 			}
-			return false;
+			return "unknown";
 		}
 	}
 
@@ -1216,7 +1327,7 @@ export class GuildSetupManager {
 		const stored = await guildConfigStore.findByGuildId(config.guildId);
 		if (!stored) throw new Error("No guild config found — channels have not been constructed yet.");
 
-		const [category, introChannel, commandsChannel, leaderboardChannel, scheduleChannel, announcementsChannel, adminChannel] =
+		const [category, introChannel, commandsChannel, leaderboardChannel, scheduleChannel, announcementsChannel, adminChannel, adminCommandsChannel] =
 			(await Promise.all([
 				guild.channels.fetch(stored.categoryId),
 				guild.channels.fetch(stored.introChannelId),
@@ -1225,6 +1336,10 @@ export class GuildSetupManager {
 				guild.channels.fetch(stored.scheduleChannelId),
 				guild.channels.fetch(stored.announcementsChannelId),
 				guild.channels.fetch(stored.adminChannelId),
+				// admin command center: nullable on legacy rows that ran /setup
+				// before this channel existed (the boot sweep creates it later),
+				// so fetch defensively and skip the grant when not yet present.
+				stored.adminCommandsChannelId ? guild.channels.fetch(stored.adminCommandsChannelId) : Promise.resolve(null),
 			])) as (GuildChannel | null)[];
 
 		// grant admin role access to category
@@ -1249,9 +1364,18 @@ export class GuildSetupManager {
 			ReadMessageHistory: true,
 		});
 
+		// grant admin role full access to the admin command center (same gating
+		// as the admin channel). Optional-chained so a legacy row whose channel
+		// the boot sweep has not built yet simply skips the grant.
+		await adminCommandsChannel?.permissionOverwrites.create(config.adminRoleId, {
+			ViewChannel: true,
+			SendMessages: true,
+			ReadMessageHistory: true,
+		});
+
 		// post the real welcome message now that the role is known
 		if (adminChannel?.isTextBased()) {
-			await adminChannel.send({ embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId)] });
+			await adminChannel.send({ embeds: [ChannelContent.adminWelcome(config.ownerId, config.adminRoleId, stored)] });
 		}
 
 		await guildConfigStore.update(config.guildId, {
@@ -1283,6 +1407,23 @@ export class GuildSetupManager {
 			},
 		];
 
+		// Introductions is the one member-writable homebase channel: it doubles
+		// as a greeter surface where new members answer the welcome icebreaker
+		// (welcomeNewMember) and satisfies a Discord Onboarding gate that requires
+		// posting in a channel before full access. Same as publicOverwrites but
+		// WITHOUT the @everyone SendMessages deny.
+		const introOverwrites = [
+			{
+				id: guild.roles.everyone.id,
+				allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+			},
+			GuildSetupManager.botSelfOverwrite(guild),
+			{
+				id: config.ownerId,
+				allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+			},
+		];
+
 		// admin channel: owner only until Phase 2. botSelfOverwrite
 		// required for the same reason as the category: @everyone deny
 		// ViewChannel hides the channel from the bot otherwise.
@@ -1306,12 +1447,13 @@ export class GuildSetupManager {
 			announcementsChannel,
 			adminChannel,
 			nextDecreeChannel,
+			adminCommandsChannel,
 		] = await Promise.all([
 			guild.channels.create({
 				name: channels.intro,
 				type: ChannelType.GuildText,
 				parent: category.id,
-				permissionOverwrites: publicOverwrites,
+				permissionOverwrites: introOverwrites,
 			}),
 			guild.channels.create({
 				name: channels.commands,
@@ -1358,6 +1500,14 @@ export class GuildSetupManager {
 				parent: category.id,
 				permissionOverwrites: publicOverwrites,
 			}),
+			// eighth — admin command center. adminOverwrites (admin-gated like
+			// inner-sanctum); hosts the relocated command guide + the admin panel.
+			guild.channels.create({
+				name: channels.adminCommands,
+				type: ChannelType.GuildText,
+				parent: category.id,
+				permissionOverwrites: adminOverwrites,
+			}),
 		]);
 
 		return {
@@ -1370,6 +1520,7 @@ export class GuildSetupManager {
 				announcementsChannelId: announcementsChannel.id,
 				adminChannelId: adminChannel.id,
 				nextDecreeChannelId: nextDecreeChannel.id,
+				adminCommandsChannelId: adminCommandsChannel.id,
 			},
 			objects: {
 				introChannel,
@@ -1379,6 +1530,7 @@ export class GuildSetupManager {
 				announcementsChannel,
 				adminChannel,
 				nextDecreeChannel,
+				adminCommandsChannel,
 			},
 		};
 	}
@@ -1409,11 +1561,12 @@ export class GuildSetupManager {
 			announcementsChannelId: string;
 			adminChannelId: string;
 			nextDecreeChannelId: string;
-			// Sibling to adminChannelId — both live in the same admin
-			// channel. See GuildConfig.introMessageIds.adminCommandGuideId
-			// for the rationale on breaking the one-key-per-channel
-			// invariant.
-			adminCommandGuideId: string;
+			// Intro anchor for the admin command center (the relocated command
+			// guide). Standard one-key-per-channel slot — the guide is this
+			// channel's only tracked message after the 2026-06-19 split.
+			adminCommandsChannelId: string;
+			// Second pinned message in #command-center: the standalone invite card.
+			inviteCardId: string;
 		};
 	}> {
 		const {
@@ -1424,6 +1577,7 @@ export class GuildSetupManager {
 			announcementsChannel,
 			adminChannel,
 			nextDecreeChannel,
+			adminCommandsChannel,
 		} = discordChannels;
 
 		const [
@@ -1434,14 +1588,15 @@ export class GuildSetupManager {
 			announcementsMsg,
 			adminMsg,
 			nextDecreeMsg,
-			// ── second tracked message in adminChannel ───────────
-			// The admin command guide lives in #inner-sanctum as a
-			// sibling to adminWelcome. Sent in the same Promise.all so
-			// posting happens in one batch and ordering is deterministic.
-			// Persisted separately on introMessageIds.adminCommandGuideId
-			// because the one-message-per-channel invariant does not
-			// hold for this channel anymore.
-			adminCommandGuideMsg,
+			// ── admin command center intro ───────────
+			// The admin command guide is the dedicated admin command center's
+			// pinned intro. Sent in the same Promise.all so posting happens in
+			// one batch and ordering is deterministic. Persisted on
+			// introMessageIds.adminCommandsChannelId like every other channel intro.
+			adminCommandsMsg,
+			// Second #command-center message: the standalone invite card (pitch +
+			// Dero gif + Summon button), pinned separately from the command guide.
+			inviteCardMsg,
 		] = await Promise.all([
 			// intro channel carries both the introduction embed AND the
 			// "Summon me to your server, Mortal" link button. Components
@@ -1449,13 +1604,13 @@ export class GuildSetupManager {
 			// also pass components on edit or Discord will drop the row.
 			introChannel.send({
 				embeds: [ChannelContent.introduction()],
-				components: [ChannelContent.introductionComponents()],
+				components: GuildSetupManager.resolveIntroComponents("introChannelId") ?? [],
 			}),
 			// Initial post includes the Suggestion Box button row so the
 			// pin carries the member-clickable surface from minute one.
 			// resolveIntroComponents returns the same row for refresh
 			// reposts on subsequent boots; keep both call sites aligned.
-			commandsChannel.send({ embeds: [ChannelContent.commandGuide()], components: [buildSuggestionBoxButtonRow()] }),
+			commandsChannel.send({ embeds: [ChannelContent.commandGuide()], components: GuildSetupManager.resolveIntroComponents("commandsChannelId") ?? [] }),
 			leaderboardChannel.send({ embeds: [ChannelContent.leaderboardIntro()] }),
 			scheduleChannel.send({ embeds: [ChannelContent.scheduleIntro()] }),
 			announcementsChannel.send({ embeds: [ChannelContent.announcementsIntro()] }),
@@ -1465,48 +1620,32 @@ export class GuildSetupManager {
 			// is persisted on introMessageIds.nextDecreeChannelId so
 			// refreshIntroEmbeds edits it in place on every boot.
 			nextDecreeChannel.send({ embeds: [ChannelContent.nextDecreeIntro()] }),
-			// Admin command guide, sibling of adminWelcome in the same
-			// admin channel. Pinning handled below alongside the
+			// Admin command guide — the pinned intro of the dedicated admin
+			// command center. Carries the owner-only Self destruct button row
+			// (gated in the handler). Pinning handled below alongside the
 			// schedule + next-decree pins.
-			adminChannel.send({ embeds: [ChannelContent.adminCommandGuide()] }),
+			adminCommandsChannel.send({ embeds: [ChannelContent.adminCommandGuide()], components: GuildSetupManager.resolveIntroComponents("adminCommandsChannelId") ?? [] }),
+			// Standalone invite card in #command-center: short pitch + Dero gif + the
+			// Summon button. Its own message so the wide button is not crammed into
+			// the command guide's row. refreshIntroEmbeds maintains it on boot.
+			commandsChannel.send({
+				embeds: [ChannelContent.inviteCard()],
+				components: GuildSetupManager.inviteCardComponents(),
+				files: [buildDeroGifAttachment()],
+			}),
 		]);
 
+		// Pinning policy (2026-06): pin ONLY member-writable channels. The
+		// introductions channel lets members post, so without a pin the welcome
+		// would get buried under chatter. Every other homebase channel is read-only,
+		// so the bot's message stays put with nothing to bury it — a pin there is
+		// just noise. So we deliberately do NOT pin the schedule board, command
+		// guide, next-decree intro, admin command guide, or invite card.
+		// refreshIntroEmbeds enforces the same rule on boot via shouldBePinned.
 		try {
-			await scheduleMessage.pin();
+			await introMsg.pin();
 		} catch (error) {
-			// pin requires ManageMessages. if the bot's role lacks it the
-			// board still works, the intro just floats in recent history.
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.scheduleChannel.guildId), error);
-		}
-
-		// Pin the next-decree intro as well so mortals who scroll up see
-		// it first even after the channel accumulates hundreds of
-		// audit-trail posts. Same best effort posture as the schedule pin.
-		try {
-			await nextDecreeMsg.pin();
-		} catch (error) {
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.nextDecreeChannel.guildId), error);
-		}
-
-		// Pin the public command center guide so mortals can always
-		// scroll up to it even if the channel accumulates other content
-		// in the future. Today #command-center is read-only for mortals
-		// so in practice nothing pushes the guide down, but the pin
-		// future-proofs it.
-		try {
-			await commandsMsg.pin();
-		} catch (error) {
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.commandsChannel.guildId), error);
-		}
-
-		// Pin the admin command guide for the same reason as the public
-		// one — the inner sanctum accumulates self-heal notices,
-		// feature announcements, and ad-hoc admin chatter, so the pin
-		// keeps the guide scannable as the primary reference.
-		try {
-			await adminCommandGuideMsg.pin();
-		} catch (error) {
-			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.adminChannel.guildId), error);
+			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.introChannel.guildId), error);
 		}
 
 		return {
@@ -1522,7 +1661,8 @@ export class GuildSetupManager {
 				announcementsChannelId: announcementsMsg.id,
 				adminChannelId: adminMsg.id,
 				nextDecreeChannelId: nextDecreeMsg.id,
-				adminCommandGuideId: adminCommandGuideMsg.id,
+				adminCommandsChannelId: adminCommandsMsg.id,
+				inviteCardId: inviteCardMsg.id,
 			},
 		};
 	}
@@ -1530,7 +1670,7 @@ export class GuildSetupManager {
 	// ── intro embed refresh on boot ──────────────────────────────
 	// What:  for each of the six homebase channels, edit the stored intro
 	//        message in place so a restarted bot ships updated copy from
-	//        embed-content.ts without forcing the operator to rebuild the
+	//        the copy packs (@base/copy/packs) without forcing the operator to rebuild the
 	//        homebase. If the stored message is missing, repost a fresh
 	//        intro and persist the new id.
 	// Who:   main.ts calls this inside the Events.ClientReady handler once
@@ -1595,11 +1735,18 @@ export class GuildSetupManager {
 			// anchor — reposts a fresh intro the first time the channel
 			// is present and persists the new id.
 			nextDecreeChannelId: storedIntroIds.nextDecreeChannelId ?? null,
-			// Flat key (not a channel id) for the second tracked message
-			// in #inner-sanctum. Legacy rows built before the split load
-			// as null; the post-loop handler below treats null as "no
-			// anchor → post a fresh admin command guide and persist it."
+			// Intro anchor for the admin command center. Legacy rows predating
+			// the 2026-06-19 split load as null; the spec loop reposts a fresh
+			// guide the first time the channel is present and persists the id.
+			adminCommandsChannelId: storedIntroIds.adminCommandsChannelId ?? null,
+			// Legacy flat key for the OLD admin command guide that used to live
+			// in #inner-sanctum. Retained only so the retirement block below can
+			// unpin that stale message and null this key; new setups never set it.
 			adminCommandGuideId: storedIntroIds.adminCommandGuideId ?? null,
+			// Flat key for the standalone invite card (second message in
+			// #command-center). null on legacy rows; the invite-card block below
+			// posts it the first time and persists the id.
+			inviteCardId: storedIntroIds.inviteCardId ?? null,
 		};
 		let needsPersist = false;
 
@@ -1617,7 +1764,7 @@ export class GuildSetupManager {
 				continue;
 			}
 
-			const embed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null);
+			const embed = GuildSetupManager.resolveIntroEmbed(spec.configField, guild, stored.adminRoleId ?? null, stored as unknown as ICopyConfig);
 			// Components (eg. the introductions channel's invite button)
 			// must be passed explicitly on send — omitting them would
 			// silently strip the invite button on every repost.
@@ -1639,13 +1786,7 @@ export class GuildSetupManager {
 					try {
 						const message = await channel.messages.fetch(storedMessageId);
 						await message.edit({ embeds: [embed], components: componentRows ?? [] });
-						if (!message.pinned) {
-							try {
-								await message.pin();
-							} catch (pinError) {
-								console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
-							}
-						}
+						// No pin: schedule channel is read-only (2026-06 pinning policy).
 						edited += 1;
 					} catch (error) {
 						// Anchor missing or corrupted — let the schedule
@@ -1677,9 +1818,10 @@ export class GuildSetupManager {
 			// Which channels should have their intro pinned at all?
 			// These are the channels where the intro is a permanent
 			// reference a mortal or admin might scroll back to.
-			const shouldBePinned =
-				spec.configField === "commandsChannelId" ||
-				spec.configField === "nextDecreeChannelId";
+			// Pin ONLY member-writable channels — just introductions. Every other
+			// homebase channel is read-only, so the bot's message stays put with
+			// nothing to bury it and a pin is just noise (see populateChannels).
+			const shouldBePinned = spec.configField === "introChannelId";
 
 			// Try to fetch the stored message. If present, compare its
 			// embed to the fresh one; if equivalent, we are done for
@@ -1688,9 +1830,23 @@ export class GuildSetupManager {
 			if (storedMessageId) {
 				storedMessage = await channel.messages.fetch(storedMessageId).catch(() => null);
 				if (storedMessage && GuildSetupManager.embedsAreEquivalent(embed, storedMessage.embeds[0])) {
-					// No change — backfill pin if the invariant says
-					// this channel should be pinned but the stored
-					// message somehow lost its pin.
+					// Embed copy is unchanged. Buttons might still have moved (the
+					// 2026-06 controls fold-in relocated power-up buttons onto these
+					// guides). A button relocation is not a copy change, so when the
+					// components drift we refresh them IN PLACE (edit, not repost — no
+					// audit-trail message to preserve). embedsAreEquivalent ignores
+					// components, so this is the only path that migrates existing guilds
+					// to the new button layout.
+					if (!GuildSetupManager.componentsAreEquivalent(componentRows, storedMessage.components)) {
+						try {
+							await storedMessage.edit({ embeds: [embed], components: componentRows ?? [] });
+							edited += 1;
+						} catch (error) {
+							console.warn(LOG_MESSAGES.setup.introRefreshEditFailed(spec.displayName, guild.id), error);
+						}
+					}
+					// Backfill pin if the invariant says this channel should be pinned
+					// but the stored message somehow lost its pin.
 					if (shouldBePinned && !storedMessage.pinned) {
 						try {
 							await storedMessage.pin();
@@ -1780,114 +1936,107 @@ export class GuildSetupManager {
 			}
 		}
 
-		// ── admin command guide (second tracked message in admin channel) ──
-		// What:  #inner-sanctum hosts TWO tracked messages — the welcome
-		//        embed (handled in the spec loop above under
-		//        adminChannelId) and the command guide (handled here).
-		//        Tracking for the second message lives on
-		//        introMessageIds.adminCommandGuideId because the spec
-		//        loop is keyed by channel id field, not by tracked
-		//        message. Rather than refactor CHANNEL_SPECS into a
-		//        message-centric shape, we run the post-on-change flow
-		//        inline for this one extra message.
-		// Who:   every setup-complete guild on every boot.
-		// When:  after the main spec loop so the admin channel exists
-		//        and its overwrites are fresh.
-		// Where: follows the same "never edit, never delete" policy as
-		//        the spec loop above. When copy changes, post new, pin
-		//        new, unpin old, leave the old message in channel
-		//        history.
-		// How:   reuse the same nextIntroIds object so the batched
-		//        guildConfigStore.update below captures both the
-		//        channel-keyed ids AND the admin command guide id in
-		//        one write.
-		const adminChannelId = stored.adminChannelId as string | null | undefined;
-		if (adminChannelId) {
-			const adminChannel = await client.channels.fetch(adminChannelId).catch(() => null);
+		// ── retire the legacy in-sanctum admin command guide ──────────────
+		// What:  the admin command guide MOVED to its own channel
+		//        (adminCommandsChannelId, maintained by the spec loop above) in
+		//        the 2026-06-19 split. On guilds that still have the old guide
+		//        pinned in #inner-sanctum, unpin it (left in history per the
+		//        never-delete policy) and clear the legacy anchor so it stops
+		//        being tracked. Once cleared, adminCommandGuideId is null and
+		//        this block is a permanent no-op.
+		// Who:   guilds set up before the split. Brand-new setups never populate
+		//        adminCommandGuideId, so they skip this entirely.
+		// When:  gated on the NEW channel's guide already being live
+		//        (nextIntroIds.adminCommandsChannelId set) so an admin who
+		//        disabled auto-heal — and therefore has no new channel yet —
+		//        keeps the old guide pinned until the replacement actually exists.
+		const legacyGuideId = nextIntroIds.adminCommandGuideId;
+		const legacyAdminChannelId = stored.adminChannelId as string | null | undefined;
+		if (legacyGuideId && nextIntroIds.adminCommandsChannelId && legacyAdminChannelId) {
+			const adminChannel = await client.channels.fetch(legacyAdminChannelId).catch(() => null);
 			if (adminChannel instanceof TextChannel) {
-				const adminGuideEmbed = ChannelContent.adminCommandGuide();
-				const storedAdminGuideId = nextIntroIds.adminCommandGuideId;
+				const legacyGuide = await adminChannel.messages.fetch(legacyGuideId).catch(() => null);
+				if (legacyGuide?.pinned) {
+					try {
+						await legacyGuide.unpin();
+					} catch (unpinError) {
+						console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("admin command guide", guild.id), unpinError);
+					}
+				}
+			}
+			// Clear the anchor regardless of whether the fetch/unpin succeeded —
+			// the message is no longer the tracked guide; the new channel owns
+			// the live one now.
+			nextIntroIds.adminCommandGuideId = null;
+			needsPersist = true;
+		}
 
-				// Fetch the stored message (if any) so we can diff against
-				// it and, if a new copy needs to be posted, unpin the old
-				// one in the same pass.
-				let storedGuideMessage: Message | null = null;
-				if (storedAdminGuideId) {
-					storedGuideMessage = await adminChannel.messages
-						.fetch(storedAdminGuideId)
-						.catch(() => null);
+		// ── invite card (second pinned message in #command-center) ──
+		// What:  a standalone "summon Dero" card — short pitch + Dero gif + the
+		//        Summon button — kept as its own pinned message so the wide invite
+		//        button is not buried in the command guide's button row.
+		// Who:   every setup-complete guild on every boot.
+		// When:  after the spec loop, so the command guide (which no longer carries
+		//        the invite) is already refreshed and the adopt scan below cannot
+		//        mistake the guide for the card.
+		// How:   edit in place (a static brand card, not an audit trail). Adopt by
+		//        the invite Link button if the stored id is gone so a flaky round
+		//        trip cannot duplicate it. Post fresh on legacy guilds that predate
+		//        the card (null stored id, no match).
+		const cardChannelId = stored.commandsChannelId as string | null | undefined;
+		if (cardChannelId) {
+			const channel = await client.channels.fetch(cardChannelId).catch(() => null);
+			if (channel instanceof TextChannel) {
+				const cardEmbed = ChannelContent.inviteCard();
+				const cardComponents = GuildSetupManager.inviteCardComponents();
+
+				let cardMessage = nextIntroIds.inviteCardId
+					? await channel.messages.fetch(nextIntroIds.inviteCardId).catch(() => null)
+					: null;
+
+				if (!cardMessage) {
+					// Adopt by EMBED identity, not just "has a Link button": on a legacy
+					// guild the command guide transiently still carries the invite button
+					// until the spec loop strips it above, and that strip edit is best
+					// effort — if it failed, a button-only match would mis-adopt and then
+					// clobber the command guide. The invite card's embed (distinct title +
+					// image) is the safe, unambiguous key.
+					const selfId = guild.client.user?.id;
+					const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+					cardMessage =
+						recent?.find((msg) => (!selfId || msg.author.id === selfId) && GuildSetupManager.embedsAreEquivalent(cardEmbed, msg.embeds[0])) ?? null;
 				}
 
-				// Short circuit: stored message exists AND its embed
-				// matches the fresh one. Backfill pin if needed, move on.
-				if (storedGuideMessage && GuildSetupManager.embedsAreEquivalent(adminGuideEmbed, storedGuideMessage.embeds[0])) {
-					if (!storedGuideMessage.pinned) {
+				if (cardMessage) {
+					// Refresh copy/components in place if drifted; backfill the pin.
+					const drift =
+						!GuildSetupManager.embedsAreEquivalent(cardEmbed, cardMessage.embeds[0]) ||
+						!GuildSetupManager.componentsAreEquivalent(cardComponents, cardMessage.components);
+					if (drift) {
 						try {
-							await storedGuideMessage.pin();
-						} catch (pinError) {
-							console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+							// attachments: [] drops the old upload so the re-attached file
+							// (attachment://) resolves to the fresh one rather than duplicating.
+							await cardMessage.edit({ embeds: [cardEmbed], components: cardComponents, files: [buildDeroGifAttachment()], attachments: [] });
+							edited += 1;
+						} catch (error) {
+							console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("invite card", guild.id), error);
 						}
 					}
-				} else {
-					// Copy differs OR no stored anchor. Before posting,
-					// scan the channel for a bot-authored message that
-					// ALREADY matches the fresh embed — this is the
-					// idempotency guard that prevents a second post when
-					// something already landed the current copy this
-					// boot cycle.
-					const selfId = guild.client.user?.id;
-					const recent = await adminChannel.messages.fetch({ limit: 20 }).catch(() => null);
-					const existingMatch = recent?.find((msg) => {
-						if (!selfId || msg.author.id !== selfId) return false;
-						if (msg.embeds.length === 0) return false;
-						return GuildSetupManager.embedsAreEquivalent(adminGuideEmbed, msg.embeds[0]);
-					});
-
-					if (existingMatch) {
-						if (!existingMatch.pinned) {
-							try {
-								await existingMatch.pin();
-							} catch (pinError) {
-								console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
-							}
-						}
-						if (storedGuideMessage && storedGuideMessage.id !== existingMatch.id && storedGuideMessage.pinned) {
-							try {
-								await storedGuideMessage.unpin();
-							} catch (unpinError) {
-								console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("admin command guide", guild.id), unpinError);
-							}
-						}
-						nextIntroIds.adminCommandGuideId = existingMatch.id;
+					// No pin: command-center is read-only (2026-06 pinning policy).
+					if (nextIntroIds.inviteCardId !== cardMessage.id) {
+						nextIntroIds.inviteCardId = cardMessage.id;
 						needsPersist = true;
-						edited += 1;
-					} else {
-						// Genuinely new content. Post fresh, pin new,
-						// unpin old. Never delete; the old guide stays
-						// in channel history as an audit trail of past
-						// command surface.
-						try {
-							const message = await adminChannel.send({ embeds: [adminGuideEmbed] });
-							try {
-								await message.pin();
-							} catch (pinError) {
-								console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
-							}
-							if (storedGuideMessage && storedGuideMessage.pinned) {
-								try {
-									await storedGuideMessage.unpin();
-								} catch (unpinError) {
-									console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("admin command guide", guild.id), unpinError);
-								}
-							}
-							nextIntroIds.adminCommandGuideId = message.id;
-							needsPersist = true;
-							reposted += 1;
-						} catch (error) {
-							// Post failed — log and retry next boot.
-							// Old message + pin stay intact.
-							console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("admin command guide", guild.id), error);
-						}
+					}
+				} else {
+					// No card yet (legacy guild migrating onto this feature) — post
+					// and track (no pin: command-center is read-only).
+					try {
+						const message = await channel.send({ embeds: [cardEmbed], components: cardComponents, files: [buildDeroGifAttachment()] });
+						nextIntroIds.inviteCardId = message.id;
+						needsPersist = true;
+						reposted += 1;
+					} catch (error) {
+						console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("invite card", guild.id), error);
 					}
 				}
 			}

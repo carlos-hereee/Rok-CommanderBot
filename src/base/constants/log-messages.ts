@@ -4,8 +4,10 @@
 // Who:   every feature module, every route handler, the bot entry point.
 // When:  caller imports LOG_MESSAGES and passes the function result or
 //        constant to console.*.
-// Where: paired with embedContent for user-facing copy. console output
-//        lives here; Discord-rendered copy lives in embed-content.ts.
+// Where: paired with the copy packs for user-facing copy. console output
+//        lives here; Discord-rendered copy lives in the copy packs
+//        (@base/copy/packs), resolved per guild via getPluginCopy
+//        (@base/copy/getCopy).
 // How:   strings with no interpolation are exported as string constants.
 //        strings that take runtime values are exported as arrow functions
 //        so the tag prefix and phrasing stay consistent per namespace.
@@ -40,6 +42,24 @@ export const LOG_MESSAGES = {
 		hourlyRefreshFailed: "[schedule] hourly refreshAllSchedules failed:",
 	},
 
+	// ── leaderboard board ──────────────────────────────────────────────
+	leaderboard: {
+		channelMissing: (channelId: string, guildId: string) =>
+			`[leaderboard] leaderboard channel ${channelId} not found or not a TextChannel for guild ${guildId}`,
+		unexpectedError: (guildId: string) => `[leaderboard] unexpected error refreshing guild ${guildId}:`,
+		storedMessageDeleted: (messageId: string, guildId: string) =>
+			`[leaderboard] stored leaderboardMessageId ${messageId} was deleted for guild ${guildId}. reposting.`,
+		editFailed: (messageId: string, guildId: string) =>
+			`[leaderboard] failed to edit leaderboardMessageId ${messageId} for guild ${guildId}:`,
+		staleAuthor: (messageId: string, guildId: string) =>
+			`[leaderboard] leaderboardMessageId ${messageId} in guild ${guildId} is not authored by this bot. skipping — ScheduleBoard owns homebase recovery.`,
+		postFailed: (guildId: string) => `[leaderboard] failed to post leaderboard message for guild ${guildId}:`,
+		pinFailed: (guildId: string) => `[leaderboard] pin failed for guild ${guildId} (likely missing ManageMessages):`,
+		refreshAfterReminderFailed: "[leaderboard] refresh after fireReminder failed:",
+		refreshAfterActivityFailed: "[leaderboard] debounced refresh after activity failed:",
+		hourlyRefreshFailed: "[leaderboard] hourly refreshAllLeaderboards failed:",
+	},
+
 	// ── reminder firing ────────────────────────────────────────────────
 	reminder: {
 		noAnnouncementsChannel: (guildId: string) =>
@@ -57,6 +77,15 @@ export const LOG_MESSAGES = {
 	// ── reminder scheduler ─────────────────────────────────────────────
 	scheduler: {
 		tickError: "Scheduler error:",
+		// Emitted when a cron tick fires while the previous minute's tick is
+		// still running. node-cron does not skip overlapping runs, so without
+		// the in-process guard two concurrent ticks could both pass the
+		// reminderStore.exists() dedup check and double-fire the same reminder.
+		// Warn-level: a single skipped tick is self-correcting (the next minute
+		// catches up), but a sustained stream of these means the tick is
+		// overrunning its 60s budget and needs investigation (large guild
+		// fan-out, slow remote-event calls, or a missing DB index).
+		tickOverlapSkipped: "[scheduler] previous tick still running — skipping this minute to avoid duplicate fires",
 		seasonEndNoChannel: (guildId: string) => `[season-end] no channel available for guild ${guildId}`,
 		seasonEndFailed: "Failed to announce season end:",
 		// Defensive: announceSeasonEnd should never be reached for an event
@@ -164,7 +193,8 @@ export const LOG_MESSAGES = {
 		// ── intro embed refresh (boot) ─────────────────────────────────
 		// What: GuildSetupManager.refreshIntroEmbeds sweeps the six stored
 		//       intro messages per guild on boot and edits them in place to
-		//       reflect the current embed-content.ts copy. Ships new wording
+		//       reflect the current copy from the copy packs
+		//       (@base/copy/packs). Ships new wording
 		//       without forcing admins to nuke and rebuild the homebase.
 		// Why separate namespace from ensureHomebase? the refresh runs after
 		//       the sweep and can fail independently of channel integrity —
@@ -231,6 +261,13 @@ export const LOG_MESSAGES = {
 	db: {
 		missingUri: "[ERROR] MONGOOSE_URI environment variable is not set.",
 		connected: "\n\n✅ Connected to MongoDB",
+		// Connection lifecycle. Mongoose auto-reconnects by default; these just
+		// make the transitions visible in Railway logs so a flaky Atlas link is
+		// diagnosable instead of manifesting only as silent query timeouts.
+		disconnected: "[db] ⚠️ MongoDB connection lost — Mongoose will attempt to reconnect",
+		reconnected: "[db] ✅ MongoDB reconnected",
+		connectionError: "[db] MongoDB connection error:",
+		disconnecting: "[db] closing MongoDB connection",
 	},
 
 	// ── api ────────────────────────────────────────────────────────────

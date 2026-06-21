@@ -5,7 +5,7 @@ import {
 	MessageFlags,
 } from "discord.js";
 import { eventStore } from "@db/stores/eventStore.js";
-import { embedContent } from "@base/constants/embed-content.js";
+import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { errorEmbed, infoEmbed } from "@utils/embedBuilder.js";
 import { refreshSchedule } from "@features/schedule/ScheduleBoard.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
@@ -16,7 +16,7 @@ import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 // earlier (e.g. /pause-schedule X days:14) stays intact and is not
 // overwritten by a guild-wide days argument.
 
-const c = embedContent.pauseAllSchedules;
+const c = rokCommanderCopy.pauseAllSchedules;
 
 export const data = new SlashCommandBuilder()
 	.setName("pause-all-schedules")
@@ -92,7 +92,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
 	if (failed > 0) {
 		await interaction.reply({
-			embeds: [infoEmbed("⏸️ Partially paused", c.partialFailure(succeeded, failed), embedContent.COLORS.SCHEDULE)],
+			embeds: [infoEmbed("⏸️ Partially paused", c.partialFailure(succeeded, failed), rokCommanderCopy.COLORS.SCHEDULE)],
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -103,7 +103,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 		: c.paused(succeeded, alreadyPaused);
 
 	await interaction.reply({
-		embeds: [infoEmbed("⏸️ All schedules paused", successText, embedContent.COLORS.SCHEDULE)],
+		embeds: [infoEmbed("⏸️ All schedules paused", successText, rokCommanderCopy.COLORS.SCHEDULE)],
 		flags: MessageFlags.Ephemeral,
 	});
 }
