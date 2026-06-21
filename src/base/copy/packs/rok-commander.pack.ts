@@ -154,7 +154,7 @@ export const rokCommanderCopy = {
 		noEvents:
 			"The future has yet to be written.\n\n" +
 			"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
-			"Admins run the slash command `/configure-kvk-season` to establish the server's schedule.",
+			"Admins can set up the server's schedule from the dashboard, or the in-Discord setup commands.",
 		seasonEnded:
 			"🏁 The KvK season has ended. The kingdom stands down.\n\n" + "Run `/configure-kvk-season` when the next campaign begins.",
 		fieldName: (name: string, type: "recurring" | "one-time") => (type === "recurring" ? `🔁 ${name}` : `📌 ${name}`),
@@ -446,7 +446,7 @@ export const rokCommanderCopy = {
 			description:
 				"The future has yet to be written.\n\n" +
 				"Once configured, upcoming events, streams, announcements, and community activities will be displayed here for all to see.\n\n" +
-				"Admins run the slash command `/configure-kvk-season` to establish the server's schedule.",
+				"Admins can set up the server's schedule from the dashboard, or the in-Discord setup commands.",
 		},
 
 		leaderboard: {
