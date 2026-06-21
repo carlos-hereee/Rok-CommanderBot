@@ -1,6 +1,7 @@
 import { Client, TextChannel, EmbedBuilder } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
+import { DERO_IMAGE_REF, buildDeroImageAttachment } from "@base/copy/brand.js";
 
 // ── lead-time table ─────────────────────────────────────────────────
 // Shared between /go-live-soon (slash command) and the Go Live Now
@@ -90,12 +91,20 @@ export async function postGoLiveAnnouncement(
 	const img = config.defaultEventImageUrl ?? null;
 	if (img) embed.setImage(img);
 
+	// Always give the embed a Dero thumbnail so a note-less "going live" never
+	// reads as an empty text card (the original gripe). The bundled static PNG is
+	// uploaded with the message (attachment://), so it renders without depending on
+	// companyuno.com being deployed.
+	embed.setThumbnail(DERO_IMAGE_REF);
+
 	const mention = roleId ? `<@&${roleId}>` : "@here";
 
 	try {
 		await channel.send({
 			content: mention,
 			embeds: [embed],
+			// The bundled Dero image, uploaded so the thumbnail attachment:// resolves.
+			files: [buildDeroImageAttachment()],
 			// Allowed-mentions discipline: only whitelist the role we
 			// are explicitly pinging, or fall back to parse:["everyone"]
 			// when there is no configured role. Never let a malformed

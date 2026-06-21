@@ -152,6 +152,13 @@ const guildConfigSchema = new Schema(
 				// Pinned intro anchor for the new admin command channel (the relocated
 				// command guide). Tracked like every other channel intro.
 				adminCommandsChannelId: { type: String, required: false, default: null },
+				// ── invite card (2026-06) ──────────────────────────────
+				// Flat key (like adminCommandGuideId): the SECOND pinned message in
+				// #command-center — the standalone "summon Dero" card (pitch + gif +
+				// Summon button), separate from commandsChannelId (the command guide).
+				// refreshIntroEmbeds maintains it; null on legacy rows until the first
+				// boot posts it.
+				inviteCardId: { type: String, required: false, default: null },
 			},
 			required: false,
 			default: () => ({}),

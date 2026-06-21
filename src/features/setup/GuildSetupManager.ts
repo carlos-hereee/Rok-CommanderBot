@@ -21,6 +21,7 @@ import { buildSuggestionBoxButton } from "@features/suggestion-box/SuggestionBox
 import { buildSelfDestructButton } from "@features/setup/selfDestruct.js";
 import { buildMemberControlButtons, buildAdminControlButtons } from "@features/power-ups/PowerUps.js";
 import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
+import { buildDeroImageAttachment } from "@base/copy/brand.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
 import { botLogStore } from "@db/stores/botLogStore.js";
 import { BOT_LOG_EVENTS } from "@base/constants/BOT_LOG_EVENTS.js";
@@ -661,16 +662,11 @@ export class GuildSetupManager {
 	): ActionRowBuilder<ButtonBuilder>[] | null {
 		switch (field) {
 			case "commandsChannelId":
-				// #command-center guide, two rows so nothing overflows:
-				//   row 1: the member actions — Suggestion Box + Toggle pings + Take
-				//          the trial (pull an icebreaker to answer in #introductions).
-				//   row 2: the wide "Summon me to your server" invite on its own line
-				//          (moved here from the introductions intro, which gets buried
-				//          now that the channel is member-writable).
-				return [
-					new ActionRowBuilder<ButtonBuilder>().addComponents(buildSuggestionBoxButton(), ...buildMemberControlButtons()),
-					new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton()),
-				];
+				// #command-center guide row: the member actions — Suggestion Box +
+				// Toggle pings + Take the trial (pull an icebreaker to answer in
+				// #introductions). The invite button is NOT here — it lives on its own
+				// pinned card (ChannelContent.inviteCard) so it does not crowd the row.
+				return [new ActionRowBuilder<ButtonBuilder>().addComponents(buildSuggestionBoxButton(), ...buildMemberControlButtons())];
 			case "adminCommandsChannelId":
 				// admin-controls guide row (2 buttons): owner-only Self destruct + the
 				// admin controls (Refresh standings).
@@ -715,10 +711,20 @@ export class GuildSetupManager {
 
 		if ((a.title ?? null) !== (stored.title ?? null)) return false;
 		if ((a.description ?? null) !== (stored.description ?? null)) return false;
-		// Compare the image url too so adding/changing an embed image (e.g. the
-		// Dero gif on the introductions embed) counts as a change worth reposting
-		// instead of being masked because the title and description still match.
-		if ((a.image?.url ?? null) !== (stored.image?.url ?? null)) return false;
+		// Image comparison. A bundled-attachment image (setImage("attachment://x"))
+		// comes back from a posted message as a Discord CDN url ending in the same
+		// filename, so a literal compare would never match and the embed would
+		// re-post/re-edit every boot. For attachment refs, compare by filename; for
+		// plain urls (e.g. the introductions Dero gif), compare literally so a real
+		// image change still counts as drift worth reposting.
+		const freshImageUrl = a.image?.url ?? null;
+		const storedImageUrl = stored.image?.url ?? null;
+		if (freshImageUrl?.startsWith("attachment://")) {
+			const fileName = freshImageUrl.slice("attachment://".length);
+			if (!storedImageUrl || !storedImageUrl.includes(fileName)) return false;
+		} else if (freshImageUrl !== storedImageUrl) {
+			return false;
+		}
 		if (aFields.length !== bFields.length) return false;
 
 		// Field-by-field compare. Name + value are the only fields that
@@ -1557,6 +1563,8 @@ export class GuildSetupManager {
 			// guide). Standard one-key-per-channel slot — the guide is this
 			// channel's only tracked message after the 2026-06-19 split.
 			adminCommandsChannelId: string;
+			// Second pinned message in #command-center: the standalone invite card.
+			inviteCardId: string;
 		};
 	}> {
 		const {
@@ -1584,6 +1592,9 @@ export class GuildSetupManager {
 			// one batch and ordering is deterministic. Persisted on
 			// introMessageIds.adminCommandsChannelId like every other channel intro.
 			adminCommandsMsg,
+			// Second #command-center message: the standalone invite card (pitch +
+			// Dero gif + Summon button), pinned separately from the command guide.
+			inviteCardMsg,
 		] = await Promise.all([
 			// intro channel carries both the introduction embed AND the
 			// "Summon me to your server, Mortal" link button. Components
@@ -1612,6 +1623,14 @@ export class GuildSetupManager {
 			// (gated in the handler). Pinning handled below alongside the
 			// schedule + next-decree pins.
 			adminCommandsChannel.send({ embeds: [ChannelContent.adminCommandGuide()], components: GuildSetupManager.resolveIntroComponents("adminCommandsChannelId") ?? [] }),
+			// Standalone invite card in #command-center: short pitch + Dero gif + the
+			// Summon button. Its own message so the wide button is not crammed into
+			// the command guide's row. refreshIntroEmbeds maintains it on boot.
+			commandsChannel.send({
+				embeds: [ChannelContent.inviteCard()],
+				components: [new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton())],
+				files: [buildDeroImageAttachment()],
+			}),
 		]);
 
 		try {
@@ -1662,6 +1681,15 @@ export class GuildSetupManager {
 			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.adminCommandsChannel.guildId), error);
 		}
 
+		// Pin the invite card so the Summon button stays scannable above member
+		// chatter (command-center is read-only for members, so nothing pushes it
+		// down today, but the pin future-proofs it alongside the command guide).
+		try {
+			await inviteCardMsg.pin();
+		} catch (error) {
+			console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(discordChannels.commandsChannel.guildId), error);
+		}
+
 		return {
 			scheduleMessageId: scheduleMessage.id,
 			// mirrors the GuildConfig.introMessageIds shape so autoSetup can
@@ -1676,6 +1704,7 @@ export class GuildSetupManager {
 				adminChannelId: adminMsg.id,
 				nextDecreeChannelId: nextDecreeMsg.id,
 				adminCommandsChannelId: adminCommandsMsg.id,
+				inviteCardId: inviteCardMsg.id,
 			},
 		};
 	}
@@ -1756,6 +1785,10 @@ export class GuildSetupManager {
 			// in #inner-sanctum. Retained only so the retirement block below can
 			// unpin that stale message and null this key; new setups never set it.
 			adminCommandGuideId: storedIntroIds.adminCommandGuideId ?? null,
+			// Flat key for the standalone invite card (second message in
+			// #command-center). null on legacy rows; the invite-card block below
+			// posts it the first time and persists the id.
+			inviteCardId: storedIntroIds.inviteCardId ?? null,
 		};
 		let needsPersist = false;
 
@@ -1985,6 +2018,88 @@ export class GuildSetupManager {
 			// the live one now.
 			nextIntroIds.adminCommandGuideId = null;
 			needsPersist = true;
+		}
+
+		// ── invite card (second pinned message in #command-center) ──
+		// What:  a standalone "summon Dero" card — short pitch + Dero gif + the
+		//        Summon button — kept as its own pinned message so the wide invite
+		//        button is not buried in the command guide's button row.
+		// Who:   every setup-complete guild on every boot.
+		// When:  after the spec loop, so the command guide (which no longer carries
+		//        the invite) is already refreshed and the adopt scan below cannot
+		//        mistake the guide for the card.
+		// How:   edit in place (a static brand card, not an audit trail). Adopt by
+		//        the invite Link button if the stored id is gone so a flaky round
+		//        trip cannot duplicate it. Post fresh on legacy guilds that predate
+		//        the card (null stored id, no match).
+		const cardChannelId = stored.commandsChannelId as string | null | undefined;
+		if (cardChannelId) {
+			const channel = await client.channels.fetch(cardChannelId).catch(() => null);
+			if (channel instanceof TextChannel) {
+				const cardEmbed = ChannelContent.inviteCard();
+				const cardComponents = [new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton())];
+
+				let cardMessage = nextIntroIds.inviteCardId
+					? await channel.messages.fetch(nextIntroIds.inviteCardId).catch(() => null)
+					: null;
+
+				if (!cardMessage) {
+					// Adopt by EMBED identity, not just "has a Link button": on a legacy
+					// guild the command guide transiently still carries the invite button
+					// until the spec loop strips it above, and that strip edit is best
+					// effort — if it failed, a button-only match would mis-adopt and then
+					// clobber the command guide. The invite card's embed (distinct title +
+					// image) is the safe, unambiguous key.
+					const selfId = guild.client.user?.id;
+					const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+					cardMessage =
+						recent?.find((msg) => (!selfId || msg.author.id === selfId) && GuildSetupManager.embedsAreEquivalent(cardEmbed, msg.embeds[0])) ?? null;
+				}
+
+				if (cardMessage) {
+					// Refresh copy/components in place if drifted; backfill the pin.
+					const drift =
+						!GuildSetupManager.embedsAreEquivalent(cardEmbed, cardMessage.embeds[0]) ||
+						!GuildSetupManager.componentsAreEquivalent(cardComponents, cardMessage.components);
+					if (drift) {
+						try {
+							// attachments: [] drops the old upload so the re-attached file
+							// (attachment://) resolves to the fresh one rather than duplicating.
+							await cardMessage.edit({ embeds: [cardEmbed], components: cardComponents, files: [buildDeroImageAttachment()], attachments: [] });
+							edited += 1;
+						} catch (error) {
+							console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("invite card", guild.id), error);
+						}
+					}
+					if (!cardMessage.pinned) {
+						try {
+							await cardMessage.pin();
+						} catch (pinError) {
+							console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+						}
+					}
+					if (nextIntroIds.inviteCardId !== cardMessage.id) {
+						nextIntroIds.inviteCardId = cardMessage.id;
+						needsPersist = true;
+					}
+				} else {
+					// No card yet (legacy guild migrating onto this feature) — post,
+					// pin, track.
+					try {
+						const message = await channel.send({ embeds: [cardEmbed], components: cardComponents, files: [buildDeroImageAttachment()] });
+						try {
+							await message.pin();
+						} catch (pinError) {
+							console.warn(LOG_MESSAGES.setup.pinScheduleIntroFailed(guild.id), pinError);
+						}
+						nextIntroIds.inviteCardId = message.id;
+						needsPersist = true;
+						reposted += 1;
+					} catch (error) {
+						console.warn(LOG_MESSAGES.setup.introRefreshEditFailed("invite card", guild.id), error);
+					}
+				}
+			}
 		}
 
 		if (needsPersist) {

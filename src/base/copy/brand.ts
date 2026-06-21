@@ -1,4 +1,5 @@
-import type { ColorResolvable } from "discord.js";
+import { AttachmentBuilder, type ColorResolvable } from "discord.js";
+import { join } from "node:path";
 
 // ── shared brand identity ────────────────────────────────────────────────
 // What:  the bot's visual + platform identity that does NOT vary by plugin
@@ -39,6 +40,24 @@ export const AUTHOR = {
 // Animated Dero (default state) for the introductions embed image (setImage), so
 // new members see the mascot in action. Same deploy requirement as AUTHOR.iconURL.
 export const DERO_GIF_URL = "https://www.companyuno.com/dero/dero-default.gif";
+
+// ── bundled Dero image (static) ──────────────────────────────────────────
+// A still PNG shipped in the bot's assets/ dir (so it deploys WITH the bot on
+// Railway), attached to messages via Discord's attachment:// reference. Used as
+// the going-live thumbnail + the invite-card image. This avoids depending on
+// companyuno.com serving /dero — the gif URL above 404s to the SPA's HTML until
+// that web app ships. The ~2.8 MB animated gifs are too heavy to upload on every
+// message; this 85 KB still is not. Swap the file (or point back at DERO_GIF_URL)
+// to upgrade the art later.
+export const DERO_IMAGE_FILE = "dero-avatar-512.png";
+export const DERO_IMAGE_REF = `attachment://${DERO_IMAGE_FILE}`;
+
+// Build the upload for the bundled image. process.cwd() is the bot's project root
+// (Railway start + nodemon both run from there), so assets/dero/<file> resolves
+// whether running from src or the compiled dist.
+export function buildDeroImageAttachment(): AttachmentBuilder {
+	return new AttachmentBuilder(join(process.cwd(), "assets", "dero", DERO_IMAGE_FILE), { name: DERO_IMAGE_FILE });
+}
 
 // Embed color palette. Color is neutral by design — the kingdom vs streamer
 // split happens in words, not in chrome — so the palette is identical across

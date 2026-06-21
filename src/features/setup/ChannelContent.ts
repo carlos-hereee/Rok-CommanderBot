@@ -1,7 +1,7 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { getPluginCopy, type ICopyConfig } from "@base/copy/getCopy.js";
 import { infoEmbed } from "@utils/embedBuilder.js";
-import { DERO_GIF_URL } from "@base/copy/brand.js";
+import { DERO_GIF_URL, COLORS, DERO_IMAGE_REF } from "@base/copy/brand.js";
 // botInviteLink is composed in @utils/config from the env-driven
 // clientId, so a dev process serves the dev install URL and a prod
 // process serves the prod install URL automatically. We deliberately
@@ -39,14 +39,33 @@ export const ChannelContent = {
 		return infoEmbed(cc.introduction.title, cc.introduction.description, copy.COLORS.INTRODUCTION).setImage(DERO_GIF_URL);
 	},
 
+	// ── invite card ──────────────────────────────────────────────────
+	// What:  a standalone "summon Dero" growth card, pinned in #command-center as
+	//        its OWN message so the wide invite button gets its own embed instead
+	//        of crowding the command guide's button row. Short pitch + the bundled
+	//        static Dero image (setImage attachment://) + the Summon button. The
+	//        caller must also upload the image file (buildDeroImageAttachment).
+	// Who:   populateChannels (initial post) + refreshIntroEmbeds (maintains it).
+	// How:   brand-indigo (COLORS.DERO) so it reads as a Dero card, not a channel
+	//        intro. NOTE: like buildInviteButton, the pitch is hardcoded kingdom
+	//        voice and is NOT pack-aware — a general-events guild sees ROK wording.
+	//        Same pre-existing debt as the button it pairs with; tracked separately.
+	inviteCard(): EmbedBuilder {
+		return infoEmbed(
+			"🔱 Summon Dero to Your Realm",
+			"Command a kingdom of your own? Dero answers the call. Bring him to your server and let the events, reminders, and rankings run themselves.",
+			COLORS.DERO
+		).setImage(DERO_IMAGE_REF);
+	},
+
 	// ── invite button ────────────────────────────────────────────────
 	// What:  the "Summon me to your server" Link button. Opens Discord's OAuth
 	//        consent screen for inviting the bot into another server. Link buttons
 	//        need no interaction handler — Discord opens the URL directly.
-	// Who:   folded into the #command-center guide row by resolveIntroComponents,
-	//        alongside the Suggestion Box + member-control buttons. MOVED off the
-	//        introductions intro (2026-06) because that channel is now member-
-	//        writable and the welcome would bury a pinned button there.
+	// Who:   attached to the standalone invite card (ChannelContent.inviteCard), its
+	//        own pinned message in #command-center. MOVED off the introductions
+	//        intro (2026-06) because that channel is now member-writable and the
+	//        welcome would bury a pinned button there.
 	// When:  attached on first build (populateChannels) and re-attached on every
 	//        boot (refreshIntroEmbeds) so URL/permission revisions land without a
 	//        manual rebuild. Returned as a bare ButtonBuilder so it can share one
