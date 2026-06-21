@@ -1,7 +1,8 @@
-import { Client, TextChannel, EmbedBuilder } from "discord.js";
+import { AttachmentBuilder, Client, TextChannel, EmbedBuilder } from "discord.js";
 import { guildConfigStore } from "@db/stores/guildConfigStore.js";
 import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { DERO_IMAGE_REF, buildDeroImageAttachment } from "@base/copy/brand.js";
+import { pickRandomGoLiveGif } from "@base/constants/goLiveGifs.js";
 
 // ── lead-time table ─────────────────────────────────────────────────
 // Shared between /go-live-soon (slash command) and the Go Live Now
@@ -85,17 +86,25 @@ export async function postGoLiveAnnouncement(
 		.setColor(rokCommanderCopy.COLORS.ANNOUNCEMENTS)
 		.setFooter({ text: rokCommanderCopy.FOOTER });
 
-	// Large banner from the guild's default event image. Go-live is not tied to
-	// a single event, so there is no per-event imageUrl here — the guild default
-	// is the only source. Guard so null is a clean no-op (no image configured).
-	const img = config.defaultEventImageUrl ?? null;
-	if (img) embed.setImage(img);
-
-	// Always give the embed a Dero thumbnail so a note-less "going live" never
-	// reads as an empty text card (the original gripe). The bundled static PNG is
-	// uploaded with the message (attachment://), so it renders without depending on
-	// companyuno.com being deployed.
-	embed.setThumbnail(DERO_IMAGE_REF);
+	// Visual, in precedence order, so a "going live" card is never an empty wall
+	// of text:
+	//   1. a per-guild banner (defaultEventImageUrl) → large setImage, as before.
+	//   2. otherwise a random Tenor "going live" gif as the thumbnail, cycled per
+	//      announcement for variety (external url, no upload).
+	//   3. otherwise (no Tenor urls configured yet) the bundled Dero still,
+	//      uploaded via attachment:// so it renders without a companyuno.com dep.
+	let thumbAttachment: AttachmentBuilder | null = null;
+	if (config.defaultEventImageUrl) {
+		embed.setImage(config.defaultEventImageUrl);
+	} else {
+		const tenorGif = pickRandomGoLiveGif();
+		if (tenorGif) {
+			embed.setThumbnail(tenorGif);
+		} else {
+			embed.setThumbnail(DERO_IMAGE_REF);
+			thumbAttachment = buildDeroImageAttachment();
+		}
+	}
 
 	const mention = roleId ? `<@&${roleId}>` : "@here";
 
@@ -103,8 +112,9 @@ export async function postGoLiveAnnouncement(
 		await channel.send({
 			content: mention,
 			embeds: [embed],
-			// The bundled Dero image, uploaded so the thumbnail attachment:// resolves.
-			files: [buildDeroImageAttachment()],
+			// Upload the bundled still ONLY when it's the fallback; a Tenor url (or
+			// a per-guild banner) needs no attachment.
+			...(thumbAttachment ? { files: [thumbAttachment] } : {}),
 			// Allowed-mentions discipline: only whitelist the role we
 			// are explicitly pinging, or fall back to parse:["everyone"]
 			// when there is no configured role. Never let a malformed
