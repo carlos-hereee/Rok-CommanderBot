@@ -86,23 +86,23 @@ export async function postGoLiveAnnouncement(
 		.setColor(rokCommanderCopy.COLORS.ANNOUNCEMENTS)
 		.setFooter({ text: rokCommanderCopy.FOOTER });
 
-	// Visual, in precedence order, so a "going live" card is never an empty wall
-	// of text:
-	//   1. a per-guild banner (defaultEventImageUrl) → large setImage, as before.
-	//   2. otherwise a random Tenor "going live" gif as the thumbnail, cycled per
-	//      announcement for variety (external url, no upload).
+	// Visual, in precedence order. Uses the LARGE image slot (setImage), not the
+	// small corner thumbnail, so the gif takes center stage below the text:
+	//   1. a per-guild banner (defaultEventImageUrl), as before.
+	//   2. otherwise a random Tenor "going live" gif, cycled per announcement for
+	//      variety (external url, no upload).
 	//   3. otherwise (no Tenor urls configured yet) the bundled Dero still,
 	//      uploaded via attachment:// so it renders without a companyuno.com dep.
-	let thumbAttachment: AttachmentBuilder | null = null;
+	let imageAttachment: AttachmentBuilder | null = null;
 	if (config.defaultEventImageUrl) {
 		embed.setImage(config.defaultEventImageUrl);
 	} else {
 		const tenorGif = pickRandomGoLiveGif();
 		if (tenorGif) {
-			embed.setThumbnail(tenorGif);
+			embed.setImage(tenorGif);
 		} else {
-			embed.setThumbnail(DERO_IMAGE_REF);
-			thumbAttachment = buildDeroImageAttachment();
+			embed.setImage(DERO_IMAGE_REF);
+			imageAttachment = buildDeroImageAttachment();
 		}
 	}
 
@@ -114,7 +114,7 @@ export async function postGoLiveAnnouncement(
 			embeds: [embed],
 			// Upload the bundled still ONLY when it's the fallback; a Tenor url (or
 			// a per-guild banner) needs no attachment.
-			...(thumbAttachment ? { files: [thumbAttachment] } : {}),
+			...(imageAttachment ? { files: [imageAttachment] } : {}),
 			// Allowed-mentions discipline: only whitelist the role we
 			// are explicitly pinging, or fall back to parse:["everyone"]
 			// when there is no configured role. Never let a malformed

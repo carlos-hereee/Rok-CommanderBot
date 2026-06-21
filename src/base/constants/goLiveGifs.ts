@@ -29,6 +29,8 @@ export const GO_LIVE_GIF_URLS: readonly string[] = [
 	"https://media.tenor.com/-mpZi-Hr8E8AAAAM/love-live-joining-vc-in-5.gif",
 	"https://media.tenor.com/HkszE8gqvykAAAAM/anime-join-now.gif",
 	"https://media.tenor.com/cXppPYb3rBkAAAAM/dwb-dwbs.gif",
+	"https://media.tenor.com/Rs8fAokgwcEAAAAd/rachelcoded-love-live.gif",
+	"https://media.tenor.com/HBtK_ooJMd4AAAAM/bitcoin-wizard-wzrd.gif",
 ];
 
 // Pick a random go-live gif, or null when none are configured yet. Runtime only
