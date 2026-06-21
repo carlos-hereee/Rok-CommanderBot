@@ -1093,6 +1093,56 @@ export class GuildSetupManager {
 		return repaired;
 	}
 
+	// ── channel rename drift sync (2026-06) ──────────────────────────
+	// What:  rename each existing homebase channel to its CURRENT expected name
+	//        when it has drifted — e.g. a pack default changed (🛡️next-decree →
+	//        🔜upcoming-events) or the bot's channel emoji changed. Removes the
+	//        "delete the channel / re-run /setup" friction for guilds on defaults.
+	// Who:   every setup-complete guild on every boot (main.ts ready loop).
+	// When:  skipped for guilds that disabled auto-heal (autoHealEnabled === false
+	//        means "do not manage my homebase", same opt-out as the rebuild sweep).
+	//        A channel with a /rename-channel override keeps that override (expected
+	//        = the override, normally already its live name); a channel with NO
+	//        override is renamed to the current pack default. So the only way to
+	//        keep an old custom name is to have set it via /rename-channel.
+	// How:   expected = override || spec.displayName; rename only when the live name
+	//        differs, so steady state is one fetch per channel and zero API writes.
+	//        Discord rate-limits renames (2 / 10 min / channel), but a drift rename
+	//        fires at most once per name change, so this stays well clear.
+	static async renameDriftedChannels(client: Client, guild: Guild): Promise<void> {
+		const stored = (await guildConfigStore.findByGuildId(guild.id)) as
+			| (Record<string, unknown> & { autoHealEnabled?: boolean | null; channelNames?: Map<string, string> | Record<string, string> })
+			| null;
+		if (!stored || stored.autoHealEnabled === false) return;
+
+		const channelNamesRaw = stored.channelNames;
+		const ids = stored as unknown as Record<string, string | null | undefined>;
+
+		for (const spec of GuildSetupManager.CHANNEL_SPECS) {
+			const storedId = ids[spec.configField];
+			if (!storedId) continue;
+			const channel = await client.channels.fetch(storedId).catch(() => null);
+			if (!(channel instanceof TextChannel)) continue;
+
+			// Mongoose Map (hydrated doc) or plain object (.lean()'d) — probe both,
+			// same defensive read as repairOneChannel.
+			const overrideName =
+				channelNamesRaw instanceof Map
+					? channelNamesRaw.get(spec.configField)
+					: (channelNamesRaw as Record<string, string> | undefined)?.[spec.configField];
+			const expected = overrideName || spec.displayName;
+			if (channel.name === expected) continue;
+
+			try {
+				const oldName = channel.name;
+				await channel.setName(expected);
+				console.log(`[setup] renamed ${spec.configField} "${oldName}" -> "${expected}" in guild ${guild.id}`);
+			} catch (error) {
+				console.warn(`[setup] failed to rename ${spec.configField} in guild ${guild.id}`, error);
+			}
+		}
+	}
+
 	// ── single channel builder ────────────────────────────────
 	// What: recreate one text channel under the given category with the
 	//       same overwrites autoSetup.createChannels would have used for

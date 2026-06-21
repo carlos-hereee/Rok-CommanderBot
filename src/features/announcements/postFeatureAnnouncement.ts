@@ -80,12 +80,25 @@ const VERSION_SHIPPED_AT: Record<string, string> = {
 };
 
 export async function postFeatureAnnouncements(client: Client): Promise<void> {
-	if (!BOT_VERSION) return;
+	if (!BOT_VERSION) {
+		console.warn("[feature-announcement] disabled: could not resolve a bot version from package.json");
+		return;
+	}
 
 	const eventKey = featureAnnouncedEvent(BOT_VERSION);
 
+	// Per-reason counters so the boot summary explains exactly why each guild
+	// did or did not get the announcement. A single `skipped` bucket made a
+	// genuine miss (setup not complete) indistinguishable from a normal no-op
+	// (already announced) in the logs, which is why "nothing posted" was opaque.
 	let posted = 0;
-	let skipped = 0;
+	let skippedNotSetup = 0;
+	let skippedJoinedAfter = 0;
+	let skippedAlready = 0;
+	let deferredNoChannels = 0;
+	let failed = 0;
+
+	console.log(`[feature-announcement] version ${BOT_VERSION}: evaluating ${client.guilds.cache.size} guild(s)`);
 
 	// Sequential loop so one guild's Discord failure does not stall
 	// the others. Parallel (Promise.all) would be slightly faster at
@@ -101,7 +114,11 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// announcement would be confusing when they have not yet
 			// experienced the baseline features.
 			if (!config?.setupComplete) {
-				skipped += 1;
+				// setupComplete only flips true when an admin RUNS /setup to
+				// completion. Auto-created channels on bot-join are not enough, so a
+				// dev/test guild that never finished /setup lands here every boot.
+				console.log(`[feature-announcement] guild ${guild.id} skipped: /setup not completed (setupComplete=false)`);
+				skippedNotSetup += 1;
 				continue;
 			}
 
@@ -113,7 +130,7 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			const shippedAt = VERSION_SHIPPED_AT[BOT_VERSION];
 			const guildCreatedAt = (config as { createdAt?: Date }).createdAt;
 			if (shippedAt && guildCreatedAt && guildCreatedAt.getTime() > new Date(shippedAt).getTime()) {
-				skipped += 1;
+				skippedJoinedAfter += 1;
 				continue;
 			}
 
@@ -122,7 +139,7 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// enough to run once per guild per boot without batching.
 			const alreadyAnnounced = await botLogStore.has(guild.id, eventKey);
 			if (alreadyAnnounced) {
-				skipped += 1;
+				skippedAlready += 1;
 				continue;
 			}
 
@@ -136,6 +153,7 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 				// Not a failure, just nothing to do. Do not log so the
 				// next boot (when ensureHomebase has rebuilt) re-attempts.
 				console.warn(`[feature-announcement] guild ${guild.id} missing announcement channels; deferring`);
+				deferredNoChannels += 1;
 				continue;
 			}
 
@@ -143,6 +161,7 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			const adminChannel = await client.channels.fetch(adminChannelId).catch(() => null);
 			if (!(announcementsChannel instanceof TextChannel) || !(adminChannel instanceof TextChannel)) {
 				console.warn(`[feature-announcement] guild ${guild.id} channels missing or wrong type; deferring`);
+				deferredNoChannels += 1;
 				continue;
 			}
 
@@ -163,7 +182,10 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// allowedMentions: { parse: [] } is belt-and-suspenders —
 			// if a future edit ever adds a raw @everyone to the copy,
 			// this prevents accidental mass notifications.
-			const publicEmbed = infoEmbed(c.public.title, c.public.description, packCopy.COLORS.ANNOUNCEMENTS);
+			// Inject the release version into the title from BOT_VERSION (package.json),
+			// the single source of truth this announcement is keyed to, so the title
+			// always reads the right version with no hardcoded version in the copy packs.
+			const publicEmbed = infoEmbed(`${c.public.title} (v${BOT_VERSION})`, c.public.description, packCopy.COLORS.ANNOUNCEMENTS);
 			await announcementsChannel.send({
 				embeds: [publicEmbed],
 				allowedMentions: { parse: [] },
@@ -174,7 +196,7 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// AFTER the public one so a failure on the public post does
 			// not leave the admin with a "here's what shipped" while
 			// the community has not seen anything yet.
-			const adminEmbed = infoEmbed(c.innerSanctum.title, c.innerSanctum.description, packCopy.COLORS.ADMIN);
+			const adminEmbed = infoEmbed(`${c.innerSanctum.title} (v${BOT_VERSION})`, c.innerSanctum.description, packCopy.COLORS.ADMIN);
 			await adminChannel.send({
 				embeds: [adminEmbed],
 				allowedMentions: { parse: [] },
@@ -198,10 +220,14 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			posted += 1;
 		} catch (error) {
 			console.error(`[feature-announcement] guild ${guild.id} announcement failed`, error);
+			failed += 1;
 		}
 	}
 
-	if (posted > 0 || skipped > 0) {
-		console.log(`[feature-announcement] version ${BOT_VERSION} — posted to ${posted} guild(s), skipped ${skipped}`);
-	}
+	console.log(
+		`[feature-announcement] version ${BOT_VERSION} done: posted ${posted}, ` +
+			`skipped ${skippedNotSetup + skippedJoinedAfter + skippedAlready} ` +
+			`(not-setup ${skippedNotSetup}, joined-after-ship ${skippedJoinedAfter}, already-sent ${skippedAlready}), ` +
+			`deferred ${deferredNoChannels}, failed ${failed}`
+	);
 }
