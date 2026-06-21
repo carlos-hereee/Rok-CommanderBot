@@ -516,6 +516,16 @@ process.on("uncaughtException", (err) => {
 				} catch (refreshError) {
 					console.error(LOG_MESSAGES.main.autoSetupFailedSkipping(guild.id), refreshError);
 				}
+
+				// Rename any homebase channel still on an old default name to the
+				// current default (e.g. 🛡️next-decree → 🔜upcoming-events), unless an
+				// admin set a custom name via /rename-channel. Removes the "delete +
+				// re-run /setup" friction for guilds on default channel names.
+				try {
+					await GuildSetupManager.renameDriftedChannels(client, guild);
+				} catch (renameError) {
+					console.error(LOG_MESSAGES.main.autoSetupFailedSkipping(guild.id), renameError);
+				}
 			} catch (error) {
 				console.error(LOG_MESSAGES.main.autoSetupFailedSkipping(guild.id), error);
 
