@@ -19,7 +19,7 @@ import { ChannelContent } from "./ChannelContent.js";
 import type { ICopyConfig } from "@base/copy/getCopy.js";
 import { buildSuggestionBoxButton } from "@features/suggestion-box/SuggestionBox.js";
 import { buildSelfDestructButton } from "@features/setup/selfDestruct.js";
-import { buildMemberControlButtons, buildAdminControlButtons } from "@features/power-ups/PowerUps.js";
+import { buildMemberControlButtons, buildAdminControlButtons, buildIcebreakerButton } from "@features/power-ups/PowerUps.js";
 import { rokCommanderCopy } from "@base/copy/packs/rok-commander.pack.js";
 import { buildDeroGifAttachment } from "@base/copy/brand.js";
 import { LOG_MESSAGES } from "@base/constants/log-messages.js";
@@ -663,9 +663,9 @@ export class GuildSetupManager {
 		switch (field) {
 			case "commandsChannelId":
 				// #command-center guide row: the member actions — Suggestion Box +
-				// Toggle pings + Take the trial (pull an icebreaker to answer in
-				// #introductions). The invite button is NOT here — it lives on its own
-				// pinned card (ChannelContent.inviteCard) so it does not crowd the row.
+				// Toggle pings. The invite button and the Icebreaker button are NOT here:
+				// they live on the standalone Summon Dero card (inviteCardComponents) so
+				// they do not crowd this row.
 				return [new ActionRowBuilder<ButtonBuilder>().addComponents(buildSuggestionBoxButton(), ...buildMemberControlButtons())];
 			case "adminCommandsChannelId":
 				// admin-controls guide row (2 buttons): owner-only Self destruct + the
@@ -675,6 +675,15 @@ export class GuildSetupManager {
 				// introductions + every other channel: intro embed only, no buttons.
 				return null;
 		}
+	}
+
+	// ── invite card button row ────────────────────────────────────
+	// The Summon Dero card's buttons: the Summon (Link) button + the "Icebreaker"
+	// button (moved off the command guide row 2026-06). Shared by the initial post
+	// (populateChannels) and boot maintenance (refreshIntroEmbeds) so the two stay
+	// in lockstep — the componentsAreEquivalent check on boot keys off this exact row.
+	private static inviteCardComponents(): ActionRowBuilder<ButtonBuilder>[] {
+		return [new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton(), buildIcebreakerButton())];
 	}
 
 	// ── embed equivalence check ──────────────────────────────────
@@ -1621,7 +1630,7 @@ export class GuildSetupManager {
 			// the command guide's row. refreshIntroEmbeds maintains it on boot.
 			commandsChannel.send({
 				embeds: [ChannelContent.inviteCard()],
-				components: [new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton())],
+				components: GuildSetupManager.inviteCardComponents(),
 				files: [buildDeroGifAttachment()],
 			}),
 		]);
@@ -1979,7 +1988,7 @@ export class GuildSetupManager {
 			const channel = await client.channels.fetch(cardChannelId).catch(() => null);
 			if (channel instanceof TextChannel) {
 				const cardEmbed = ChannelContent.inviteCard();
-				const cardComponents = [new ActionRowBuilder<ButtonBuilder>().addComponents(ChannelContent.buildInviteButton())];
+				const cardComponents = GuildSetupManager.inviteCardComponents();
 
 				let cardMessage = nextIntroIds.inviteCardId
 					? await channel.messages.fetch(nextIntroIds.inviteCardId).catch(() => null)

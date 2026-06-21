@@ -11,7 +11,8 @@ import { welcomeNewMember } from "@features/greeter/welcomeNewMember.js";
 // The bot's common channel actions are one-click buttons in Discord, no slash
 // command required. They USED to live on standalone pinned "power-up" panel
 // messages; they are now BUTTONS on the pinned intro guides instead:
-//   • #command-center guide: "Toggle pings" + "Take the trial" (any member)
+//   • #command-center guide: "Toggle pings" (any member)
+//   • Summon Dero invite card: "Icebreaker" (any member)
 //   • admin-controls guide:  "Refresh standings" (owner/admin)
 // resolveIntroComponents (GuildSetupManager) composes these — built by the
 // factories below — into the guide rows alongside the suggestion-box, invite,
@@ -31,9 +32,8 @@ const POWERUP_PREFIX = "powerup";
 
 // The folded controls, keyed by `<kind>:<action>` (the customId tail). The
 // handler reads this table to (a) reject unknown/retired customIds and (b)
-// decide whether to gate the click. "Take the trial" (member:greet) is member-
-// usable — any member can pull their own icebreaker question — so it is NOT
-// adminOnly.
+// decide whether to gate the click. "Icebreaker" (member:greet) is member-usable —
+// any member can pull their own icebreaker question — so it is NOT adminOnly.
 const POWERUP_ACTIONS = {
 	"member:subscribe": { adminOnly: false },
 	"member:greet": { adminOnly: false },
@@ -45,15 +45,20 @@ const POWERUP_ACTIONS = {
 // Returned as bare ButtonBuilders so resolveIntroComponents can pack several into
 // one ActionRow. The customIds MUST match POWERUP_ACTIONS / the switch below.
 
-// #command-center guide row 1: announcement-ping toggle ("Toggle pings" — the
-// bell carries "announcements") + "Take the trial" (pull a random icebreaker to
-// answer in #introductions). Both open to any member. Secondary style so the
+// #command-center guide row: the announcement-ping toggle ("Toggle pings" — the
+// bell carries "announcements"). Open to any member. Secondary style so the
 // Suggestion Box (Primary) stays the row's visual lead.
 export function buildMemberControlButtons(): ButtonBuilder[] {
 	return [
 		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:subscribe`).setLabel("Toggle pings").setEmoji("🔔").setStyle(ButtonStyle.Secondary),
-		new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:greet`).setLabel("Take the trial").setEmoji("⚔️").setStyle(ButtonStyle.Secondary),
 	];
+}
+
+// "Icebreaker" — pulls the clicking member a random icebreaker question (posted to
+// #introductions). Member-usable (member:greet). Lives on the Summon Dero invite
+// card, not the command guide row.
+export function buildIcebreakerButton(): ButtonBuilder {
+	return new ButtonBuilder().setCustomId(`${POWERUP_PREFIX}:member:greet`).setLabel("Icebreaker").setEmoji("🎲").setStyle(ButtonStyle.Secondary);
 }
 
 // admin-controls guide row: refresh the leaderboard standings. Owner/admin gated
