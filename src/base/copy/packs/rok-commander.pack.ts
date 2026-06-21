@@ -700,7 +700,7 @@ export const rokCommanderCopy = {
 	//        Update BOTH public and innerSanctum together when shipping
 	//        a new version; they describe the same release in two voices.
 	featureAnnouncement: {
-		// ── v1.6.1 ── Dero mascot / command-center hub / invite card / admin controls ──
+		// ── launch release ── Dero mascot / command-center hub / invite card / admin controls ──
 		// The launch release. Public block is Dero's kingdom-voice
 		// announcement to members; inner sanctum is the Commanders-voice
 		// companion for admins (control center, Go Live Now gifs, opt-in

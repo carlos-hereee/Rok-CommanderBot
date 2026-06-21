@@ -182,7 +182,10 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// allowedMentions: { parse: [] } is belt-and-suspenders —
 			// if a future edit ever adds a raw @everyone to the copy,
 			// this prevents accidental mass notifications.
-			const publicEmbed = infoEmbed(c.public.title, c.public.description, packCopy.COLORS.ANNOUNCEMENTS);
+			// Inject the release version into the title from BOT_VERSION (package.json),
+			// the single source of truth this announcement is keyed to, so the title
+			// always reads the right version with no hardcoded version in the copy packs.
+			const publicEmbed = infoEmbed(`${c.public.title} (v${BOT_VERSION})`, c.public.description, packCopy.COLORS.ANNOUNCEMENTS);
 			await announcementsChannel.send({
 				embeds: [publicEmbed],
 				allowedMentions: { parse: [] },
@@ -193,7 +196,7 @@ export async function postFeatureAnnouncements(client: Client): Promise<void> {
 			// AFTER the public one so a failure on the public post does
 			// not leave the admin with a "here's what shipped" while
 			// the community has not seen anything yet.
-			const adminEmbed = infoEmbed(c.innerSanctum.title, c.innerSanctum.description, packCopy.COLORS.ADMIN);
+			const adminEmbed = infoEmbed(`${c.innerSanctum.title} (v${BOT_VERSION})`, c.innerSanctum.description, packCopy.COLORS.ADMIN);
 			await adminChannel.send({
 				embeds: [adminEmbed],
 				allowedMentions: { parse: [] },

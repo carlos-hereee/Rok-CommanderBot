@@ -519,14 +519,14 @@ export const generalEventsCopy: IPluginCopy = {
 	// When the next bot release ships, BOTH packs need their copy updated in
 	// lockstep; both the public and inner-sanctum blocks get translated per voice.
 	featureAnnouncement: {
-		// ── v1.6.1 ── Dero mascot / command-center hub / invite card / admin controls ──
+		// ── launch release ── Dero mascot / command-center hub / invite card / admin controls ──
 		// The launch release in plain English. Public block is the
 		// member-facing announcement; inner sanctum is the plain admin
 		// companion (control center, Go Live Now gifs, opt-in pings, a
 		// self-maintaining homebase, re-run /setup). Update BOTH blocks
 		// together with the rok-commander pack when shipping a new release.
 		public: {
-			title: "📣 v1.6.1: A big upgrade for your community",
+			title: "📣 A big upgrade for your community",
 			description:
 				"A lot changed today. Here's what's new.\n\n" +
 				"🎭 **Meet your host.**\n" +
@@ -546,7 +546,7 @@ export const generalEventsCopy: IPluginCopy = {
 				"**👉 Visit #command-center to see what changed.** Introduce yourself, explore the buttons, and add the bot to your own server if you like what you see.",
 		},
 		innerSanctum: {
-			title: "🛠️ v1.6.1: Admin update",
+			title: "🛠️ Admin update",
 			description:
 				"Here's what's new for admins.\n\n" +
 				"**Admin control center.** A new admin-only channel (`🎛️admin-controls`) holds the command guide plus buttons you press instead of type:\n" +
