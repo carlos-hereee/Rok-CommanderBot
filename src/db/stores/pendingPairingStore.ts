@@ -77,7 +77,7 @@ export const pendingPairingStore = {
 		const doc = await PendingPairing.findOneAndUpdate(
 			{ code: normalized, consumedAt: null, expiresAt: { $gt: new Date() } },
 			{ $set: { consumedAt: new Date() } },
-			{ new: true }
+			{ returnDocument: "after" }
 		).lean();
 		return (doc ?? null) as IPendingPairing | null;
 	},

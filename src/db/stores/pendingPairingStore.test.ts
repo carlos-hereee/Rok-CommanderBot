@@ -108,7 +108,7 @@ describe("pendingPairingStore", () => {
 			expect(filter.consumedAt).toBeNull(); // only an unconsumed code matches, so single-use holds
 			expect(filter.expiresAt.$gt).toBeInstanceOf(Date); // expired rows excluded before the TTL reap
 			expect(update.$set.consumedAt).toBeInstanceOf(Date);
-			expect(options).toMatchObject({ new: true });
+			expect(options).toMatchObject({ returnDocument: "after" });
 			expect(result).toEqual(row);
 		});
 

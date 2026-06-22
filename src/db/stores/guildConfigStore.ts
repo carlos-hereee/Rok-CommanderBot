@@ -10,7 +10,7 @@ export const guildConfigStore = {
 	},
 
 	async update(guildId: string, data: object) {
-		return GuildConfigModel.findOneAndUpdate({ guildId }, { $set: data }, { new: true });
+		return GuildConfigModel.findOneAndUpdate({ guildId }, { $set: data }, { returnDocument: "after" });
 	},
 
 	async isSetupComplete(guildId: string): Promise<boolean> {

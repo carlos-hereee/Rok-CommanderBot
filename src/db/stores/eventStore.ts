@@ -126,7 +126,7 @@ export const eventStore = {
 				"eventStore.update(eventId, data) requires guildId under USE_REMOTE_EVENTS — call updateInGuild(eventId, guildId, data) instead"
 			);
 		}
-		return EventModel.findOneAndUpdate({ eventId }, { $set: data }, { new: true }) as unknown as Promise<EventLike | null>;
+		return EventModel.findOneAndUpdate({ eventId }, { $set: data }, { returnDocument: "after" }) as unknown as Promise<EventLike | null>;
 	},
 
 	async updateInGuild(eventId: string, guildId: string, data: Record<string, unknown>): Promise<EventLike | null> {
@@ -139,7 +139,7 @@ export const eventStore = {
 		return EventModel.findOneAndUpdate(
 			{ eventId, guildId },
 			{ $set: data },
-			{ new: true }
+			{ returnDocument: "after" }
 		) as unknown as Promise<EventLike | null>;
 	},
 
@@ -154,7 +154,7 @@ export const eventStore = {
 		return EventModel.findOneAndUpdate(
 			{ eventId },
 			{ $set: { active: false } },
-			{ new: true }
+			{ returnDocument: "after" }
 		) as unknown as Promise<EventLike | null>;
 	},
 
@@ -165,7 +165,7 @@ export const eventStore = {
 		return EventModel.findOneAndUpdate(
 			{ eventId, guildId },
 			{ $set: { active: false } },
-			{ new: true }
+			{ returnDocument: "after" }
 		) as unknown as Promise<EventLike | null>;
 	},
 };

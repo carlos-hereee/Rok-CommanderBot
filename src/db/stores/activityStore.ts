@@ -22,9 +22,9 @@ export const activityStore = {
 				// merge in whatever activity data changed
 				$set: data,
 			},
-			// new: true returns the updated doc
+			// returnDocument: "after" returns the updated doc
 			// upsert: true creates it if it doesn't exist
-			{ new: true, upsert: true }
+			{ returnDocument: "after", upsert: true }
 		);
 	},
 

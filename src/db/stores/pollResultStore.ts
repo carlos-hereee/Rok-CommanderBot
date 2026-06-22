@@ -10,7 +10,7 @@ export const pollResultStore = {
 		return PollResultModel.findOneAndUpdate(
 			{ pollId, guildId, userId },
 			{ $set: { choice }, $setOnInsert: { pollId, guildId, userId } },
-			{ new: true, upsert: true }
+			{ returnDocument: "after", upsert: true }
 		);
 	},
 

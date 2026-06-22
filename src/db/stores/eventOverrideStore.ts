@@ -51,7 +51,7 @@ export const eventOverrideStore = {
 					originalOccurrence: data.originalOccurrence,
 				},
 			},
-			{ upsert: true, new: true, runValidators: true }
+			{ upsert: true, returnDocument: "after", runValidators: true }
 		).lean();
 		return doc as unknown as IEventOverride;
 	},
